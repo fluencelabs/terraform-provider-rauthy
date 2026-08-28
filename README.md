@@ -10,6 +10,24 @@ hand-written bootstrap file.
 
 Tracks Rauthy **0.35.2**.
 
+## Installation
+
+Once the provider is published to the Terraform Registry:
+
+```hcl
+terraform {
+  required_providers {
+    rauthy = {
+      source  = "fluencelabs/rauthy"
+      version = "~> 0.1"
+    }
+  }
+}
+```
+
+It is not published yet; see [PUBLISHING.md](PUBLISHING.md) for the remaining
+one-time setup and for how to run against a locally built binary in the meantime.
+
 ## Provider configuration
 
 ```hcl
