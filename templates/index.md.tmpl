@@ -1,0 +1,37 @@
+---
+page_title: "rauthy Provider"
+description: |-
+  Manage OIDC clients in a Rauthy identity provider with Terraform.
+---
+
+# rauthy Provider
+
+Manages OIDC clients in [Rauthy](https://github.com/sebadob/rauthy) through its admin API.
+
+A confidential client's secret cannot be supplied from outside: Rauthy generates it, and the field is
+explicitly not deserialized from the create request. The secret is therefore read back from Rauthy as
+a computed attribute, which is the reason this provider exists rather than a `random_password` and a
+bootstrap file.
+
+## Example usage
+
+{{ tffile "examples/provider/provider.tf" }}
+
+## API key rights
+
+The provider authenticates with a Rauthy API key, created by hand in the Admin UI under *API Keys*.
+It needs exactly these access rights:
+
+| Group     | Rights                       | Used for                                                      |
+|-----------|------------------------------|---------------------------------------------------------------|
+| `Clients` | read, create, update, delete | the whole `rauthy_client` lifecycle                           |
+| `Secrets` | read                         | reading a confidential client's secret on every refresh       |
+| `Secrets` | update                       | rotating a client secret                                      |
+
+A key missing `Secrets:read` fails on every read of a confidential client; the provider names the
+missing right rather than reporting a bare 403.
+
+The provider cannot issue API keys itself. Rauthy's `/api_keys` endpoints require an admin session
+rather than an API key, so the first key is always created by hand.
+
+{{ .SchemaMarkdown | trimspace }}

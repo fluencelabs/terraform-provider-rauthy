@@ -1,0 +1,59 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          check-latest: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.7.1
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          check-latest: true
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        # The OpenAPI contract tests run against the spec committed under
+        # internal/client/mock/testdata. CI never regenerates it (that needs
+        # Docker); `make openapi-refresh` is a manual step at Rauthy version
+        # bumps.
+        run: go test ./... -count=1 -timeout 5m
+        env:
+          # Acceptance tests are explicitly disabled in CI by design; they need a live Rauthy instance.
+          TF_ACC: ""
+      - name: Gofmt check
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "Files need gofmt:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Docs stale check
+        run: |
+          go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate --provider-name rauthy
+          if ! git diff --exit-code docs/; then
+            echo "docs/ is stale — run 'make docs' and commit the result"
+            exit 1
+          fi
