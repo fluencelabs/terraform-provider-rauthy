@@ -29,6 +29,13 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
+  # The registry verifies every asset against SHA256SUMS, the manifest
+  # included, so it has to be listed here and not only under `release`.
+  # Otherwise publishing fails with "missing SHA256 checksum for
+  # [..._manifest.json]".
+  extra_files:
+    - glob: "terraform-registry-manifest.json"
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
   name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
   algorithm: sha256
 
