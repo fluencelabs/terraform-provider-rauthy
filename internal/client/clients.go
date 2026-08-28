@@ -66,7 +66,11 @@ func (c *Client) GetClientSecret(ctx context.Context, id string) (*ClientSecretR
 // RotateClientSecret issues PUT /clients/{id}/secret, generating a fresh
 // secret. cacheCurrentHours (1..24), when non-nil, keeps the previous secret
 // valid for that long so consumers can catch up. Requires Secrets:Update.
-func (c *Client) RotateClientSecret(ctx context.Context, id string, cacheCurrentHours *int64) (*ClientSecretResponse, error) {
+func (c *Client) RotateClientSecret(
+	ctx context.Context,
+	id string,
+	cacheCurrentHours *int64,
+) (*ClientSecretResponse, error) {
 	var out ClientSecretResponse
 	req := ClientSecretRequest{CacheCurrentHours: cacheCurrentHours}
 	if err := c.do(ctx, http.MethodPut, clientPath(id)+"/secret", req, &out); err != nil {

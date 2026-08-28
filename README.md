@@ -35,6 +35,31 @@ Create the key in the Rauthy Admin UI under *API Keys* with exactly these access
 A key missing `Secrets:read` fails on every read of a confidential client; the provider reports the
 missing right by name rather than surfacing a bare 403.
 
+## Managing a client
+
+```hcl
+resource "rauthy_client" "backend" {
+  id            = "example-backend"
+  name          = "Example Backend"
+  confidential  = true
+  redirect_uris = ["https://app.example.com/oidc/callback"]
+
+  flows_enabled         = ["authorization_code", "refresh_token"]
+  scopes                = ["openid", "profile", "email"]
+  default_scopes        = ["openid"]
+  access_token_lifetime = 600
+
+  # Rotation is never implicit: the secret changes only when this value does.
+  secret_rotation_trigger    = "2026-01-01"
+  secret_cache_current_hours = 6
+}
+```
+
+Most attributes are optional *and* computed, because `PUT /clients/{id}` is a full replacement and
+Rauthy requires a value for each of them. Leaving one out adopts Rauthy's own default; removing one
+later keeps the last applied value rather than reverting it. See the resource documentation for the
+full reasoning.
+
 ## What this provider does not do
 
 - It never writes a secret anywhere. `rauthy_client.secret` is a computed, sensitive attribute;

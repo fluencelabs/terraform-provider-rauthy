@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,10 +42,10 @@ func WithHTTPClient(hc *http.Client) Option {
 // pasted Swagger URL does not silently produce /auth/v1/auth/v1.
 func New(rawURL, apiKey string, opts ...Option) (*Client, error) {
 	if strings.TrimSpace(rawURL) == "" {
-		return nil, fmt.Errorf("rauthy url must not be empty")
+		return nil, errors.New("rauthy url must not be empty")
 	}
 	if strings.TrimSpace(apiKey) == "" {
-		return nil, fmt.Errorf("rauthy api key must not be empty")
+		return nil, errors.New("rauthy api key must not be empty")
 	}
 
 	u, err := url.Parse(rawURL)
@@ -115,8 +116,8 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	if out == nil || len(bytes.TrimSpace(raw)) == 0 {
 		return nil
 	}
-	if err := json.Unmarshal(raw, out); err != nil {
-		return fmt.Errorf("decode %s %s response: %w", method, path, err)
+	if decodeErr := json.Unmarshal(raw, out); decodeErr != nil {
+		return fmt.Errorf("decode %s %s response: %w", method, path, decodeErr)
 	}
 	return nil
 }

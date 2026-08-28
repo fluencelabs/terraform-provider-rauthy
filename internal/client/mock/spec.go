@@ -3,6 +3,7 @@
 package mock
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 // ErrNoSpec is returned when no vendored spec is present in testdata. The spec
 // is produced by `make openapi-refresh`, which needs Docker and is run by hand;
 // see scripts/openapi-refresh.sh.
-var ErrNoSpec = fmt.Errorf("no vendored Rauthy OpenAPI spec in internal/client/mock/testdata")
+var ErrNoSpec = errors.New("no vendored Rauthy OpenAPI spec in internal/client/mock/testdata")
 
 // SpecPath returns the path of the vendored spec. The filename carries the
 // Rauthy version it was generated from (rauthy-openapi-<version>.json) so that
@@ -24,7 +25,7 @@ var ErrNoSpec = fmt.Errorf("no vendored Rauthy OpenAPI spec in internal/client/m
 func SpecPath() (string, error) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
-		return "", fmt.Errorf("cannot locate the mock package on disk")
+		return "", errors.New("cannot locate the mock package on disk")
 	}
 	dir := filepath.Join(filepath.Dir(thisFile), "testdata")
 
@@ -54,7 +55,7 @@ func NewValidator() (validator.Validator, []error, error) {
 		return nil, nil, err
 	}
 
-	raw, err := os.ReadFile(path) //nolint:gosec // path is derived from this package's own testdata dir
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read %s: %w", path, err)
 	}

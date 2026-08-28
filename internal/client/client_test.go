@@ -14,7 +14,7 @@ import (
 
 // newTestClient wires a Client to a test server and records the last request it
 // received.
-func newTestClient(t *testing.T, handler http.HandlerFunc) (*client.Client, *httptest.Server) {
+func newTestClient(t *testing.T, handler http.HandlerFunc) *client.Client {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -23,7 +23,7 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*client.Client, *htt
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	return c, srv
+	return c
 }
 
 func TestNew_AppendsAPIBasePath(t *testing.T) {
@@ -69,7 +69,7 @@ func TestCreateClient_SendsAPIKeyHeaderAndMinimalBody(t *testing.T) {
 	var gotAuth, gotPath, gotMethod string
 	var gotBody map[string]any
 
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		gotPath = r.URL.Path
 		gotMethod = r.Method
@@ -113,7 +113,7 @@ func TestGetClientSecret_UsesPOST(t *testing.T) {
 	t.Parallel()
 
 	var gotMethod, gotPath string
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"app","confidential":true,"secret":"s3cr3t"}`))
@@ -135,7 +135,7 @@ func TestGetClientSecret_UsesPOST(t *testing.T) {
 func TestGetClientSecret_PublicClientHasNoSecret(t *testing.T) {
 	t.Parallel()
 
-	c, _ := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"spa","confidential":false}`))
 	})
@@ -152,7 +152,7 @@ func TestGetClientSecret_PublicClientHasNoSecret(t *testing.T) {
 func TestGetClientSecret_403NamesTheMissingRight(t *testing.T) {
 	t.Parallel()
 
-	c, _ := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"error":"Forbidden","message":"Access denied"}`))
 	})
@@ -174,7 +174,7 @@ func TestRotateClientSecret_SendsCacheCurrentHours(t *testing.T) {
 
 	var gotMethod string
 	var gotBody map[string]any
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &gotBody)
@@ -198,7 +198,7 @@ func TestRotateClientSecret_OmitsCacheCurrentHoursWhenUnset(t *testing.T) {
 	t.Parallel()
 
 	var gotBody map[string]any
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &gotBody)
 		w.Header().Set("Content-Type", "application/json")
@@ -216,7 +216,7 @@ func TestRotateClientSecret_OmitsCacheCurrentHoursWhenUnset(t *testing.T) {
 func TestNotFoundIsDetectable(t *testing.T) {
 	t.Parallel()
 
-	c, _ := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"error":"NotFound","message":"Client 'gone' not found"}`))
 	})
@@ -236,7 +236,7 @@ func TestIDIsPathEscaped(t *testing.T) {
 	// Rauthy client IDs may contain characters that are legal in the id regex
 	// but not in a raw URL path, such as `?`, `#` and `%`.
 	var gotPath string
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.EscapedPath()
 		w.WriteHeader(http.StatusNoContent)
 	})

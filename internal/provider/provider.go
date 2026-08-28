@@ -16,8 +16,9 @@ import (
 
 // Environment variables used as fallbacks for the provider configuration.
 const (
-	EnvURL    = "RAUTHY_URL"
-	EnvAPIKey = "RAUTHY_API_KEY"
+	EnvURL = "RAUTHY_URL"
+	// EnvAPIKey names the variable; it is not a credential itself.
+	EnvAPIKey = "RAUTHY_API_KEY" //nolint:gosec // this is an env var name, not a secret
 )
 
 var _ provider.Provider = (*rauthyProvider)(nil)
@@ -67,7 +68,11 @@ func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 	}
 }
 
-func (p *rauthyProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+func (p *rauthyProvider) Configure(
+	ctx context.Context,
+	req provider.ConfigureRequest,
+	resp *provider.ConfigureResponse,
+) {
 	var cfg providerModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
 	if resp.Diagnostics.HasError() {
@@ -130,7 +135,9 @@ func (p *rauthyProvider) Configure(ctx context.Context, req provider.ConfigureRe
 }
 
 func (p *rauthyProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{}
+	return []func() resource.Resource{
+		NewClientResource,
+	}
 }
 
 func (p *rauthyProvider) DataSources(_ context.Context) []func() datasource.DataSource {

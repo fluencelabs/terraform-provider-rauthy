@@ -64,7 +64,13 @@ func validateRequest(t *testing.T, v validator.Validator, method, path string, b
 	return ok, joinErrs(valErrs)
 }
 
-func validateResponse(t *testing.T, v validator.Validator, method, path string, status int, body string) (bool, string) {
+func validateResponse(
+	t *testing.T,
+	v validator.Validator,
+	method, path string,
+	status int,
+	body string,
+) (bool, string) {
 	t.Helper()
 
 	req := httptest.NewRequest(method, "http://rauthy.test"+path, nil)
