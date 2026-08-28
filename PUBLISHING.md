@@ -116,6 +116,19 @@ The flow:
 > right after release-please, gated on `release_created`. Merging the release PR
 > is the trigger.
 
+### Versioning before 1.0
+
+`release-please-config.json` sets `bump-minor-pre-major`, so while the version
+is below `1.0.0` a `feat!:` or `BREAKING CHANGE:` bumps the **minor** rather
+than jumping to `2.0.0`: `0.1.0 → 0.2.0`. That is the usual reading of semver
+for a pre-1.0 project, and it is deliberate here — the provider has not yet been
+exercised against a live Rauthy instance, so the schema should be free to change
+without burning major versions.
+
+Cut `1.0.0` when the resource has been run against a real instance and its
+attributes are considered settled. From that point on a renamed or removed
+attribute means a major bump.
+
 ### The first release
 
 The version in `.release-please-manifest.json` starts at `0.0.0`. The first
