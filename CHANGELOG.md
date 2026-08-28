@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/fluencelabs/terraform-provider-rauthy/compare/v0.1.0...v0.1.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* include the registry manifest in SHA256SUMS ([ce3005b](https://github.com/fluencelabs/terraform-provider-rauthy/commit/ce3005b7fe44c14b8516c9e2331bc8befdd922ea))
+* include the registry manifest in SHA256SUMS ([486d86e](https://github.com/fluencelabs/terraform-provider-rauthy/commit/486d86e2fec2aaeff9d84e1e9849fe3be485b59b))
+
 ## 0.1.0 (2026-08-28)
 
 
