@@ -41,8 +41,14 @@ rather than by CI.
 The registry refuses a release whose `SHA256SUMS` signature does not verify
 against a public key registered to the namespace, so this is not optional.
 
+**The key must be RSA or DSA.** The registry API rejects the ECC keys `gpg`
+offers by default, ed25519 included, so pick "RSA and RSA" in the prompt rather
+than accepting the default.
+
 ```sh
-# Generate a key (RSA 4096, no expiry or a long one). Use a real email.
+# Generate a key: choose (1) RSA and RSA, 4096 bits, no expiry or a long one.
+# An expiring key means the release workflow starts failing on a date nobody
+# has written down.
 gpg --full-generate-key
 
 # Find the key id (the long hex after rsa4096/).
@@ -63,6 +69,10 @@ In the GitHub repo: **Settings → Secrets and variables → Actions → New sec
 | ----------------- | ---------------------------------------------- |
 | `GPG_PRIVATE_KEY` | contents of `private.asc`                      |
 | `PASSPHRASE`      | the passphrase set when generating the key     |
+
+Set `PASSPHRASE` even if it feels redundant: the import step in the release
+workflow reads it, and a key created with a passphrase fails to import without
+it. If the key has no passphrase, leave the secret unset.
 
 The release workflow imports this key and exports its fingerprint as
 `GPG_FINGERPRINT`, which `.goreleaser.yml` uses to sign the checksums.
@@ -118,7 +128,9 @@ The flow:
 
 ### Versioning before 1.0
 
-`release-please-config.json` sets `bump-minor-pre-major`, so while the version
+`release-please-config.json` sets `initial-version` to `0.1.0`, because
+release-please otherwise cuts `1.0.0` as the first release of a package that has
+never been released. It also sets `bump-minor-pre-major`, so while the version
 is below `1.0.0` a `feat!:` or `BREAKING CHANGE:` bumps the **minor** rather
 than jumping to `2.0.0`: `0.1.0 → 0.2.0`. That is the usual reading of semver
 for a pre-1.0 project, and it is deliberate here — the provider has not yet been
