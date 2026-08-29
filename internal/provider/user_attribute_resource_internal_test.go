@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -9,59 +10,57 @@ import (
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 )
 
-// default_value is Optional and not Computed, so state after apply must equal
-// the configuration exactly — but the configuration is a rendering of a JSON
-// document and Rauthy re-serialises it its own way. defaultValueString keeps
-// the configured spelling whenever it means the same thing.
+// Rauthy stores the default as parsed JSON and re-serialises it its own way, so
+// the bytes coming back are rarely the bytes the configuration wrote. Semantic
+// equality is what stops that from being a perpetual diff.
+func TestJSONString_SemanticEquals(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		a, b string
+		want bool
+	}{
+		"identical":               {`{"a":1}`, `{"a":1}`, true},
+		"whitespace only":         {"{\n  \"a\": 1\n}", `{"a":1}`, true},
+		"reordered object keys":   {`{"a":1,"b":2}`, `{"b":2,"a":1}`, true},
+		"different value":         {`{"a":1}`, `{"a":2}`, false},
+		"array order is not free": {`[1,2]`, `[2,1]`, false},
+		"scalar string":           {`"engineering"`, `  "engineering" `, true},
+		// Neither side parses, so this falls back to byte equality rather than
+		// silently calling two broken values equal.
+		"both unparseable and equal":   {`not json`, `not json`, true},
+		"both unparseable and unequal": {`not json`, `also not json`, false},
+	}
+
+	for name, tc := range cases {
+		got, diags := newJSONString(tc.a).StringSemanticEquals(context.Background(), newJSONString(tc.b))
+		if diags.HasError() {
+			t.Fatalf("%s: unexpected diagnostics: %v", name, diags)
+		}
+		if got != tc.want {
+			t.Errorf("%s: %q == %q is %v, want %v", name, tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+// The mapping side stays simple now that equality is semantic: it renders
+// Rauthy's own spelling and lets the framework put the configured one back.
 func TestDefaultValueString(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
-		raw   string
-		prior types.String
-		want  types.String
+		raw  string
+		want jsonString
 	}{
-		"nothing stored, nothing configured": {
-			raw:   "",
-			prior: types.StringNull(),
-			want:  types.StringNull(),
-		},
-		"an explicit JSON null is no default": {
-			raw:   "null",
-			prior: types.StringNull(),
-			want:  types.StringNull(),
-		},
-		"imported value takes the server spelling": {
-			raw:   `{"code": 7}`,
-			prior: types.StringNull(),
-			want:  types.StringValue(`{"code":7}`),
-		},
-		"reformatting alone is not a change": {
-			raw:   `{"code":7}`,
-			prior: types.StringValue("{\n  \"code\": 7\n}"),
-			want:  types.StringValue("{\n  \"code\": 7\n}"),
-		},
-		"a real change takes the server value": {
-			raw:   `{"code":8}`,
-			prior: types.StringValue(`{"code":7}`),
-			want:  types.StringValue(`{"code":8}`),
-		},
-		"a dropped default becomes null": {
-			raw:   "",
-			prior: types.StringValue(`"engineering"`),
-			want:  types.StringNull(),
-		},
-		"an unknown prior falls back to the server value": {
-			raw:   `"engineering"`,
-			prior: types.StringUnknown(),
-			want:  types.StringValue(`"engineering"`),
-		},
+		"nothing stored":          {"", nullJSONString()},
+		"an explicit JSON null":   {"null", nullJSONString()},
+		"whitespace is stripped":  {`{"code": 7}`, newJSONString(`{"code":7}`)},
+		"a scalar string default": {`"engineering"`, newJSONString(`"engineering"`)},
 	}
 
 	for name, tc := range cases {
-		got := defaultValueString(json.RawMessage(tc.raw), tc.prior)
-		if !got.Equal(tc.want) {
-			t.Errorf("%s: defaultValueString(%q, %v) = %v, want %v", name, tc.raw, tc.prior, got, tc.want)
+		if got := defaultValueString(json.RawMessage(tc.raw)); !got.Equal(tc.want) {
+			t.Errorf("%s: defaultValueString(%q) = %v, want %v", name, tc.raw, got, tc.want)
 		}
 	}
 }
@@ -100,7 +99,7 @@ func TestBuildUserAttrRequest_OmitsAnAbsentDefault(t *testing.T) {
 	body := buildUserAttrRequest(&userAttributeResourceModel{
 		Name:         types.StringValue("department"),
 		Desc:         types.StringNull(),
-		DefaultValue: types.StringNull(),
+		DefaultValue: nullJSONString(),
 		UserEditable: types.BoolValue(true),
 	})
 

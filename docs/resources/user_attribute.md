@@ -3,7 +3,7 @@ page_title: "rauthy_user_attribute Resource - rauthy"
 description: |-
     Manages a custom user attribute definition in Rauthy.
   An attribute has to be defined on the instance before anything can reference it: rauthy_scope.attr_include_access and rauthy_scope.attr_include_id are filtered against the known definitions and unknown names are dropped silently, so a scope that maps an attribute should depend on the rauthy_user_attribute that defines it.
-  Rauthy has no identifier for an attribute other than its name, so id mirrors name and a rename is a real rename rather than a replacement.
+  Rauthy has no identifier for an attribute other than its name, so id mirrors name, and changing the name replaces the attribute rather than renaming it in place.
   Requires these API key rights: UserAttributes read, create, update, delete.
 ---
 
@@ -13,7 +13,7 @@ Manages a custom user attribute definition in Rauthy.
 
 An attribute has to be defined on the instance before anything can reference it: `rauthy_scope.attr_include_access` and `rauthy_scope.attr_include_id` are filtered against the known definitions and unknown names are dropped silently, so a scope that maps an attribute should depend on the `rauthy_user_attribute` that defines it.
 
-Rauthy has no identifier for an attribute other than its name, so `id` mirrors `name` and a rename is a real rename rather than a replacement.
+Rauthy has no identifier for an attribute other than its name, so `id` mirrors `name`, and changing the name replaces the attribute rather than renaming it in place.
 
 Requires these API key rights: `UserAttributes` read, create, update, delete.
 
@@ -47,11 +47,11 @@ resource "rauthy_scope" "billing" {
 
 ### Required
 
-- `name` (String) Name of the attribute, for example `department`. This is the key it appears under in a user's `attributes` and in the tokens a mapping scope issues. Renaming in place is supported.
+- `name` (String) Name of the attribute, for example `department`. This is the key it appears under in a user's `attributes` and in the tokens a mapping scope issues. Changing it replaces the attribute, because Rauthy's in-place rename leaks the old name — see the note on UpdateUserAttr in the client.
 
 ### Optional
 
-- `default_value` (String) Default value for the attribute, as a JSON document — Rauthy stores arbitrary JSON here, not just strings, so a plain string default has to be written as `jsonencode("engineering")` or `"\"engineering\""`. Whitespace is not significant: the value is compared after compaction, so reformatting the JSON does not produce a diff.
+- `default_value` (String) Default value for the attribute, as a JSON document — Rauthy stores arbitrary JSON here, not just strings, so a plain string default has to be written as `jsonencode("engineering")` or `"\"engineering\""`. Values are compared as JSON rather than as text, so reformatting or reordering object keys is not a change. Rauthy re-serialises what it stores, so without that the value would never settle.
 - `desc` (String) Description of the attribute, shown in the Admin UI. Rauthy validates it against `^[a-zA-Z0-9-_/]{0,128}$`, which notably excludes spaces.
 - `user_editable` (Boolean) Whether users may change this attribute on themselves from the account page. Defaults to `false`, which keeps the attribute admin-only.
 

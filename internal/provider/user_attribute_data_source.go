@@ -121,9 +121,9 @@ func (d *userAttributeDataSource) Read(
 	config.ID = types.StringValue(got.Name)
 	config.Name = types.StringValue(got.Name)
 	config.Desc = optionalString(got.Desc)
-	// Nothing prior to preserve here: the data source reports Rauthy's own
-	// spelling of the default.
-	config.DefaultValue = defaultValueString(got.DefaultValue, types.StringNull())
+	// The data source reports Rauthy's own spelling of the default; there is no
+	// configuration here for it to disagree with, so it stays a plain string.
+	config.DefaultValue = defaultValueString(got.DefaultValue).StringValue
 	config.UserEditable = types.BoolValue(got.UserEditable)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
 }

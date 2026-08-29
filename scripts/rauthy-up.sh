@@ -47,6 +47,7 @@ read -r -d '' key_json <<'JSON' || true
     {"group": "Roles",   "access_rights": ["read", "create", "update", "delete"]},
     {"group": "Groups",  "access_rights": ["read", "create", "update", "delete"]},
     {"group": "Scopes",  "access_rights": ["read", "create", "update", "delete"]},
+    {"group": "UserAttributes", "access_rights": ["read", "create", "update", "delete"]},
     {"group": "Users",   "access_rights": ["read", "create", "update", "delete"]}
   ]
 }

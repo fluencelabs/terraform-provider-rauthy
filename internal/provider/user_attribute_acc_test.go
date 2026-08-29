@@ -80,22 +80,28 @@ func TestAccUserAttribute_lifecycle(t *testing.T) {
 				PlanOnly: true,
 			},
 			{
-				// A structured default: the value is JSON, not just a string.
-				Config: testAccUserAttributeConfig("tf-acc-attr", `
-  default_value = jsonencode({ code = 7, label = "eng" })`),
-				Check: resource.TestCheckResourceAttrSet(
-					"rauthy_user_attribute.test", "default_value"),
-			},
-			{
-				// Whitespace in the configured document is not a change.
+				// A structured default written with whitespace Rauthy will not
+				// give back: it stores the parsed document and re-serialises it
+				// compacted. Post-apply state must still hold what the
+				// configuration wrote.
 				Config: testAccUserAttributeConfig("tf-acc-attr", `
   default_value = "{\"code\": 7, \"label\": \"eng\"}"`),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				Check: resource.TestCheckResourceAttr(
+					"rauthy_user_attribute.test", "default_value", `{"code": 7, "label": "eng"}`),
 			},
 			{
-				// PUT /users/attr/{name} addresses the old name and carries
-				// the new one, so a rename is an update, not a replacement.
+				// The perpetual diff this resource used to have: without JSON
+				// semantic equality the refreshed state is Rauthy's compacted
+				// spelling and every plan wants to rewrite it.
+				Config: testAccUserAttributeConfig("tf-acc-attr", `
+  default_value = "{\"code\": 7, \"label\": \"eng\"}"`),
+				PlanOnly: true,
+			},
+			{
+				// A rename replaces the attribute. Rauthy's in-place rename
+				// leaves the old name occupied — invisible in GET /users/attr
+				// but still rejecting a POST — so the provider deletes and
+				// recreates instead.
 				Config: testAccUserAttributeConfig("tf-acc-attr-renamed", ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(
@@ -103,6 +109,15 @@ func TestAccUserAttribute_lifecycle(t *testing.T) {
 					resource.TestCheckResourceAttr(
 						"rauthy_user_attribute.test", "id", "tf-acc-attr-renamed"),
 				),
+			},
+			{
+				// Renaming back proves the point: had the rename gone through
+				// PUT, the original name would still be occupied and this
+				// create would fail with "User attribute config does already
+				// exist".
+				Config: testAccUserAttributeConfig("tf-acc-attr", ""),
+				Check: resource.TestCheckResourceAttr(
+					"rauthy_user_attribute.test", "name", "tf-acc-attr"),
 			},
 			{
 				ResourceName:      "rauthy_user_attribute.test",
