@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -276,10 +277,8 @@ func (r *passwordPolicyResource) put(
 	diags *diag.Diagnostics,
 ) {
 	_, err := r.api.UpdatePasswordPolicy(ctx, client.PasswordPolicy{
-		// Both are bounded to 8..128 by the schema validators, so the narrowing
-		// conversion cannot overflow.
-		LengthMin:        int32(m.LengthMin.ValueInt64()), //nolint:gosec // bounded by validators.PasswordLength
-		LengthMax:        int32(m.LengthMax.ValueInt64()), //nolint:gosec // bounded by validators.PasswordLength
+		LengthMin:        clampInt32(m.LengthMin.ValueInt64()),
+		LengthMax:        clampInt32(m.LengthMax.ValueInt64()),
 		IncludeLowerCase: int32Ptr(m.IncludeLowerCase),
 		IncludeUpperCase: int32Ptr(m.IncludeUpperCase),
 		IncludeDigits:    int32Ptr(m.IncludeDigits),
@@ -308,8 +307,24 @@ func int32Ptr(v types.Int64) *int32 {
 	if v.IsNull() || v.IsUnknown() {
 		return nil
 	}
-	i := int32(v.ValueInt64()) //nolint:gosec // every int32 attribute is range-bounded by a schema validator
+	i := clampInt32(v.ValueInt64())
 	return &i
+}
+
+// clampInt32 narrows a Terraform Int64 to the int32 the Rauthy API uses.
+//
+// The schema validators already bound every one of these attributes far below
+// the int32 range, so the clamp never fires in practice; it is here so the
+// narrowing is provably safe rather than safe by argument.
+func clampInt32(v int64) int32 {
+	switch {
+	case v > math.MaxInt32:
+		return math.MaxInt32
+	case v < math.MinInt32:
+		return math.MinInt32
+	default:
+		return int32(v)
+	}
 }
 
 func optionalInt64(v *int32) types.Int64 {

@@ -172,7 +172,7 @@ linters:
       # Terraform attribute names are the wire format of a schema, and every
       # resource repeats the common ones. Hiding them behind a constant would
       # obscure the mapping to the API rather than clarify it.
-      ignore-strings: '^(id|name)$'
+      ignore-string-values: [ '^(id|name)$' ]
 
     depguard:
       # Rules to apply.
