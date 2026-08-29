@@ -60,6 +60,19 @@ const (
 	cacheCurrentHoursMax   = 24
 )
 
+// Bounds from the #[validate(range(...))] attributes in
+// src/api_types/src/generic.rs (PasswordPolicyRequest).
+const (
+	passwordLengthMin    = 8
+	passwordLengthMax    = 128
+	passwordCharClassMin = 1
+	passwordCharClassMax = 32
+	passwordValidDaysMin = 1
+	passwordValidDaysMax = 3650
+	notRecentlyUsedMin   = 1
+	notRecentlyUsedMax   = 10
+)
+
 // Enumerations from src/api_types/src/cust_validation.rs.
 //
 //nolint:gochecknoglobals // transcribed upstream enumerations, read-only
@@ -163,4 +176,37 @@ func AccessTokenLifetime() validator.Int64 {
 // CacheCurrentHours bounds cache_current_hours on a secret rotation.
 func CacheCurrentHours() validator.Int64 {
 	return int64validator.Between(cacheCurrentHoursMin, cacheCurrentHoursMax)
+}
+
+// RoleName validates a role name against RE_ROLES_SCOPES, the same pattern
+// Rauthy applies to scopes.
+func RoleName() validator.String {
+	return stringvalidator.RegexMatches(scope,
+		`must match ^[a-zA-Z0-9-_/,:*.]{2,64}$`)
+}
+
+// GroupName validates a group name against RE_GROUPS.
+func GroupName() validator.String {
+	return stringvalidator.RegexMatches(groups,
+		`must match ^[a-zA-Z0-9-_/,:*\s]{2,64}$`)
+}
+
+// PasswordLength validates length_min and length_max.
+func PasswordLength() validator.Int64 {
+	return int64validator.Between(passwordLengthMin, passwordLengthMax)
+}
+
+// PasswordCharClassCount validates the include_* counts.
+func PasswordCharClassCount() validator.Int64 {
+	return int64validator.Between(passwordCharClassMin, passwordCharClassMax)
+}
+
+// PasswordValidDays validates valid_days.
+func PasswordValidDays() validator.Int64 {
+	return int64validator.Between(passwordValidDaysMin, passwordValidDaysMax)
+}
+
+// PasswordNotRecentlyUsed validates not_recently_used.
+func PasswordNotRecentlyUsed() validator.Int64 {
+	return int64validator.Between(notRecentlyUsedMin, notRecentlyUsedMax)
 }

@@ -46,8 +46,8 @@ func (p *rauthyProvider) Metadata(_ context.Context, _ provider.MetadataRequest,
 
 func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages OIDC clients in a [Rauthy](https://github.com/sebadob/rauthy) identity provider " +
-			"through its admin API.",
+		MarkdownDescription: "Manages OIDC clients, roles, groups and the password policy of a " +
+			"[Rauthy](https://github.com/sebadob/rauthy) identity provider through its admin API.",
 		Attributes: map[string]schema.Attribute{
 			"url": schema.StringAttribute{
 				Optional: true,
@@ -60,9 +60,11 @@ func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				Sensitive: true,
 				MarkdownDescription: "Rauthy API key in `<name>$<secret>` form. Falls back to the `" + EnvAPIKey +
 					"` environment variable.\n\n" +
-					"The key needs these access rights: `Clients` read, create, update, delete, and " +
-					"`Secrets` read and update. `Secrets:read` is used on every refresh of a confidential " +
-					"client, `Secrets:update` only when rotating a secret.",
+					"The key needs the access rights of the resources it manages: `Clients` read, create, " +
+					"update, delete and `Secrets` read and update for `rauthy_client`; `Roles` and `Groups` " +
+					"read, create, update, delete for `rauthy_role` and `rauthy_group`; `Config` read and " +
+					"update for `rauthy_password_policy`. `Secrets:read` is used on every refresh of a " +
+					"confidential client, `Secrets:update` only when rotating a secret.",
 			},
 		},
 	}
@@ -137,9 +139,15 @@ func (p *rauthyProvider) Configure(
 func (p *rauthyProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewClientResource,
+		NewRoleResource,
+		NewGroupResource,
+		NewPasswordPolicyResource,
 	}
 }
 
 func (p *rauthyProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+	return []func() datasource.DataSource{
+		NewRoleDataSource,
+		NewGroupDataSource,
+	}
 }
