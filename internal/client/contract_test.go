@@ -177,7 +177,8 @@ func TestContract_ClientResponse(t *testing.T) {
 		"access_token_lifetime": 600,
 		"scopes": ["openid"],
 		"default_scopes": ["openid"],
-		"force_mfa": false
+		"force_mfa": false,
+		"claims_at_root": false
 	}`
 
 	ok, msg := validateResponse(t, v, http.MethodGet, apiPath("/clients/example-app"), http.StatusOK, body)
@@ -331,7 +332,7 @@ func TestContract_ScopeRequest(t *testing.T) {
 
 // KNOWN SPEC INACCURACY. The vendored document says a scope's attr_include_*
 // come back as a string, and that is true only of POST /scopes. Against a live
-// Rauthy 0.35.2, GET /scopes and PUT /scopes/{id} answer with an array — the
+// Rauthy 0.36.2, GET /scopes and PUT /scopes/{id} answer with an array — the
 // handlers return different types and the OpenAPI document records only one.
 //
 // This test pins the divergence rather than the belief: the string form is what
@@ -343,8 +344,8 @@ func TestContract_ScopeResponseShapeDivergesFromTheSpec(t *testing.T) {
 	v := newContractValidator(t)
 
 	ok, msg := validateResponse(t, v, http.MethodGet, apiPath("/scopes"), http.StatusOK,
-		`[{"id":"scope-1","name":"read:billing","attr_include_access":"department,cost_center",`+
-			`"attr_include_id":null}]`)
+		`[{"id":"scope-1","name":"read:billing","claims_at_root":false,`+
+			`"attr_include_access":"department,cost_center","attr_include_id":null}]`)
 	if !ok {
 		t.Errorf("GET /scopes response rejected by the spec: %s", msg)
 	}
@@ -352,7 +353,7 @@ func TestContract_ScopeResponseShapeDivergesFromTheSpec(t *testing.T) {
 	// The array form — what a live instance actually returns from this very
 	// endpoint — is rejected by the document.
 	ok, _ = validateResponse(t, v, http.MethodGet, apiPath("/scopes"), http.StatusOK,
-		`[{"id":"scope-1","name":"read:billing","attr_include_access":["department"]}]`)
+		`[{"id":"scope-1","name":"read:billing","claims_at_root":false,"attr_include_access":["department"]}]`)
 	if ok {
 		t.Error("the spec now accepts the array form GET /scopes really returns; the document and the " +
 			"API may have been reconciled — re-check whether AttrList still needs to decode both")

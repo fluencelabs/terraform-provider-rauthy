@@ -3,7 +3,7 @@
   "info": {
     "title": "Rauthy Single Sign-on",
     "description": "OpenID Connect Single Sign-On Identity & Access Management",
-    "version": "v0.35.2"
+    "version": "v0.36.2"
   },
   "servers": [
     {
@@ -1020,6 +1020,141 @@
         }
       }
     },
+    "/clients/{id}/favicon": {
+      "get": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "Retrieve the custom favicon for this client.",
+        "operationId": "get_client_favicon",
+        "parameters": [
+          {
+            "name": "updated",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ok"
+          },
+          "404": {
+            "description": "NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "Upload a custom favicon for this client.",
+        "description": "**Permissions**\n- `Clients.Update`",
+        "operationId": "put_client_favicon",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ok"
+          },
+          "400": {
+            "description": "BadRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "Delete the custom favicon for this client.",
+        "description": "**Permissions**\n- `Clients.Update`",
+        "operationId": "delete_client_favicon",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ok"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{id}/forward_auth": {
       "get": {
         "tags": [
@@ -1455,7 +1590,7 @@
           "email"
         ],
         "summary": "Get all EmailJobs",
-        "description": "**Permissions**\n- rauthy_admin",
+        "description": "**Permissions**\n- rauthy_admin\n- group admin (only jobs scoped to a group it manages)",
         "operationId": "get_email_jobs",
         "responses": {
           "200": {
@@ -1487,7 +1622,7 @@
           "email"
         ],
         "summary": "Send out a custom email to users",
-        "description": "**Permissions**\n- rauthy_admin",
+        "description": "**Permissions**\n- rauthy_admin\n- group admin (only an `in_group` filter for a group it manages)",
         "operationId": "post_send_email",
         "requestBody": {
           "content": {
@@ -1521,7 +1656,7 @@
           "email"
         ],
         "summary": "Cancel a long-running E-Mail job early",
-        "description": "**Permissions**\n- rauthy_admin",
+        "description": "**Permissions**\n- rauthy_admin\n- group admin (only jobs scoped to a group it manages)",
         "operationId": "post_email_job_cancel",
         "parameters": [
           {
@@ -3229,6 +3364,18 @@
             "name": "prompt",
             "in": "query",
             "description": "Validation: `[a-zA-Z0-9_\\s]{0,128}`",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "resource",
+            "in": "query",
+            "description": "RFC 8707 resource indicator. Must be an absolute URI without a fragment. The\nrequested resource is validated against the client's `allowed_resources` and,\non success, added to the issued access token's `aud`.\n\nValidation: `[a-zA-Z0-9,.:/_-&?=~!$'()*+%@]+$` (no `#`; RFC 8707 forbids a fragment)",
             "required": false,
             "schema": {
               "type": [
@@ -6987,6 +7134,109 @@
         }
       }
     },
+    "/users/webauthn_finish": {
+      "post": {
+        "tags": [
+          "mfa"
+        ],
+        "summary": "Finishes the authentication process for a WebAuthn Device for this user",
+        "description": "**Permissions**\n- authenticated and logged in user for this very {id}",
+        "operationId": "post_webauthn_auth_finish_login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebauthnAuthFinishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebauthnAdditionalData"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/webauthn_start": {
+      "post": {
+        "tags": [
+          "mfa"
+        ],
+        "summary": "Starts the authentication process for a WebAuthn Device for this user. This only works during\nthe login. Service requests need to use the user-specific endpoint.",
+        "operationId": "post_webauthn_auth_start_login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebauthnAuthStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebauthnAuthStartResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/users/{id}": {
       "get": {
         "tags": [
@@ -8470,7 +8720,9 @@
           "Scopes",
           "UserAttributes",
           "Users",
-          "Pam"
+          "Pam",
+          "AuthProviders",
+          "ApiKeys"
         ]
       },
       "AccessRights": {
@@ -8667,6 +8919,20 @@
           }
         }
       },
+      "Audience": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "RFC 7519 `aud` (audience) claim value: a single audience string, or an array of\nthem. Rauthy serializes a single audience as a plain string (so there is no change\nfor existing consumers) and only emits a JSON array when two or more audiences are\npresent (RFC 8707 `resource` indicators, the per-client `default_aud`, or the\n`solid` audience for Solid-OIDC ephemeral clients). Both forms are valid per the RFC."
+      },
       "AuthProviderTemplate": {
         "type": "object",
         "description": "Auth Provider as template value for SSR of the Login page",
@@ -8740,6 +9006,13 @@
           "redirect_uri": {
             "type": "string",
             "description": "Validation: `[a-zA-Z0-9,.:/_-&?=~#!$'()*+%@]+$`"
+          },
+          "resource": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8707 resource indicator. Must be an absolute URI without a fragment. The\nrequested resource is validated against the client's `allowed_resources` and,\non success, added to the issued access token's `aud`.\n\nValidation: `[a-zA-Z0-9,.:/_-&?=~!$'()*+%@]+$` (no `#`; RFC 8707 forbids a fragment)"
           },
           "response_type": {
             "type": "string",
@@ -8870,7 +9143,8 @@
           "access_token_lifetime",
           "scopes",
           "default_scopes",
-          "force_mfa"
+          "force_mfa",
+          "claims_at_root"
         ],
         "properties": {
           "access_token_alg": {
@@ -8881,6 +9155,15 @@
             "format": "int32"
           },
           "allowed_origins": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_resources": {
             "type": [
               "array",
               "null"
@@ -8908,6 +9191,10 @@
               "type": "string"
             }
           },
+          "claims": {},
+          "claims_at_root": {
+            "type": "boolean"
+          },
           "client_uri": {
             "type": [
               "string",
@@ -8918,6 +9205,15 @@
             "type": "boolean"
           },
           "contacts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "default_aud": {
             "type": [
               "array",
               "null"
@@ -8938,7 +9234,7 @@
           "flows_enabled": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GrantType"
             }
           },
           "force_mfa": {
@@ -9221,9 +9517,9 @@
           "grant_types": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GrantType"
             },
-            "description": "Validation: `Vec<^(authorization_code|client_credentials|urn:ietf:params:oauth:grant-type:device_code|password|refresh_token)$>`"
+            "description": "Validation: cannot be empty"
           },
           "id_token_signed_response_alg": {
             "oneOf": [
@@ -9326,7 +9622,7 @@
           "grant_types": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GrantType"
             }
           },
           "id_token_signed_response_alg": {
@@ -9635,6 +9931,20 @@
           },
           {
             "type": "string",
+            "description": "RFC 6749 \u00a75.2: the provided grant is invalid, expired, revoked, or was issued to\nanother client. Serialized as the RFC error code `invalid_grant`. Used by the RFC 8693\ntoken exchange for a `subject_token` / `actor_token` that cannot be accepted.",
+            "enum": [
+              "invalid_grant"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "RFC 8707 \u00a72: the requested `resource` is invalid, unknown, malformed, or not\nallowed for the client. Serialized as the RFC error code `invalid_target`.",
+            "enum": [
+              "invalid_target"
+            ]
+          },
+          {
+            "type": "string",
             "enum": [
               "JwtToken"
             ]
@@ -9673,6 +9983,12 @@
             "type": "string",
             "enum": [
               "PasswordRefresh"
+            ]
+          },
+          {
+            "type": "string",
+            "enum": [
+              "PreconditionRequired"
             ]
           },
           {
@@ -10192,6 +10508,18 @@
           }
         ]
       },
+      "GrantType": {
+        "type": "string",
+        "description": "The OAuth 2.0 / OIDC grant types (flows) Rauthy supports.\n\nThe wire format is the grant type identifier itself, which for the extended grants is the\nfull URN. Keeping this an enum rather than a validated `String` makes it type-safe in code\nand self-documenting in the OpenAPI spec.",
+        "enum": [
+          "authorization_code",
+          "client_credentials",
+          "password",
+          "refresh_token",
+          "urn:ietf:params:oauth:grant-type:device_code",
+          "urn:ietf:params:oauth:grant-type:token-exchange"
+        ]
+      },
       "Group": {
         "type": "object",
         "required": [
@@ -10572,6 +10900,7 @@
           "fr",
           "ko",
           "nb",
+          "nl",
           "ru",
           "uk",
           "zhhans"
@@ -10612,6 +10941,13 @@
           "redirect_uri": {
             "type": "string",
             "description": "Validation: `[a-zA-Z0-9,.:/_-&?=~#!$'()*+%@]+$`"
+          },
+          "resource": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8707 resource indicator forwarded from the authorization request, carried\ninto the auth code so the issued access token can be audience-restricted.\n\nValidation: `[a-zA-Z0-9,.:/_-&?=~!$'()*+%@]+$` (no `#`; RFC 8707 forbids a fragment)"
           },
           "scopes": {
             "type": [
@@ -10684,6 +11020,13 @@
           "redirect_uri": {
             "type": "string",
             "description": "Validation: `[a-zA-Z0-9,.:/_-&?=~#!$'()*+%@]+$`"
+          },
+          "resource": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8707 resource indicator forwarded from the authorization request, carried\ninto the auth code so the issued access token can be audience-restricted.\n\nValidation: `[a-zA-Z0-9,.:/_-&?=~!$'()*+%@]+$` (no `#`; RFC 8707 forbids a fragment)"
           },
           "scopes": {
             "type": [
@@ -10888,7 +11231,7 @@
           },
           "id": {
             "type": "string",
-            "description": "Validation: `^[a-z0-9-_/]{2,128}$`"
+            "description": "Validation: `^[a-zA-Z0-9._\\-]{2,256}$`"
           },
           "name": {
             "type": [
@@ -11008,6 +11351,13 @@
           },
           "language": {
             "$ref": "#/components/schemas/Language"
+          },
+          "preferred_username": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Validation: `[user_values.preferred_username] -> regex_rust`"
           },
           "roles": {
             "type": "array",
@@ -11715,6 +12065,7 @@
           "uid",
           "gid",
           "username",
+          "home_dir",
           "roles",
           "groups"
         ],
@@ -11733,6 +12084,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "home_dir": {
+            "type": "string"
           },
           "id": {
             "type": "string"
@@ -11796,6 +12150,7 @@
           "gid",
           "email",
           "shell",
+          "home_dir",
           "groups"
         ],
         "properties": {
@@ -11822,6 +12177,9 @@
               "$ref": "#/components/schemas/PamGroupUserLink"
             }
           },
+          "home_dir": {
+            "type": "string"
+          },
           "id": {
             "type": "integer",
             "format": "int32",
@@ -11842,7 +12200,8 @@
           "name",
           "gid",
           "email",
-          "shell"
+          "shell",
+          "home_dir"
         ],
         "properties": {
           "authorized_keys": {
@@ -11861,6 +12220,9 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          },
+          "home_dir": {
+            "type": "string"
           },
           "id": {
             "type": "integer",
@@ -11887,6 +12249,12 @@
             "items": {
               "$ref": "#/components/schemas/PamGroupUserLink"
             }
+          },
+          "home_dir": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "shell": {
             "type": "string"
@@ -12712,7 +13080,8 @@
         "type": "object",
         "required": [
           "id",
-          "name"
+          "name",
+          "claims_at_root"
         ],
         "properties": {
           "attr_include_access": {
@@ -12726,6 +13095,10 @@
               "string",
               "null"
             ]
+          },
+          "claims_at_root": {
+            "type": "boolean",
+            "description": "If `true`, the mapped custom attributes are emitted at the token root\n(flattened) instead of nested under `custom`. Only meaningful for custom\nscopes; a collision with a reserved claim fails token issuance."
           },
           "id": {
             "type": "string"
@@ -12761,6 +13134,10 @@
             },
             "description": "Validation: `^[a-zA-Z0-9-_/]{2,128}$`"
           },
+          "claims_at_root": {
+            "type": "boolean",
+            "description": "If `true`, the custom attributes mapped by this scope are emitted at the\ntoken root instead of nested under `custom`. The admin owns collision\ncorrectness: issuance fails if a mapped attribute name collides with a\nreserved JWT claim. Defaults to `false` and is only meaningful for custom\nscopes."
+          },
           "scope": {
             "type": "string",
             "description": "Validation: `^[a-zA-Z0-9-_/,:*.]{2,64}$`"
@@ -12771,7 +13148,8 @@
         "type": "object",
         "required": [
           "id",
-          "name"
+          "name",
+          "claims_at_root"
         ],
         "properties": {
           "attr_include_access": {
@@ -12791,6 +13169,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "claims_at_root": {
+            "type": "boolean"
           },
           "id": {
             "type": "string"
@@ -13047,12 +13428,6 @@
           },
           "tos_await_code": {
             "type": "string"
-          },
-          "user_id": {
-            "type": [
-              "string",
-              "null"
-            ]
           }
         }
       },
@@ -13172,9 +13547,13 @@
             "type": "boolean"
           },
           "aud": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Audience"
+              }
             ]
           },
           "client_id": {
@@ -13234,6 +13613,27 @@
           "grant_type"
         ],
         "properties": {
+          "actor_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8693 token exchange: the token that represents the identity of the acting party.\nIf given, the exchanged token is a delegation and will contain an `act` claim.\nRauthy only accepts an access token here.\n\nValidation: `[a-zA-Z0-9,.:/_-&?=~#!$'()*+%@]+$`"
+          },
+          "actor_token_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8693 token exchange: the type of the `actor_token`. Rauthy only accepts\n`urn:ietf:params:oauth:token-type:access_token`.\n\nValidation: max length is 256"
+          },
+          "audience": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8693 token exchange: the target of the exchanged token. Validated against the\nclient's `allowed_resources`, exactly like `resource`.\n\nValidation: `[a-zA-Z0-9,.:/_-&?=~#!$'()*+%@]+$`"
+          },
           "client_id": {
             "type": [
               "string",
@@ -13270,8 +13670,7 @@
             "description": "Validation: max length is 256"
           },
           "grant_type": {
-            "type": "string",
-            "description": "Validation: `^(authorization_code|client_credentials|urn:ietf:params:oauth:grant-type:device_code|password|refresh_token)$`"
+            "$ref": "#/components/schemas/GrantType"
           },
           "password": {
             "type": [
@@ -13293,6 +13692,41 @@
               "null"
             ],
             "description": "Validation: `[a-zA-Z0-9,.:/_-&?=~#!$'()*+%@]+$`"
+          },
+          "requested_token_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8693 token exchange: the type of token the client wants back. Rauthy only issues\n`urn:ietf:params:oauth:token-type:access_token`, which is also the default.\n\nValidation: max length is 256"
+          },
+          "resource": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8707 resource indicator. Must be an absolute URI without a fragment. On a\n`refresh_token` grant it may only narrow (be a subset of) the resources granted\nto the original token, never widen them.\n\nValidation: `[a-zA-Z0-9,.:/_-&?=~!$'()*+%@]+$` (no `#`; RFC 8707 forbids a fragment)"
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8693 token exchange: the scopes for the exchanged token. May only narrow the\nscopes of the `subject_token`, never widen them.\n\nValidation: `[a-zA-Z0-9-_/:\\s*]{0,512}`"
+          },
+          "subject_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8693 token exchange: the token that represents the identity on whose behalf the\nrequest is made. Rauthy only accepts an access token here.\n\nValidation: `[a-zA-Z0-9,.:/_-&?=~#!$'()*+%@]+$`"
+          },
+          "subject_token_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 8693 token exchange: the type of the `subject_token`. Rauthy only accepts\n`urn:ietf:params:oauth:token-type:access_token`.\n\nValidation: max length is 256"
           },
           "username": {
             "type": [
@@ -13379,7 +13813,6 @@
       "UpdateClientRequest": {
         "type": "object",
         "required": [
-          "id",
           "confidential",
           "redirect_uris",
           "enabled",
@@ -13412,6 +13845,16 @@
             },
             "description": "Validation: `Vec<^(http|https)://[a-z0-9.:-]+$>`"
           },
+          "allowed_resources": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "RFC 8707 allow-list of resource indicators this client may request. An empty /\nmissing list rejects any `resource` request parameter with `invalid_target`.\n\nValidation: `Vec<^[a-zA-Z0-9,.:/_\\\\-&?=~!$'()*+%@]+$>`"
+          },
           "auth_code_lifetime": {
             "type": "integer",
             "format": "int32",
@@ -13433,6 +13876,13 @@
             },
             "description": "Validation: `Vec<^(plain|S256)$>`"
           },
+          "claims": {
+            "description": "Admin-defined custom claims emitted into `client_credentials` tokens.\nValidation: JSON object, max 1024 serialized characters"
+          },
+          "claims_at_root": {
+            "type": "boolean",
+            "description": "When `true`, `claims` are emitted at the token root instead of nested\nunder `custom`. Collisions with reserved claims fail token issuance."
+          },
           "client_uri": {
             "type": [
               "string",
@@ -13453,6 +13903,16 @@
             },
             "description": "Validation: `Vec<^[a-zA-Z0-9\\+.@/-]{0,48}$>`"
           },
+          "default_aud": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Audiences that are always added to this client's tokens, independent of any\n`resource` request parameter. Useful for clients that cannot send a `resource`.\n\nValidation: `Vec<^[a-zA-Z0-9,.:/_\\\\-&?=~!$'()*+%@]+$>`"
+          },
           "default_scopes": {
             "type": "array",
             "items": {
@@ -13466,16 +13926,12 @@
           "flows_enabled": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GrantType"
             },
-            "description": "Validation: `Vec<^(authorization_code|client_credentials|urn:ietf:params:oauth:grant-type:device_code|password|refresh_token)$>`"
+            "description": "Validation: cannot be empty"
           },
           "force_mfa": {
             "type": "boolean"
-          },
-          "id": {
-            "type": "string",
-            "description": "Validation: `^[a-zA-Z0-9,.:/_\\-&?=~#!$'()*+%]{2,256}$`"
           },
           "id_token_alg": {
             "$ref": "#/components/schemas/JwkKeyPairAlg",
@@ -14333,6 +14789,12 @@
           "immutable": {
             "type": "boolean"
           },
+          "pattern_hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "pattern_html": {
             "type": "string"
           },
@@ -14504,10 +14966,15 @@
             }
           },
           {
-            "type": "string",
-            "enum": [
+            "type": "object",
+            "required": [
               "Test"
-            ]
+            ],
+            "properties": {
+              "Test": {
+                "type": "string"
+              }
+            }
           },
           {
             "type": "object",
@@ -14555,7 +15022,6 @@
         "required": [
           "code",
           "rcr",
-          "user_id",
           "exp"
         ],
         "properties": {
@@ -14568,9 +15034,6 @@
             "minimum": 0
           },
           "rcr": {
-            "type": "string"
-          },
-          "user_id": {
             "type": "string"
           }
         }
@@ -14640,7 +15103,6 @@
         "type": "object",
         "required": [
           "code",
-          "user_id",
           "exp"
         ],
         "properties": {
@@ -14651,9 +15113,6 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
-          },
-          "user_id": {
-            "type": "string"
           }
         }
       },

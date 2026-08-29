@@ -9,7 +9,7 @@
 // field sets and types but not values, and these validators are the only
 // mechanical guard we have.
 //
-// Every pattern and bound below is transcribed from Rauthy v0.35.2:
+// Every pattern and bound below is transcribed from Rauthy v0.36.2:
 // src/common/src/regex.rs, src/api_types/src/cust_validation.rs and the
 // #[validate] attributes in src/api_types/src/clients.rs.
 package validators
@@ -25,8 +25,12 @@ import (
 
 // Patterns from src/common/src/regex.rs.
 var (
-	// RE_CLIENT_ID.
-	clientID = regexp.MustCompile(`^[a-zA-Z0-9,.:/_\-&?=~#!$'()*+%]{2,256}$`)
+	// RE_CLIENT_ID. Rauthy 0.36 narrowed this: `POST /clients` now rejects
+	// everything outside letters, digits, dot, underscore and hyphen, so ids
+	// that used to be legal (anything with `/`, `,`, `:` and friends) are
+	// refused by a live server. Validating the narrow form here turns that
+	// into a plan-time error naming the attribute.
+	clientID = regexp.MustCompile(`^[a-zA-Z0-9._\-]{2,256}$`)
 
 	// RE_CLIENT_NAME. The CJK ranges are part of the upstream pattern.
 	clientName = regexp.MustCompile(`^[a-zA-Z0-9À-ɏ\-\s` +
@@ -113,7 +117,7 @@ var (
 // ClientID validates a client id against RE_CLIENT_ID.
 func ClientID() validator.String {
 	return stringvalidator.RegexMatches(clientID,
-		`must match ^[a-zA-Z0-9,.:/_\-&?=~#!$'()*+%]{2,256}$`)
+		`must match ^[a-zA-Z0-9._\-]{2,256}$`)
 }
 
 // ClientName validates a client name against RE_CLIENT_NAME.
