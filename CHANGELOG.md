@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/fluencelabs/terraform-provider-rauthy/compare/v0.1.1...v0.2.0) (2026-08-29)
+
+
+### Features
+
+* add role, group and password policy resources ([db2c97d](https://github.com/fluencelabs/terraform-provider-rauthy/commit/db2c97d86669d7315e484a8064efbd42b3c173c4))
+* add role, group and password policy resources ([c6f45df](https://github.com/fluencelabs/terraform-provider-rauthy/commit/c6f45df4550b43fa515be18bf3c2d877c9697832))
+
+
+### Bug Fixes
+
+* address review findings on the new resources ([9f2efd1](https://github.com/fluencelabs/terraform-provider-rauthy/commit/9f2efd1870d182968642cab00c37b141c9043673))
+* make the lint config and int32 narrowing version-proof ([f4d461c](https://github.com/fluencelabs/terraform-provider-rauthy/commit/f4d461cd0166c85e1041c8b4b1946cdfc0024b4c))
+
 ## [0.1.1](https://github.com/fluencelabs/terraform-provider-rauthy/compare/v0.1.0...v0.1.1) (2026-08-28)
 
 
