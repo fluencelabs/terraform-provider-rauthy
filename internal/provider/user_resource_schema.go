@@ -22,6 +22,9 @@ const userResourceDescription = "Manages a user account in Rauthy.\n\n" +
 	"values and an initial `password` — is written by the update that follows. A user created " +
 	"through the API has no password and no passkey until one is set, either by this resource " +
 	"or by the account-initialisation email Rauthy sends.\n\n" +
+	"`given_name` is required even though Rauthy's own API documentation calls it optional: " +
+	"an update that does not carry one is rejected, so a user created without it could never " +
+	"be changed again.\n\n" +
 	"Every name in `roles` and `groups` must already exist on the instance; reference a " +
 	"`rauthy_role` or `rauthy_group` resource to have Terraform order that for you.\n\n" +
 	"Requires these API key rights: `Users` read, create, update, delete."
@@ -54,9 +57,15 @@ func userIdentityAttributes() map[string]schema.Attribute {
 			MarkdownDescription: "Email address, which is also the login identifier. Changing it " +
 				"updates the account in place rather than replacing it.",
 		},
+		// Required, though Rauthy's own OpenAPI document calls it nullable:
+		// PUT /users/{id} answers a null given_name with "'given_name' is
+		// required", so a user created without one could be created and then
+		// never updated again. Requiring it here turns that dead end into a
+		// plan-time error. family_name really is optional — a PUT carrying
+		// only given_name is accepted.
 		"given_name": schema.StringAttribute{
-			Optional:            true,
-			MarkdownDescription: "Given name.",
+			Required:            true,
+			MarkdownDescription: "Given name. Required: Rauthy rejects an update that does not carry one.",
 			Validators:          []validator.String{validators.PersonName()},
 		},
 		"family_name": schema.StringAttribute{

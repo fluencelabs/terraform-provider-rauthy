@@ -3,6 +3,7 @@ page_title: "rauthy_user Resource - rauthy"
 description: |-
     Manages a user account in Rauthy.
   Creating a user takes two API calls: Rauthy's create endpoint accepts only the email, language, roles and groups, so everything else — enabled, email_verified, the profile values and an initial password — is written by the update that follows. A user created through the API has no password and no passkey until one is set, either by this resource or by the account-initialisation email Rauthy sends.
+  given_name is required even though Rauthy's own API documentation calls it optional: an update that does not carry one is rejected, so a user created without it could never be changed again.
   Every name in roles and groups must already exist on the instance; reference a rauthy_role or rauthy_group resource to have Terraform order that for you.
   Requires these API key rights: Users read, create, update, delete.
 ---
@@ -12,6 +13,8 @@ description: |-
 Manages a user account in Rauthy.
 
 Creating a user takes two API calls: Rauthy's create endpoint accepts only the email, language, roles and groups, so everything else — `enabled`, `email_verified`, the profile values and an initial `password` — is written by the update that follows. A user created through the API has no password and no passkey until one is set, either by this resource or by the account-initialisation email Rauthy sends.
+
+`given_name` is required even though Rauthy's own API documentation calls it optional: an update that does not carry one is rejected, so a user created without it could never be changed again.
 
 Every name in `roles` and `groups` must already exist on the instance; reference a `rauthy_role` or `rauthy_group` resource to have Terraform order that for you.
 
@@ -56,13 +59,13 @@ resource "rauthy_user" "ada" {
 ### Required
 
 - `email` (String) Email address, which is also the login identifier. Changing it updates the account in place rather than replacing it.
+- `given_name` (String) Given name. Required: Rauthy rejects an update that does not carry one.
 
 ### Optional
 
 - `email_verified` (Boolean) Whether the email address counts as verified. Setting this to `true` skips the verification step Rauthy would otherwise require.
 - `enabled` (Boolean) Whether the account may log in. Disabling it does not delete anything.
 - `family_name` (String) Family name.
-- `given_name` (String) Given name.
 - `groups` (Set of String) Groups the user belongs to. Each must already exist.
 - `language` (String) Language used for the account's emails and the login UI.
 - `password` (String, Sensitive) Password to set on the account. Rauthy never returns it, so this is write-only: the provider cannot detect a password changed elsewhere, and removing the attribute leaves the last one set rather than clearing it. The value is stored in the Terraform state in clear text — prefer leaving it unset and letting the user set their own password through Rauthy's reset flow.

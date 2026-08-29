@@ -21,7 +21,8 @@ var (
 func testAccUserConfig(email, extra string) string {
 	return fmt.Sprintf(`
 resource "rauthy_user" "test" {
-  email = %q
+  email      = %q
+  given_name = "Ada"
   %s
 }
 `, email, extra)
@@ -73,14 +74,12 @@ func TestAccUser_lifecycle(t *testing.T) {
 			},
 			{
 				Config: testAccUserConfig("tf-acc-user@example.com", `
-  given_name     = "Ada"
   family_name    = "Lovelace"
   language       = "de"
   email_verified = true
   enabled        = false
 `),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("rauthy_user.test", "given_name", "Ada"),
 					resource.TestCheckResourceAttr("rauthy_user.test", "family_name", "Lovelace"),
 					resource.TestCheckResourceAttr("rauthy_user.test", "language", "de"),
 					resource.TestCheckResourceAttr("rauthy_user.test", "email_verified", "true"),
@@ -90,7 +89,6 @@ func TestAccUser_lifecycle(t *testing.T) {
 			{
 				// Profile values round-trip through the nested block.
 				Config: testAccUserConfig("tf-acc-user@example.com", `
-  given_name = "Ada"
   user_values = {
     city = "London"
     tz   = "Europe/London"
@@ -103,7 +101,6 @@ func TestAccUser_lifecycle(t *testing.T) {
 			},
 			{
 				Config: testAccUserConfig("tf-acc-user@example.com", `
-  given_name = "Ada"
   user_values = {
     city = "London"
     tz   = "Europe/London"
@@ -145,9 +142,10 @@ resource "rauthy_group" "test" {
 }
 
 resource "rauthy_user" "test" {
-  email  = "tf-acc-user-roles@example.com"
-  roles  = [rauthy_role.test.name]
-  groups = [rauthy_group.test.name]
+  email      = "tf-acc-user-roles@example.com"
+  given_name = "Ada"
+  roles      = [rauthy_role.test.name]
+  groups     = [rauthy_group.test.name]
 }
 
 data "rauthy_user" "by_email" {

@@ -52,6 +52,12 @@ type NewUserRequest struct {
 // PUT is a full replacement: Rauthy's deserializer requires email, roles,
 // enabled and email_verified, and an omitted `groups` or `user_values` clears
 // what was there rather than leaving it alone.
+//
+// GivenName is required too, though the OpenAPI document calls it nullable —
+// a null is answered with "'given_name' is required". That divergence is
+// invisible to the contract tests and was found by running against a live
+// instance; the resource makes the attribute Required because of it.
+// FamilyName is genuinely optional: a PUT carrying only GivenName is accepted.
 type UpdateUserRequest struct {
 	Email         string      `json:"email"`
 	Enabled       bool        `json:"enabled"`
