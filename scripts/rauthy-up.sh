@@ -17,6 +17,15 @@ set -euo pipefail
 version="${1:?usage: rauthy-up.sh <rauthy-version> [--github-env]}"
 output_format="${2:-shell}"
 
+case "$output_format" in
+shell | --github-env) ;;
+*)
+	echo "unknown output format '${output_format}'; expected --github-env or nothing" >&2
+	exit 2
+	;;
+esac
+
+
 image="ghcr.io/sebadob/rauthy:${version}"
 name="${RAUTHY_ACC_CONTAINER:-rauthy-acc}"
 port="${RAUTHY_ACC_PORT:-8098}"
@@ -46,8 +55,15 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib-rauthy.sh
 . "${script_dir}/lib-rauthy.sh"
 
-workdir="$(mktemp -d "${script_dir}/.rauthy-acc.XXXXXX")"
-trap 'rm -rf "$workdir"' EXIT
+# The container outlives this script — rauthy-down.sh tears it down later — so
+# the files it bind-mounts have to outlive it too. Deleting them on exit works
+# on Linux only because the mount pins the inode; with Docker Desktop or Colima
+# the share is path-based and the mounted file goes unreadable the moment the
+# host copy disappears. The directory has a fixed name so rauthy-down.sh can
+# clean it up, and is recreated from scratch on every boot.
+workdir="${script_dir}/.rauthy-acc"
+rm -rf "$workdir"
+mkdir -p "$workdir"
 
 # Seed the user attributes the acceptance tests map into tokens. Rauthy filters
 # a scope's attr_include_* against the attributes that already exist and drops
@@ -97,6 +113,7 @@ if ! rauthy_wait_ready "${url}/auth/v1/ping" 90; then
 	echo "rauthy did not become ready; container logs follow" >&2
 	docker logs "$name" >&2 || true
 	docker rm -f "$name" >/dev/null 2>&1 || true
+	rm -rf "$workdir"
 	exit 1
 fi
 
@@ -108,6 +125,7 @@ if ! curl -sf -o /dev/null -H "Authorization: API-Key ${key_name}\$${key_secret}
 	echo "the bootstrapped API key was rejected by ${url}/auth/v1/clients" >&2
 	docker logs "$name" >&2 || true
 	docker rm -f "$name" >/dev/null 2>&1 || true
+	rm -rf "$workdir"
 	exit 1
 fi
 

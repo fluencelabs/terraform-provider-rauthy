@@ -65,13 +65,19 @@ func (r *clientResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 // users: the fields Rauthy already accepts on POST /clients.
 func clientIdentityAttributes() map[string]schema.Attribute {
 	// Every Optional+Computed attribute below carries UseStateForUnknown.
-	// Without it Terraform marks such an attribute unknown whenever anything
-	// else on the resource changes, and the update then sends the zero value:
-	// for the set-typed ones that is a JSON null, which Rauthy rejects with
-	// "invalid type: null, expected a sequence", and for the scalars it would
-	// quietly reset a server-chosen value. Keeping prior state is what these
-	// attributes mean — the practitioner did not express an opinion, so the
-	// value Rauthy already holds stands.
+	//
+	// Without it, updating a client fails outright. Established by experiment,
+	// not by reading the framework: with the modifiers removed, an update sends
+	// `"flows_enabled": null` (captured off the wire) and Rauthy answers
+	// "invalid type: null, expected a sequence"; with them, the same update
+	// succeeds. Since UseStateForUnknown does nothing unless the planned value
+	// is unknown, that value was unknown — an Optional+Computed attribute the
+	// configuration never mentions.
+	//
+	// Keeping prior state is also what these attributes mean: the practitioner
+	// expressed no opinion, so whatever Rauthy already holds stands. At Create
+	// there is no prior state, the modifiers are no-ops, and the values still
+	// come from the creation response.
 	return map[string]schema.Attribute{
 		"id": schema.StringAttribute{
 			Required:            true,

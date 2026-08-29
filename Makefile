@@ -1,4 +1,4 @@
-.PHONY: docs build test testacc rauthy-up rauthy-down fmt vet openapi-refresh
+.PHONY: docs build test testacc rauthy-up rauthy-down print-rauthy-version fmt vet openapi-refresh
 
 # Rauthy version the vendored OpenAPI spec was generated from. Bump together
 # with the spec file (see openapi-refresh).
@@ -28,6 +28,11 @@ rauthy-up:
 
 rauthy-down:
 	@./scripts/rauthy-down.sh
+
+# The single place the pinned Rauthy version lives; CI reads it from here so a
+# spec bump cannot leave the acceptance matrix on the old release.
+print-rauthy-version:
+	@echo $(RAUTHY_VERSION)
 
 docs:
 	tfplugindocs generate --provider-name rauthy
