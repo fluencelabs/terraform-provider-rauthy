@@ -20,3 +20,9 @@ terraform.rc
 # Local dev builds (terraform dev_overrides)
 .local-bin/
 /terraform-provider-rauthy
+
+# Working directories the Rauthy helper scripts create next to themselves. They
+# hold generated config carrying throwaway secrets; a hard-killed run leaves one
+# behind, and it must not be committable.
+scripts/.rauthy-acc/
+**/.openapi-refresh.*

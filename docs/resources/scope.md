@@ -2,7 +2,7 @@
 page_title: "rauthy_scope Resource - rauthy"
 description: |-
     Manages a custom OIDC scope in Rauthy. A scope created here can be referenced by name from rauthy_client.scopes and rauthy_client.default_scopes.
-  The two attr_include_* sets map custom user attributes into the issued tokens. Rauthy stores them as a single comma-joined string, so an attribute name containing a comma is not representable.
+  The two attr_include_* sets map custom user attributes into the issued tokens. Every name listed there must already exist as a user attribute on the instance: Rauthy filters the mapping against the attributes it knows and discards the rest silently, so the provider turns such a drop into an error rather than writing state that does not match the configuration. Rauthy stores the mapping as one comma-joined string, so an attribute name containing a comma is not representable.
   Requires these API key rights: Scopes read, create, update, delete.
 ---
 
@@ -10,7 +10,7 @@ description: |-
 
 Manages a custom OIDC scope in Rauthy. A scope created here can be referenced by name from `rauthy_client.scopes` and `rauthy_client.default_scopes`.
 
-The two `attr_include_*` sets map custom user attributes into the issued tokens. Rauthy stores them as a single comma-joined string, so an attribute name containing a comma is not representable.
+The two `attr_include_*` sets map custom user attributes into the issued tokens. Every name listed there must **already exist as a user attribute** on the instance: Rauthy filters the mapping against the attributes it knows and discards the rest silently, so the provider turns such a drop into an error rather than writing state that does not match the configuration. Rauthy stores the mapping as one comma-joined string, so an attribute name containing a comma is not representable.
 
 Requires these API key rights: `Scopes` read, create, update, delete.
 

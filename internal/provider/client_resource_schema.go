@@ -6,7 +6,10 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -61,6 +64,20 @@ func (r *clientResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 // clientIdentityAttributes covers who the client is and where it may send
 // users: the fields Rauthy already accepts on POST /clients.
 func clientIdentityAttributes() map[string]schema.Attribute {
+	// Every Optional+Computed attribute below carries UseStateForUnknown.
+	//
+	// Without it, updating a client fails outright. Established by experiment,
+	// not by reading the framework: with the modifiers removed, an update sends
+	// `"flows_enabled": null` (captured off the wire) and Rauthy answers
+	// "invalid type: null, expected a sequence"; with them, the same update
+	// succeeds. Since UseStateForUnknown does nothing unless the planned value
+	// is unknown, that value was unknown — an Optional+Computed attribute the
+	// configuration never mentions.
+	//
+	// Keeping prior state is also what these attributes mean: the practitioner
+	// expressed no opinion, so whatever Rauthy already holds stands. At Create
+	// there is no prior state, the modifiers are no-ops, and the values still
+	// come from the creation response.
 	return map[string]schema.Attribute{
 		"id": schema.StringAttribute{
 			Required:            true,
@@ -84,6 +101,9 @@ func clientIdentityAttributes() map[string]schema.Attribute {
 			Optional:            true,
 			Computed:            true,
 			MarkdownDescription: "Whether the client may be used to log in." + optionalComputedNote,
+			PlanModifiers: []planmodifier.Bool{
+				boolplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"redirect_uris": schema.SetAttribute{
 			Required:            true,
@@ -118,30 +138,45 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 				"`urn:ietf:params:oauth:grant-type:device_code`, `password`, `refresh_token`." +
 				optionalComputedNote,
 			Validators: validators.FlowsEnabledSet(),
+			PlanModifiers: []planmodifier.Set{
+				setplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"access_token_alg": schema.StringAttribute{
 			Optional:            true,
 			Computed:            true,
 			MarkdownDescription: "Signing algorithm for access tokens: `RS256`, `RS384`, `RS512` or `EdDSA`." + optionalComputedNote,
 			Validators:          []validator.String{validators.SigningAlg()},
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"id_token_alg": schema.StringAttribute{
 			Optional:            true,
 			Computed:            true,
 			MarkdownDescription: "Signing algorithm for id tokens: `RS256`, `RS384`, `RS512` or `EdDSA`." + optionalComputedNote,
 			Validators:          []validator.String{validators.SigningAlg()},
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"auth_code_lifetime": schema.Int64Attribute{
 			Optional:            true,
 			Computed:            true,
 			MarkdownDescription: "Lifetime of an authorization code in seconds (10-300)." + optionalComputedNote,
 			Validators:          []validator.Int64{validators.AuthCodeLifetime()},
+			PlanModifiers: []planmodifier.Int64{
+				int64planmodifier.UseStateForUnknown(),
+			},
 		},
 		"access_token_lifetime": schema.Int64Attribute{
 			Optional:            true,
 			Computed:            true,
 			MarkdownDescription: "Lifetime of an access token in seconds (10-86400)." + optionalComputedNote,
 			Validators:          []validator.Int64{validators.AccessTokenLifetime()},
+			PlanModifiers: []planmodifier.Int64{
+				int64planmodifier.UseStateForUnknown(),
+			},
 		},
 		"scopes": schema.SetAttribute{
 			Optional:            true,
@@ -149,6 +184,9 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 			ElementType:         types.StringType,
 			MarkdownDescription: "Scopes the client may request." + optionalComputedNote,
 			Validators:          []validator.Set{validators.ScopeSet()},
+			PlanModifiers: []planmodifier.Set{
+				setplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"default_scopes": schema.SetAttribute{
 			Optional:            true,
@@ -156,6 +194,9 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 			ElementType:         types.StringType,
 			MarkdownDescription: "Scopes granted even when the client does not ask for them." + optionalComputedNote,
 			Validators:          []validator.Set{validators.ScopeSet()},
+			PlanModifiers: []planmodifier.Set{
+				setplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"challenges": schema.SetAttribute{
 			Optional:    true,
@@ -164,11 +205,17 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 			MarkdownDescription: "Accepted PKCE challenge methods: `plain`, `S256`. Rauthy requires " +
 				"`S256` from public clients regardless of this setting." + optionalComputedNote,
 			Validators: validators.ChallengeSet(),
+			PlanModifiers: []planmodifier.Set{
+				setplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"force_mfa": schema.BoolAttribute{
 			Optional:            true,
 			Computed:            true,
 			MarkdownDescription: "Require MFA for users logging in through this client." + optionalComputedNote,
+			PlanModifiers: []planmodifier.Bool{
+				boolplanmodifier.UseStateForUnknown(),
+			},
 		},
 	}
 }

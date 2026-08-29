@@ -1,52 +1,71 @@
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 )
 
-// ScopeResponse is a scope as Rauthy returns it.
+// AttrList is a scope's attribute mapping as it comes back from Rauthy, which
+// is not one shape but two: POST /scopes answers with the stored form, a single
+// comma-joined string, while GET /scopes and PUT /scopes/{id} answer with an
+// array. The vendored OpenAPI document describes only the string form, so this
+// divergence is invisible to the contract tests and was found by running
+// against a live instance.
 //
-// Note the asymmetry with ScopeRequest: the request carries the attribute
-// mappings as arrays, but every endpoint answers with Rauthy's `Scope`, where
-// the same fields are a single comma-joined string (or null when unset). The
-// contract tests pin both directions.
-type ScopeResponse struct {
-	ID                string  `json:"id"`
-	Name              string  `json:"name"`
-	AttrIncludeAccess *string `json:"attr_include_access"`
-	AttrIncludeID     *string `json:"attr_include_id"`
+// Both are decoded into a slice, and an element that is empty after trimming is
+// dropped: the joined form of "no attributes" is "", which naively splits to a
+// one-element slice holding an empty name.
+type AttrList []string
+
+// UnmarshalJSON accepts null, a comma-joined string, or an array of strings.
+func (a *AttrList) UnmarshalJSON(raw []byte) error {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		*a = nil
+		return nil
+	}
+
+	if trimmed[0] == '"' {
+		var joined string
+		if err := json.Unmarshal(trimmed, &joined); err != nil {
+			return fmt.Errorf("decode attribute mapping %s: %w", trimmed, err)
+		}
+		*a = cleanAttrs(strings.Split(joined, ","))
+		return nil
+	}
+
+	var list []string
+	if err := json.Unmarshal(trimmed, &list); err != nil {
+		return fmt.Errorf("decode attribute mapping %s: %w", trimmed, err)
+	}
+	*a = cleanAttrs(list)
+	return nil
 }
 
-// AttrIncludeAccessList splits the comma-joined access-token attribute
-// mapping. A null field yields nil, which the provider renders as an unset
-// attribute rather than an empty set.
-func (s *ScopeResponse) AttrIncludeAccessList() []string { return splitAttrs(s.AttrIncludeAccess) }
-
-// AttrIncludeIDList splits the comma-joined id-token attribute mapping.
-func (s *ScopeResponse) AttrIncludeIDList() []string { return splitAttrs(s.AttrIncludeID) }
-
-func splitAttrs(raw *string) []string {
-	if raw == nil {
-		return nil
-	}
-	trimmed := strings.TrimSpace(*raw)
-	if trimmed == "" {
-		return nil
-	}
-	parts := strings.Split(trimmed, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
+func cleanAttrs(in []string) AttrList {
+	out := make(AttrList, 0, len(in))
+	for _, v := range in {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
 		}
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+// ScopeResponse is a scope as Rauthy returns it.
+type ScopeResponse struct {
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	AttrIncludeAccess AttrList `json:"attr_include_access"`
+	AttrIncludeID     AttrList `json:"attr_include_id"`
 }
 
 // ScopeRequest is the body of POST /scopes and PUT /scopes/{id}.

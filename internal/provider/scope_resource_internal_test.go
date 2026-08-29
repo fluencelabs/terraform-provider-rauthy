@@ -81,16 +81,15 @@ func TestApplyScope_PreservesAnEmptyMappingFromThePlan(t *testing.T) {
 	}
 }
 
-// The comma-joined string Rauthy returns is split back into a set.
+// The decoded mapping lands in the set attribute.
 func TestApplyScope_SplitsTheJoinedMapping(t *testing.T) {
 	t.Parallel()
 
-	joined := "department,cost_center"
 	model := scopeResourceModel{}
 	applyScope(&model, &client.ScopeResponse{
 		ID:                "scope-1",
 		Name:              "read:billing",
-		AttrIncludeAccess: &joined,
+		AttrIncludeAccess: client.AttrList{"department", "cost_center"},
 	})
 
 	if want := setOf(t, "department", "cost_center"); !model.AttrIncludeAccess.Equal(want) {

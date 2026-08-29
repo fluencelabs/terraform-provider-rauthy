@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Rauthy moves under us: a nightly run catches a release that breaks the
+  # provider before an unrelated pull request trips over it.
+  schedule:
+    - cron: "0 4 * * *"
 
 jobs:
   lint:
@@ -57,3 +61,82 @@ jobs:
             echo "docs/ is stale — run 'make docs' and commit the result"
             exit 1
           fi
+
+  acceptance:
+    name: acceptance (rauthy ${{ matrix.rauthy }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Applied to the whole job, not just the test step: booting an unreleased
+    # Rauthy tag is itself a way for the forward-looking row to fail.
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The version the vendored OpenAPI spec was generated from, read out
+          # of the Makefile so a spec bump cannot leave CI booting the old
+          # release. This row must pass.
+          - rauthy: "from-makefile"
+            allow_failure: false
+          # Where Rauthy is heading. Allowed to fail so an upstream change is
+          # reported without blocking a pull request that did not cause it.
+          - rauthy: "latest"
+            allow_failure: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          check-latest: true
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Resolve the Rauthy version
+        id: version
+        run: |
+          set -euo pipefail
+          want='${{ matrix.rauthy }}'
+          if [ "$want" = "from-makefile" ]; then
+            want="$(make -s print-rauthy-version)"
+            echo "pinned Rauthy version from the Makefile: $want"
+          fi
+          echo "version=$want" >> "$GITHUB_OUTPUT"
+
+      - name: Boot Rauthy
+        run: ./scripts/rauthy-up.sh "${{ steps.version.outputs.version }}" --github-env >> "$GITHUB_ENV"
+
+      # A skipped acceptance suite is indistinguishable from a passing one:
+      # the harness calls t.Skip when these are unset, so a malformed
+      # $GITHUB_ENV would turn the whole job green while testing nothing.
+      - name: Check the test environment arrived
+        run: |
+          set -euo pipefail
+          : "${RAUTHY_URL:?RAUTHY_URL did not reach the test step}"
+          : "${RAUTHY_API_KEY:?RAUTHY_API_KEY did not reach the test step}"
+
+      - name: Acceptance tests
+        env:
+          TF_ACC: "1"
+        # -p 1 keeps the packages serial: they share one Rauthy, and
+        # rauthy_password_policy is a singleton for the whole instance, so two
+        # tests running at once would fight over the same object.
+        run: |
+          set -euo pipefail
+          go test ./... -count=1 -p 1 -timeout 15m -run 'TestAcc' -v 2>&1 | tee acc.log
+          # Belt and braces: prove at least one acceptance test really PASSED.
+          # `=== RUN` is printed for skipped tests too, so it proves nothing —
+          # the harness skips when the credentials are missing, which is the
+          # very failure this guard exists to catch.
+          if ! grep -qE '^--- PASS:[[:space:]]+TestAcc' acc.log; then
+            echo "no acceptance test ran — the suite skipped instead of testing" >&2
+            exit 1
+          fi
+
+      - name: Rauthy logs
+        if: failure()
+        run: docker logs rauthy-acc || true
+
+      - name: Stop Rauthy
+        if: always()
+        run: ./scripts/rauthy-down.sh
