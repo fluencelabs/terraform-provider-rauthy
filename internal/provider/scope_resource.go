@@ -49,8 +49,9 @@ func (r *scopeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"listed there must **already exist as a user attribute** on the instance: Rauthy filters the " +
 			"mapping against the attributes it knows and discards the rest silently, so the provider " +
 			"turns such a drop into an error rather than writing state that does not match the " +
-			"configuration. Rauthy stores the mapping as one comma-joined string, so an attribute name " +
-			"containing a comma is not representable.\n\n" +
+			"configuration. Define them with `rauthy_user_attribute` and reference that resource, so " +
+			"Terraform orders the two correctly. Rauthy stores the mapping as one comma-joined string, " +
+			"so an attribute name containing a comma is not representable.\n\n" +
 			"Requires these API key rights: `Scopes` read, create, update, delete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -214,8 +215,8 @@ func checkAttrsKept(sent client.ScopeRequest, got *client.ScopeResponse, diags *
 			"Rauthy dropped unknown user attributes from the scope",
 			fmt.Sprintf(
 				"Rauthy kept only the attribute names that are already defined on the instance and "+
-					"silently discarded the rest: %v. Define them first — in the Admin UI under User "+
-					"Attributes, or through POST /auth/v1/users/attr — and apply again.",
+					"silently discarded the rest: %v. Define them first with a rauthy_user_attribute "+
+					"resource — and make this scope depend on it — then apply again.",
 				dropped,
 			),
 		)

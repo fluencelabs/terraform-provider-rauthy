@@ -51,6 +51,16 @@ var (
 	// Attribute names in a scope's attr_include_* mapping.
 	userAttrName = regexp.MustCompile(`^[a-zA-Z0-9-_/]{2,128}$`)
 
+	// The name of a user attribute *definition*. Same character class as the
+	// mapping above but a tighter length bound: Rauthy accepts a 128-character
+	// name in a scope's mapping while refusing to define one longer than 32,
+	// so an over-long name is rejected at the point where it is created.
+	userAttrConfigName = regexp.MustCompile(`^[a-zA-Z0-9-_/]{2,32}$`)
+
+	// The description of a user attribute definition. Note the character
+	// class: Rauthy does not allow spaces in it, so this is not free text.
+	userAttrDesc = regexp.MustCompile(`^[a-zA-Z0-9-_/]{0,128}$`)
+
 	// A user's given_name and family_name.
 	personName = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-'\s]{1,32}$`)
 
@@ -239,6 +249,18 @@ func ScopeName() validator.String {
 func UserAttrNameSet() validator.Set {
 	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(userAttrName,
 		`must match ^[a-zA-Z0-9-_/]{2,128}$`))
+}
+
+// UserAttrConfigName validates the name of a user attribute definition.
+func UserAttrConfigName() validator.String {
+	return stringvalidator.RegexMatches(userAttrConfigName,
+		`must match ^[a-zA-Z0-9-_/]{2,32}$`)
+}
+
+// UserAttrDesc validates the description of a user attribute definition.
+func UserAttrDesc() validator.String {
+	return stringvalidator.RegexMatches(userAttrDesc,
+		`must match ^[a-zA-Z0-9-_/]{0,128}$ (no spaces)`)
 }
 
 // Language validates a UI/email language against Rauthy's Language enum.
