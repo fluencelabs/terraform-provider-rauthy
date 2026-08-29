@@ -50,6 +50,17 @@ var (
 
 	// Attribute names in a scope's attr_include_* mapping.
 	userAttrName = regexp.MustCompile(`^[a-zA-Z0-9-_/]{2,128}$`)
+
+	// A user's given_name and family_name.
+	personName = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-'\s]{1,32}$`)
+
+	// The user_values fields, from validate_* in cust_validation.rs.
+	birthdate   = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
+	phone       = regexp.MustCompile(`^\+[0-9]{0,32}$`)
+	zip         = regexp.MustCompile(`^[a-zA-Z0-9]{0,24}$`)
+	street      = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-.\s]{0,48}$`)
+	addressPart = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-\s]{0,48}$`)
+	timezone    = regexp.MustCompile(`^[A-Za-z]+(?:/[A-Za-z0-9_+-]+)*$`)
 )
 
 // Bounds from the #[validate(range(...))] attributes in
@@ -94,6 +105,9 @@ var (
 
 	// RE_CODE_CHALLENGE_METHOD.
 	challengeMethods = []string{"plain", "S256"}
+
+	// Language.
+	languages = []string{"de", "en", "fr", "ko", "nb", "ru", "uk", "zhhans"}
 )
 
 // ClientID validates a client id against RE_CLIENT_ID.
@@ -225,4 +239,59 @@ func ScopeName() validator.String {
 func UserAttrNameSet() validator.Set {
 	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(userAttrName,
 		`must match ^[a-zA-Z0-9-_/]{2,128}$`))
+}
+
+// Language validates a UI/email language against Rauthy's Language enum.
+func Language() validator.String {
+	return stringvalidator.OneOf(languages...)
+}
+
+// PersonName validates a given or family name.
+func PersonName() validator.String {
+	return stringvalidator.RegexMatches(personName,
+		"must be 1-32 characters of letters, digits, spaces, '-' or '\\''")
+}
+
+// RoleNameSet validates every element of a set as a role name.
+func RoleNameSet() validator.Set {
+	return setvalidator.ValueStringsAre(RoleName())
+}
+
+// GroupNameSet validates every element of a set as a group name.
+func GroupNameSet() validator.Set {
+	return setvalidator.ValueStringsAre(GroupName())
+}
+
+// Birthdate validates a user's birthdate, which Rauthy stores as YYYY-MM-DD.
+func Birthdate() validator.String {
+	return stringvalidator.RegexMatches(birthdate, "must be a date in the form YYYY-MM-DD")
+}
+
+// Phone validates a user's phone number.
+func Phone() validator.String {
+	return stringvalidator.RegexMatches(phone, "must be in the form +<digits>, at most 32 digits")
+}
+
+// Zip validates a user's postal code.
+func Zip() validator.String {
+	return stringvalidator.RegexMatches(zip, "must be at most 24 letters or digits")
+}
+
+// Street validates a user's street.
+func Street() validator.String {
+	return stringvalidator.RegexMatches(street,
+		"must be at most 48 characters of letters, digits, spaces, '-' or '.'")
+}
+
+// AddressPart validates a user's city or country.
+func AddressPart() validator.String {
+	return stringvalidator.RegexMatches(addressPart,
+		"must be at most 48 characters of letters, digits, spaces or '-'")
+}
+
+// Timezone validates a user's timezone. Rauthy only checks that the value
+// parses as an IANA name, so this is a shape check rather than a lookup.
+func Timezone() validator.String {
+	return stringvalidator.RegexMatches(timezone,
+		"must be an IANA timezone such as Europe/Berlin")
 }
