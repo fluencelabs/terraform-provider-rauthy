@@ -1,6 +1,7 @@
 package provider_test
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -75,10 +76,15 @@ resource "rauthy_password_policy" "test" {
 				PlanOnly: true,
 			},
 			{
-				ResourceName:      "rauthy_password_policy.test",
-				ImportState:       true,
-				ImportStateId:     "singleton",
-				ImportStateVerify: true,
+				// Import cannot work against Rauthy v0.35.2: it needs
+				// GET /password_policy, which accepts only session auth.
+				// Asserting the refusal keeps us honest — if a future Rauthy
+				// opens the endpoint, this step fails and import can be
+				// enabled for real.
+				ResourceName:  "rauthy_password_policy.test",
+				ImportState:   true,
+				ImportStateId: "singleton",
+				ExpectError:   regexp.MustCompile("does not allow importing the password policy"),
 			},
 		},
 	})
