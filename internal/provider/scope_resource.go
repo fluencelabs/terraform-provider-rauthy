@@ -45,9 +45,12 @@ func (r *scopeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a custom OIDC scope in Rauthy. A scope created here can be referenced " +
 			"by name from `rauthy_client.scopes` and `rauthy_client.default_scopes`.\n\n" +
-			"The two `attr_include_*` sets map custom user attributes into the issued tokens. Rauthy stores " +
-			"them as a single comma-joined string, so an attribute name containing a comma is not " +
-			"representable.\n\n" +
+			"The two `attr_include_*` sets map custom user attributes into the issued tokens. Every name " +
+			"listed there must **already exist as a user attribute** on the instance: Rauthy filters the " +
+			"mapping against the attributes it knows and discards the rest silently, so the provider " +
+			"turns such a drop into an error rather than writing state that does not match the " +
+			"configuration. Rauthy stores the mapping as one comma-joined string, so an attribute name " +
+			"containing a comma is not representable.\n\n" +
 			"Requires these API key rights: `Scopes` read, create, update, delete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -121,6 +124,7 @@ func (r *scopeResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
+	checkAttrsKept(body, created, &resp.Diagnostics)
 	applyScope(&plan, created)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -166,6 +170,7 @@ func (r *scopeResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
+	checkAttrsKept(body, updated, &resp.Diagnostics)
 	applyScope(&plan, updated)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -181,6 +186,43 @@ func (r *scopeResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	if err := r.api.DeleteScope(ctx, id); err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy scope "+id, err.Error())
 	}
+}
+
+// checkAttrsKept reports attribute names Rauthy dropped.
+//
+// Rauthy filters an attribute mapping against the user attributes that already
+// exist and keeps only the names it recognises — silently, with a 200. Left
+// unchecked that produces state which does not match the configuration, so the
+// drop is turned into a plain error naming what went missing.
+func checkAttrsKept(sent client.ScopeRequest, got *client.ScopeResponse, diags *diag.Diagnostics) {
+	report := func(attr string, requested []string, kept client.AttrList) {
+		have := make(map[string]struct{}, len(kept))
+		for _, k := range kept {
+			have[k] = struct{}{}
+		}
+		var dropped []string
+		for _, want := range requested {
+			if _, ok := have[want]; !ok {
+				dropped = append(dropped, want)
+			}
+		}
+		if len(dropped) == 0 {
+			return
+		}
+		diags.AddAttributeError(
+			path.Root(attr),
+			"Rauthy dropped unknown user attributes from the scope",
+			fmt.Sprintf(
+				"Rauthy kept only the attribute names that are already defined on the instance and "+
+					"silently discarded the rest: %v. Define them first — in the Admin UI under User "+
+					"Attributes, or through POST /auth/v1/users/attr — and apply again.",
+				dropped,
+			),
+		)
+	}
+
+	report("attr_include_access", sent.AttrIncludeAccess, got.AttrIncludeAccess)
+	report("attr_include_id", sent.AttrIncludeID, got.AttrIncludeID)
 }
 
 func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.Diagnostics) client.ScopeRequest {
@@ -201,8 +243,8 @@ func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.D
 func applyScope(m *scopeResourceModel, s *client.ScopeResponse) {
 	m.ID = types.StringValue(s.ID)
 	m.Name = types.StringValue(s.Name)
-	m.AttrIncludeAccess = attrSet(s.AttrIncludeAccessList(), m.AttrIncludeAccess)
-	m.AttrIncludeID = attrSet(s.AttrIncludeIDList(), m.AttrIncludeID)
+	m.AttrIncludeAccess = attrSet(s.AttrIncludeAccess, m.AttrIncludeAccess)
+	m.AttrIncludeID = attrSet(s.AttrIncludeID, m.AttrIncludeID)
 }
 
 // attrSet renders an attribute mapping, keeping `[]` distinct from unset.
@@ -213,7 +255,7 @@ func applyScope(m *scopeResourceModel, s *client.ScopeResponse) {
 // deriving null from the response would abort an apply that wrote `[]` with
 // "inconsistent result after apply". When the response carries nothing, the
 // value the configuration (or prior state) expressed is therefore kept.
-func attrSet(values []string, prior types.Set) types.Set {
+func attrSet(values client.AttrList, prior types.Set) types.Set {
 	if len(values) > 0 {
 		return stringsToSet(values)
 	}

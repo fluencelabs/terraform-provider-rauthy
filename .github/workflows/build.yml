@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Rauthy moves under us: a nightly run catches a release that breaks the
+  # provider before an unrelated pull request trips over it.
+  schedule:
+    - cron: "0 4 * * *"
 
 jobs:
   lint:
@@ -57,3 +61,52 @@ jobs:
             echo "docs/ is stale — run 'make docs' and commit the result"
             exit 1
           fi
+
+  acceptance:
+    name: acceptance (rauthy ${{ matrix.rauthy }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Applied to the whole job, not just the test step: booting an unreleased
+    # Rauthy tag is itself a way for the forward-looking row to fail.
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The version the vendored OpenAPI spec was generated from. This one
+          # must pass.
+          - rauthy: "0.35.2"
+            allow_failure: false
+          # Where Rauthy is heading. Allowed to fail so an upstream change is
+          # reported without blocking a pull request that did not cause it.
+          - rauthy: "latest"
+            allow_failure: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          check-latest: true
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Boot Rauthy
+        id: rauthy
+        run: ./scripts/rauthy-up.sh "${{ matrix.rauthy }}" --github-env >> "$GITHUB_ENV"
+
+      - name: Acceptance tests
+        env:
+          TF_ACC: "1"
+        # -p 1 keeps the packages serial: they share one Rauthy, and
+        # rauthy_password_policy is a singleton for the whole instance, so two
+        # tests running at once would fight over the same object.
+        run: go test ./... -count=1 -p 1 -timeout 15m -run 'TestAcc'
+
+      - name: Rauthy logs
+        if: failure()
+        run: docker logs rauthy-acc || true
+
+      - name: Stop Rauthy
+        if: always()
+        run: ./scripts/rauthy-down.sh

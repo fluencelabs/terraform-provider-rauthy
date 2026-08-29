@@ -46,40 +46,60 @@ func TestCreateScope_SendsArraysAndSplitsTheJoinedResponse(t *testing.T) {
 		t.Errorf("attr_include_access = %#v, want a two-element array", gotBody["attr_include_access"])
 	}
 
-	if want := []string{"department", "cost_center"}; !reflect.DeepEqual(got.AttrIncludeAccessList(), want) {
-		t.Errorf("AttrIncludeAccessList() = %v, want %v", got.AttrIncludeAccessList(), want)
+	if want := (client.AttrList{"department", "cost_center"}); !reflect.DeepEqual(got.AttrIncludeAccess, want) {
+		t.Errorf("AttrIncludeAccess = %v, want %v", got.AttrIncludeAccess, want)
 	}
-	if want := []string{"department"}; !reflect.DeepEqual(got.AttrIncludeIDList(), want) {
-		t.Errorf("AttrIncludeIDList() = %v, want %v", got.AttrIncludeIDList(), want)
+	if want := (client.AttrList{"department"}); !reflect.DeepEqual(got.AttrIncludeID, want) {
+		t.Errorf("AttrIncludeID = %v, want %v", got.AttrIncludeID, want)
 	}
 }
 
-// A null or blank mapping must read as "unset", not as an empty-string
-// attribute name: the provider renders nil as a null set.
-func TestScopeResponse_SplitsAbsentMappingsToNil(t *testing.T) {
+// Rauthy answers with two different shapes for the same field: POST /scopes
+// returns the stored comma-joined string, while GET /scopes and PUT
+// /scopes/{id} return an array. The vendored OpenAPI document describes only
+// the string, so this is invisible to the contract tests — it was found by
+// running the acceptance suite against a live instance.
+func TestAttrList_DecodesBothShapes(t *testing.T) {
 	t.Parallel()
 
-	blank := ""
-	spaces := " , "
-	joined := " department , cost_center "
-
 	cases := map[string]struct {
-		in   *string
-		want []string
+		raw  string
+		want client.AttrList
 	}{
-		"null":            {nil, nil},
-		"empty string":    {&blank, nil},
-		"only separators": {&spaces, nil},
-		"padded":          {&joined, []string{"department", "cost_center"}},
+		"null":                    {`null`, nil},
+		"joined string":           {`"department,cost_center"`, client.AttrList{"department", "cost_center"}},
+		"empty string":            {`""`, nil},
+		"string of separators":    {`" , "`, nil},
+		"padded joined string":    {`" department , cost_center "`, client.AttrList{"department", "cost_center"}},
+		"array":                   {`["department","cost_center"]`, client.AttrList{"department", "cost_center"}},
+		"empty array":             {`[]`, nil},
+		"array holding one empty": {`[""]`, nil},
 	}
+
 	for name, tc := range cases {
-		s := client.ScopeResponse{AttrIncludeAccess: tc.in, AttrIncludeID: tc.in}
-		if got := s.AttrIncludeAccessList(); !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("%s: AttrIncludeAccessList() = %#v, want %#v", name, got, tc.want)
+		var got client.AttrList
+		if err := json.Unmarshal([]byte(tc.raw), &got); err != nil {
+			t.Errorf("%s: unmarshal %s: %v", name, tc.raw, err)
+			continue
 		}
-		if got := s.AttrIncludeIDList(); !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("%s: AttrIncludeIDList() = %#v, want %#v", name, got, tc.want)
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: unmarshal %s = %#v, want %#v", name, tc.raw, got, tc.want)
 		}
+	}
+}
+
+// "no attributes" comes back from Rauthy as an empty string or as an array
+// holding one empty string; neither may become an attribute named "".
+func TestAttrList_RejectsAnEmptyAttributeName(t *testing.T) {
+	t.Parallel()
+
+	var s client.ScopeResponse
+	body := `{"id":"scope-1","name":"probe","attr_include_access":"","attr_include_id":[""]}`
+	if err := json.Unmarshal([]byte(body), &s); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if s.AttrIncludeAccess != nil || s.AttrIncludeID != nil {
+		t.Errorf("got access=%#v id=%#v, want both nil", s.AttrIncludeAccess, s.AttrIncludeID)
 	}
 }
 
@@ -106,8 +126,8 @@ func TestScopeRequest_OmitsEmptyMappings(t *testing.T) {
 			t.Errorf("%s present in the body, want it omitted", field)
 		}
 	}
-	if got.AttrIncludeAccessList() != nil {
-		t.Errorf("AttrIncludeAccessList() = %v, want nil", got.AttrIncludeAccessList())
+	if got.AttrIncludeAccess != nil {
+		t.Errorf("AttrIncludeAccess = %v, want nil", got.AttrIncludeAccess)
 	}
 }
 

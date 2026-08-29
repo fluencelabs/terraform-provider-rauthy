@@ -107,7 +107,7 @@ func (d *scopeDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 
 	config.ID = types.StringValue(got.ID)
 	config.Name = types.StringValue(got.Name)
-	config.AttrIncludeAccess = stringsToSet(got.AttrIncludeAccessList())
-	config.AttrIncludeID = stringsToSet(got.AttrIncludeIDList())
+	config.AttrIncludeAccess = stringsToSet(got.AttrIncludeAccess)
+	config.AttrIncludeID = stringsToSet(got.AttrIncludeID)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
 }

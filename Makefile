@@ -1,4 +1,4 @@
-.PHONY: docs build test fmt vet openapi-refresh
+.PHONY: docs build test testacc rauthy-up rauthy-down fmt vet openapi-refresh
 
 # Rauthy version the vendored OpenAPI spec was generated from. Bump together
 # with the spec file (see openapi-refresh).
@@ -13,6 +13,21 @@ vet:
 
 test:
 	go test ./... -count=1
+
+# Acceptance tests against a live Rauthy. `make rauthy-up` prints the
+# environment they need; CI runs the same script.
+#
+#   eval "$$(make -s rauthy-up)"
+#   make testacc
+#   make rauthy-down
+testacc:
+	TF_ACC=1 go test ./... -count=1 -p 1 -timeout 15m -run TestAcc
+
+rauthy-up:
+	@./scripts/rauthy-up.sh $(RAUTHY_VERSION)
+
+rauthy-down:
+	@./scripts/rauthy-down.sh
 
 docs:
 	tfplugindocs generate --provider-name rauthy

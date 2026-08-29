@@ -329,11 +329,17 @@ func TestContract_ScopeRequest(t *testing.T) {
 	}
 }
 
-// The response half of the asymmetry: Rauthy answers with `Scope`, whose
-// attr_include_* are a single comma-joined string, not the arrays the request
-// carries. If a Rauthy upgrade ever aligns the two, this test fails and the
-// splitting in ScopeResponse can go.
-func TestContract_ScopeResponseJoinsAttrsIntoAString(t *testing.T) {
+// KNOWN SPEC INACCURACY. The vendored document says a scope's attr_include_*
+// come back as a string, and that is true only of POST /scopes. Against a live
+// Rauthy 0.35.2, GET /scopes and PUT /scopes/{id} answer with an array — the
+// handlers return different types and the OpenAPI document records only one.
+//
+// This test pins the divergence rather than the belief: the string form is what
+// the spec accepts, the array form is what the spec rejects and the server
+// nonetheless sends. AttrList decodes both. When a Rauthy release makes the
+// document agree with the API, the second half fails and this compensation can
+// be reconsidered.
+func TestContract_ScopeResponseShapeDivergesFromTheSpec(t *testing.T) {
 	v := newContractValidator(t)
 
 	ok, msg := validateResponse(t, v, http.MethodGet, apiPath("/scopes"), http.StatusOK,
@@ -343,11 +349,12 @@ func TestContract_ScopeResponseJoinsAttrsIntoAString(t *testing.T) {
 		t.Errorf("GET /scopes response rejected by the spec: %s", msg)
 	}
 
-	// The array form the request uses must NOT validate as a response.
+	// The array form — what a live instance actually returns from this very
+	// endpoint — is rejected by the document.
 	ok, _ = validateResponse(t, v, http.MethodGet, apiPath("/scopes"), http.StatusOK,
 		`[{"id":"scope-1","name":"read:billing","attr_include_access":["department"]}]`)
 	if ok {
-		t.Error("an array attr_include_access validated as a response; the asymmetry this package " +
-			"compensates for may be gone — re-check ScopeResponse")
+		t.Error("the spec now accepts the array form GET /scopes really returns; the document and the " +
+			"API may have been reconciled — re-check whether AttrList still needs to decode both")
 	}
 }
