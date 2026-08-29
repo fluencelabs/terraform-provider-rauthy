@@ -64,6 +64,11 @@ func validateRequest(t *testing.T, v validator.Validator, method, path string, b
 	return ok, joinErrs(valErrs)
 }
 
+// The method and status parameters are spelled out at every call site even
+// though every response contract checked so far is a 200 on GET; they keep the
+// helper honest if a non-GET response is ever validated.
+//
+//nolint:unparam // deliberately general; see above
 func validateResponse(
 	t *testing.T,
 	v validator.Validator,
@@ -228,5 +233,78 @@ func TestContract_SpecDoesNotCarryValueRanges(t *testing.T) {
 	if !ok {
 		t.Log("the spec now rejects cache_current_hours=48; ranges became machine-readable, " +
 			"the contract tests can start asserting them")
+	}
+}
+
+func TestContract_RoleRequest(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateRequest(t, v, http.MethodPost, apiPath("/roles"), client.RoleRequest{Role: "admin"})
+	if !ok {
+		t.Errorf("POST /roles body rejected by the spec: %s", msg)
+	}
+
+	ok, msg = validateRequest(t, v, http.MethodPut, apiPath("/roles/role-1"), client.RoleRequest{Role: "operator"})
+	if !ok {
+		t.Errorf("PUT /roles/{id} body rejected by the spec: %s", msg)
+	}
+}
+
+func TestContract_RoleResponse(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateResponse(t, v, http.MethodGet, apiPath("/roles"), http.StatusOK,
+		`[{"id":"role-1","name":"admin"}]`)
+	if !ok {
+		t.Errorf("GET /roles response rejected by the spec: %s", msg)
+	}
+}
+
+func TestContract_GroupRequest(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateRequest(t, v, http.MethodPost, apiPath("/groups"), client.GroupRequest{Group: "developers"})
+	if !ok {
+		t.Errorf("POST /groups body rejected by the spec: %s", msg)
+	}
+
+	ok, msg = validateRequest(t, v, http.MethodPut, apiPath("/groups/group-1"), client.GroupRequest{Group: "ops"})
+	if !ok {
+		t.Errorf("PUT /groups/{id} body rejected by the spec: %s", msg)
+	}
+}
+
+func TestContract_GroupResponse(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateResponse(t, v, http.MethodGet, apiPath("/groups"), http.StatusOK,
+		`[{"id":"group-1","name":"developers"}]`)
+	if !ok {
+		t.Errorf("GET /groups response rejected by the spec: %s", msg)
+	}
+}
+
+func TestContract_PasswordPolicyRequest(t *testing.T) {
+	v := newContractValidator(t)
+
+	digits := int32(1)
+	ok, msg := validateRequest(t, v, http.MethodPut, apiPath("/password_policy"), client.PasswordPolicy{
+		LengthMin:     12,
+		LengthMax:     128,
+		IncludeDigits: &digits,
+	})
+	if !ok {
+		t.Errorf("PUT /password_policy body rejected by the spec: %s", msg)
+	}
+}
+
+func TestContract_PasswordPolicyResponse(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateResponse(t, v, http.MethodGet, apiPath("/password_policy"), http.StatusOK,
+		`{"length_min":12,"length_max":128,"include_digits":1,"include_lower_case":null,`+
+			`"include_upper_case":null,"include_special":null,"valid_days":null,"not_recently_used":null}`)
+	if !ok {
+		t.Errorf("GET /password_policy response rejected by the spec: %s", msg)
 	}
 }

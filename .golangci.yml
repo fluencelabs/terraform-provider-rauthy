@@ -168,6 +168,12 @@ linters:
       # Default: 0.0
       package-average: 10.0
 
+    goconst:
+      # Terraform attribute names are the wire format of a schema, and every
+      # resource repeats the common ones. Hiding them behind a constant would
+      # obscure the mapping to the API rather than clarify it.
+      ignore-string-values: [ '^(id|name)$' ]
+
     depguard:
       # Rules to apply.
       #
@@ -454,6 +460,15 @@ linters:
       - text: 'comment on exported \S+ \S+ should be of the form ".+"'
         source: '// ?(nolint|TODO)'
         linters: [ revive, staticcheck ]
+      # Roles and groups are separate Rauthy endpoint families that happen to
+      # have the same shape, all the way up through the resources and data
+      # sources built on them. Folding them together behind generics would hide
+      # which endpoints actually exist, so the repetition is deliberate.
+      - path: 'internal/client/(roles|groups)\.go'
+        linters: [ dupl ]
+      - path: 'internal/provider/(role|group)_(resource|data_source)\.go'
+        linters: [ dupl ]
+
       - path: '_test\.go'
         linters:
           - bodyclose

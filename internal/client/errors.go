@@ -71,3 +71,17 @@ func hasStatus(err error, status int) bool {
 	}
 	return false
 }
+
+// notFoundError builds a synthetic 404 for endpoints Rauthy does not offer
+// per-id: roles and groups can only be listed, so "not there" is something the
+// client concludes rather than something the server says.
+// The endpoints in question are list endpoints, so the method is always GET.
+func notFoundError(path, message string) *APIError {
+	return &APIError{
+		Method:     http.MethodGet,
+		Path:       path,
+		StatusCode: http.StatusNotFound,
+		Message:    message,
+		ErrorCode:  "NotFound",
+	}
+}
