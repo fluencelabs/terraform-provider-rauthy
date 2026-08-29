@@ -54,7 +54,7 @@ func (c *Client) GetRole(ctx context.Context, id string) (*RoleResponse, error) 
 			return &roles[i], nil
 		}
 	}
-	return nil, notFoundError(rolePath(id), "role "+id+" does not exist")
+	return nil, notFoundError("/roles", "role "+id+" does not exist")
 }
 
 // GetRoleByName returns the role with the given name, or a synthetic 404.

@@ -8,6 +8,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -16,9 +18,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = (*passwordPolicyResource)(nil)
-	_ resource.ResourceWithConfigure   = (*passwordPolicyResource)(nil)
-	_ resource.ResourceWithImportState = (*passwordPolicyResource)(nil)
+	_ resource.Resource                   = (*passwordPolicyResource)(nil)
+	_ resource.ResourceWithConfigure      = (*passwordPolicyResource)(nil)
+	_ resource.ResourceWithImportState    = (*passwordPolicyResource)(nil)
+	_ resource.ResourceWithValidateConfig = (*passwordPolicyResource)(nil)
 )
 
 // NewPasswordPolicyResource returns the rauthy_password_policy resource.
@@ -28,15 +31,22 @@ type passwordPolicyResource struct {
 	api *client.Client
 }
 
+// passwordPolicySingletonID is the value of the synthetic `id` attribute. The
+// policy has no identifier of its own — there is only ever one — but Terraform
+// tooling (notably `terraform import` and the acceptance-test harness) expects
+// every resource to carry a primary identity, so one is supplied.
+const passwordPolicySingletonID = "singleton"
+
 type passwordPolicyResourceModel struct {
-	LengthMin        types.Int64 `tfsdk:"length_min"`
-	LengthMax        types.Int64 `tfsdk:"length_max"`
-	IncludeLowerCase types.Int64 `tfsdk:"include_lower_case"`
-	IncludeUpperCase types.Int64 `tfsdk:"include_upper_case"`
-	IncludeDigits    types.Int64 `tfsdk:"include_digits"`
-	IncludeSpecial   types.Int64 `tfsdk:"include_special"`
-	ValidDays        types.Int64 `tfsdk:"valid_days"`
-	NotRecentlyUsed  types.Int64 `tfsdk:"not_recently_used"`
+	ID               types.String `tfsdk:"id"`
+	LengthMin        types.Int64  `tfsdk:"length_min"`
+	LengthMax        types.Int64  `tfsdk:"length_max"`
+	IncludeLowerCase types.Int64  `tfsdk:"include_lower_case"`
+	IncludeUpperCase types.Int64  `tfsdk:"include_upper_case"`
+	IncludeDigits    types.Int64  `tfsdk:"include_digits"`
+	IncludeSpecial   types.Int64  `tfsdk:"include_special"`
+	ValidDays        types.Int64  `tfsdk:"valid_days"`
+	NotRecentlyUsed  types.Int64  `tfsdk:"not_recently_used"`
 }
 
 func (r *passwordPolicyResource) Metadata(
@@ -71,6 +81,14 @@ func (r *passwordPolicyResource) Schema(
 			"leaving it at its previous value: the API replaces the policy wholesale.\n\n" +
 			"Requires these API key rights: `Config` read and update.",
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed: true,
+				MarkdownDescription: "Always `" + passwordPolicySingletonID + "`. The policy has no " +
+					"identifier of its own; this exists because Terraform expects one.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"length_min": schema.Int64Attribute{
 				Required:            true,
 				MarkdownDescription: "Minimum password length (8-128).",
@@ -141,6 +159,36 @@ func (r *passwordPolicyResource) ImportState(
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
+// ValidateConfig catches a length range that cannot be satisfied at plan time,
+// naming the attribute, rather than failing halfway through an apply.
+func (r *passwordPolicyResource) ValidateConfig(
+	ctx context.Context,
+	req resource.ValidateConfigRequest,
+	resp *resource.ValidateConfigResponse,
+) {
+	var config passwordPolicyResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Either bound may still be unknown at plan time; there is nothing to
+	// compare then.
+	if config.LengthMin.IsNull() || config.LengthMin.IsUnknown() ||
+		config.LengthMax.IsNull() || config.LengthMax.IsUnknown() {
+		return
+	}
+
+	if config.LengthMin.ValueInt64() > config.LengthMax.ValueInt64() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("length_min"),
+			"Invalid password length range",
+			fmt.Sprintf("length_min (%d) must not exceed length_max (%d).",
+				config.LengthMin.ValueInt64(), config.LengthMax.ValueInt64()),
+		)
+	}
+}
+
 // Create does not create anything: it replaces the policy that already exists.
 func (r *passwordPolicyResource) Create(
 	ctx context.Context,
@@ -156,6 +204,7 @@ func (r *passwordPolicyResource) Create(
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	plan.ID = types.StringValue(passwordPolicySingletonID)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -194,6 +243,7 @@ func (r *passwordPolicyResource) Update(
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	plan.ID = types.StringValue(passwordPolicySingletonID)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -211,22 +261,21 @@ func (r *passwordPolicyResource) Delete(
 	)
 }
 
+// put replaces the instance policy with the planned one.
+//
+// The response is deliberately discarded rather than folded back into the plan.
+// Every attribute here is Optional and not Computed, so Terraform requires the
+// state after apply to equal the plan exactly; writing back a response that
+// Rauthy normalised — or an empty 200 body, which the client reports as success
+// without touching the target — would abort the apply with "inconsistent result
+// after apply" once the policy had already been replaced server-side. Any
+// divergence instead shows up as ordinary drift on the next Read.
 func (r *passwordPolicyResource) put(
 	ctx context.Context,
 	m *passwordPolicyResourceModel,
 	diags *diag.Diagnostics,
 ) {
-	if m.LengthMin.ValueInt64() > m.LengthMax.ValueInt64() {
-		diags.AddAttributeError(
-			path.Root("length_min"),
-			"Invalid password length range",
-			fmt.Sprintf("length_min (%d) must not exceed length_max (%d).",
-				m.LengthMin.ValueInt64(), m.LengthMax.ValueInt64()),
-		)
-		return
-	}
-
-	updated, err := r.api.UpdatePasswordPolicy(ctx, client.PasswordPolicy{
+	_, err := r.api.UpdatePasswordPolicy(ctx, client.PasswordPolicy{
 		// Both are bounded to 8..128 by the schema validators, so the narrowing
 		// conversion cannot overflow.
 		LengthMin:        int32(m.LengthMin.ValueInt64()), //nolint:gosec // bounded by validators.PasswordLength
@@ -240,12 +289,11 @@ func (r *passwordPolicyResource) put(
 	})
 	if err != nil {
 		diags.AddError("Could not update the Rauthy password policy", err.Error())
-		return
 	}
-	applyPasswordPolicy(m, updated)
 }
 
 func applyPasswordPolicy(m *passwordPolicyResourceModel, p *client.PasswordPolicy) {
+	m.ID = types.StringValue(passwordPolicySingletonID)
 	m.LengthMin = types.Int64Value(int64(p.LengthMin))
 	m.LengthMax = types.Int64Value(int64(p.LengthMax))
 	m.IncludeLowerCase = optionalInt64(p.IncludeLowerCase)

@@ -52,6 +52,10 @@ resource "rauthy_password_policy" "this" {
 - `not_recently_used` (Number) How many previous passwords may not be reused (1-10). Unset disables the check.
 - `valid_days` (Number) Days a password stays valid before it must be changed (1-3650). Unset means it never expires.
 
+### Read-Only
+
+- `id` (String) Always `singleton`. The policy has no identifier of its own; this exists because Terraform expects one.
+
 ## Import
 
 Import is supported using the following syntax:

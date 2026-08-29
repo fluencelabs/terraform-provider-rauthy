@@ -42,6 +42,9 @@ func (r *roleResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a role in Rauthy. Roles are assigned to users and can be requested by " +
 			"clients through the `roles` scope.\n\n" +
+			"Renaming a role replaces it wholesale in Rauthy, which drops any `meta` payload another tool " +
+			"may have attached to it. This provider does not manage `meta`, so it should own the roles it " +
+			"declares.\n\n" +
 			"Requires these API key rights: `Roles` read, create, update, delete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{

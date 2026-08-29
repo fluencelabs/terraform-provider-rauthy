@@ -52,7 +52,7 @@ func (c *Client) GetGroup(ctx context.Context, id string) (*GroupResponse, error
 			return &groups[i], nil
 		}
 	}
-	return nil, notFoundError(groupPath(id), "group "+id+" does not exist")
+	return nil, notFoundError("/groups", "group "+id+" does not exist")
 }
 
 // GetGroupByName returns the group with the given name, or a synthetic 404.
