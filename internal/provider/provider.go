@@ -140,6 +140,7 @@ func (p *rauthyProvider) Resources(_ context.Context) []func() resource.Resource
 	return []func() resource.Resource{
 		NewClientResource,
 		NewRoleResource,
+		NewScopeResource,
 		NewGroupResource,
 		NewPasswordPolicyResource,
 	}
@@ -148,6 +149,7 @@ func (p *rauthyProvider) Resources(_ context.Context) []func() resource.Resource
 func (p *rauthyProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewRoleDataSource,
+		NewScopeDataSource,
 		NewGroupDataSource,
 	}
 }

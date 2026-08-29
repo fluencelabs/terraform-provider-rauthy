@@ -47,6 +47,9 @@ var (
 
 	// validate_vec_contact.
 	contact = regexp.MustCompile(`^[a-zA-Z0-9+.@/-]{0,48}$`)
+
+	// Attribute names in a scope's attr_include_* mapping.
+	userAttrName = regexp.MustCompile(`^[a-zA-Z0-9-_/]{2,128}$`)
 )
 
 // Bounds from the #[validate(range(...))] attributes in
@@ -209,4 +212,17 @@ func PasswordValidDays() validator.Int64 {
 // PasswordNotRecentlyUsed validates not_recently_used.
 func PasswordNotRecentlyUsed() validator.Int64 {
 	return int64validator.Between(notRecentlyUsedMin, notRecentlyUsedMax)
+}
+
+// ScopeName validates a scope name against RE_ROLES_SCOPES.
+func ScopeName() validator.String {
+	return stringvalidator.RegexMatches(scope,
+		`must match ^[a-zA-Z0-9-_/,:*.]{2,64}$`)
+}
+
+// UserAttrNameSet validates every element of a set as a user-attribute name,
+// the form accepted in a scope's attr_include_access and attr_include_id.
+func UserAttrNameSet() validator.Set {
+	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(userAttrName,
+		`must match ^[a-zA-Z0-9-_/]{2,128}$`))
 }

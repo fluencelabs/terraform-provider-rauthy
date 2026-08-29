@@ -308,3 +308,46 @@ func TestContract_PasswordPolicyResponse(t *testing.T) {
 		t.Errorf("GET /password_policy response rejected by the spec: %s", msg)
 	}
 }
+
+func TestContract_ScopeRequest(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateRequest(t, v, http.MethodPost, apiPath("/scopes"), client.ScopeRequest{
+		Scope:             "read:billing",
+		AttrIncludeAccess: []string{"department", "cost_center"},
+		AttrIncludeID:     []string{"department"},
+	})
+	if !ok {
+		t.Errorf("POST /scopes body rejected by the spec: %s", msg)
+	}
+
+	ok, msg = validateRequest(t, v, http.MethodPut, apiPath("/scopes/scope-1"), client.ScopeRequest{
+		Scope: "read:billing",
+	})
+	if !ok {
+		t.Errorf("PUT /scopes/{id} body rejected by the spec: %s", msg)
+	}
+}
+
+// The response half of the asymmetry: Rauthy answers with `Scope`, whose
+// attr_include_* are a single comma-joined string, not the arrays the request
+// carries. If a Rauthy upgrade ever aligns the two, this test fails and the
+// splitting in ScopeResponse can go.
+func TestContract_ScopeResponseJoinsAttrsIntoAString(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateResponse(t, v, http.MethodGet, apiPath("/scopes"), http.StatusOK,
+		`[{"id":"scope-1","name":"read:billing","attr_include_access":"department,cost_center",`+
+			`"attr_include_id":null}]`)
+	if !ok {
+		t.Errorf("GET /scopes response rejected by the spec: %s", msg)
+	}
+
+	// The array form the request uses must NOT validate as a response.
+	ok, _ = validateResponse(t, v, http.MethodGet, apiPath("/scopes"), http.StatusOK,
+		`[{"id":"scope-1","name":"read:billing","attr_include_access":["department"]}]`)
+	if ok {
+		t.Error("an array attr_include_access validated as a response; the asymmetry this package " +
+			"compensates for may be gone — re-check ScopeResponse")
+	}
+}
