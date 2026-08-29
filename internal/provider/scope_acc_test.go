@@ -53,7 +53,7 @@ func TestAccScope_lifecycle(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("rauthy_scope.test", "name", "tf-acc-scope"),
 					resource.TestCheckResourceAttrSet("rauthy_scope.test", "id"),
-					resource.TestCheckNoResourceAttr("rauthy_scope.test", "attr_include_access"),
+					resource.TestCheckNoResourceAttr("rauthy_scope.test", "attr_include_access.#"),
 				),
 			},
 			{
@@ -73,6 +73,25 @@ func TestAccScope_lifecycle(t *testing.T) {
 				// Re-applying must be a no-op; a mangled split would show here.
 				Config: testAccScopeConfig("tf-acc-scope",
 					`attr_include_access = ["department", "cost_center"]
+  attr_include_id     = ["department"]`),
+				PlanOnly: true,
+			},
+			{
+				// An explicitly empty mapping must survive the round trip.
+				// Rauthy returns null for both empty and absent, so deriving
+				// the set from the response alone would abort this apply with
+				// "inconsistent result after apply".
+				Config: testAccScopeConfig("tf-acc-scope",
+					`attr_include_access = []
+  attr_include_id     = ["department"]`),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("rauthy_scope.test", "attr_include_access.#", "0"),
+					resource.TestCheckResourceAttr("rauthy_scope.test", "attr_include_id.#", "1"),
+				),
+			},
+			{
+				Config: testAccScopeConfig("tf-acc-scope",
+					`attr_include_access = []
   attr_include_id     = ["department"]`),
 				PlanOnly: true,
 			},

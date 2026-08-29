@@ -110,10 +110,12 @@ func (r *scopeResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	created, err := r.api.CreateScope(ctx, buildScopeRequest(ctx, &plan, &resp.Diagnostics))
+	body := buildScopeRequest(ctx, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	created, err := r.api.CreateScope(ctx, body)
 	if err != nil {
 		resp.Diagnostics.AddError("Could not create Rauthy scope "+plan.Name.ValueString(), err.Error())
 		return
@@ -153,10 +155,12 @@ func (r *scopeResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	id := plan.ID.ValueString()
-	updated, err := r.api.UpdateScope(ctx, id, buildScopeRequest(ctx, &plan, &resp.Diagnostics))
+	body := buildScopeRequest(ctx, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	updated, err := r.api.UpdateScope(ctx, id, body)
 	if err != nil {
 		resp.Diagnostics.AddError("Could not update Rauthy scope "+id, err.Error())
 		return
@@ -190,9 +194,31 @@ func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.D
 // applyScope folds a response into the model. The attribute mappings arrive as
 // one comma-joined string and are split back into sets here; order is not
 // preserved by Rauthy, which is why these are sets rather than lists.
+//
+// The model's own values are read before being overwritten: at Create and
+// Update they hold the plan, at Read the prior state, and both are needed to
+// tell an empty mapping from an absent one — see attrSet.
 func applyScope(m *scopeResourceModel, s *client.ScopeResponse) {
 	m.ID = types.StringValue(s.ID)
 	m.Name = types.StringValue(s.Name)
-	m.AttrIncludeAccess = stringsToSet(s.AttrIncludeAccessList())
-	m.AttrIncludeID = stringsToSet(s.AttrIncludeIDList())
+	m.AttrIncludeAccess = attrSet(s.AttrIncludeAccessList(), m.AttrIncludeAccess)
+	m.AttrIncludeID = attrSet(s.AttrIncludeIDList(), m.AttrIncludeID)
+}
+
+// attrSet renders an attribute mapping, keeping `[]` distinct from unset.
+//
+// Rauthy collapses the two: an empty mapping and an absent one both come back
+// as null, which splits to nil. These attributes are Optional and not Computed,
+// so Terraform requires post-apply state to equal the configuration exactly —
+// deriving null from the response would abort an apply that wrote `[]` with
+// "inconsistent result after apply". When the response carries nothing, the
+// value the configuration (or prior state) expressed is therefore kept.
+func attrSet(values []string, prior types.Set) types.Set {
+	if len(values) > 0 {
+		return stringsToSet(values)
+	}
+	if !prior.IsNull() && !prior.IsUnknown() && len(prior.Elements()) == 0 {
+		return prior
+	}
+	return types.SetNull(types.StringType)
 }
