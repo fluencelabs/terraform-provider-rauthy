@@ -2,40 +2,41 @@
 
 ## [0.3.0](https://github.com/fluencelabs/terraform-provider-rauthy/compare/v0.2.0...v0.3.0) (2026-08-30)
 
+This release roughly triples the provider's coverage of Rauthy and tracks Rauthy 0.36.2. It contains two changes that can break an existing configuration; both are listed first.
 
-### Features
+### Breaking changes
 
-* add rauthy_api_key for managing Rauthy's own admin API keys ([5835a07](https://github.com/fluencelabs/terraform-provider-rauthy/commit/5835a079e16250b7fe9e2e1c9f85b87c387ae09c))
-* add rauthy_blacklist_ip ([88b0b81](https://github.com/fluencelabs/terraform-provider-rauthy/commit/88b0b81dda6f3dee5f4c614cf04e037d2a732852))
-* add the rauthy_api_key resource ([5a8085e](https://github.com/fluencelabs/terraform-provider-rauthy/commit/5a8085e9cca09f7473575a476da05dffeed2b9d4))
-* add the rauthy_auth_provider resource and data sources ([552ca26](https://github.com/fluencelabs/terraform-provider-rauthy/commit/552ca26fedb99243da1b379288a9341ffcb9f108))
-* add the rauthy_auth_provider resource and data sources ([5cb979e](https://github.com/fluencelabs/terraform-provider-rauthy/commit/5cb979e9d411edcf521800e2094b7bcb241d409a))
-* add the rauthy_blacklist_ip resource ([7085aee](https://github.com/fluencelabs/terraform-provider-rauthy/commit/7085aeec4e73914946ef5597269c510066e9eb76))
-* add the rauthy_client data source ([f3db5b3](https://github.com/fluencelabs/terraform-provider-rauthy/commit/f3db5b30d926b07134f20214c8234a1b59681887))
-* add the rauthy_client data source ([e57da38](https://github.com/fluencelabs/terraform-provider-rauthy/commit/e57da3822f73d48f03b6826f2edbc452fbe8ef01))
-* add the rauthy_client_logo and rauthy_client_favicon resources ([2715f13](https://github.com/fluencelabs/terraform-provider-rauthy/commit/2715f130699e72886a6404799021e03f1fe028d6))
-* add the rauthy_scope resource and data source ([de0271c](https://github.com/fluencelabs/terraform-provider-rauthy/commit/de0271c76ceb3c163c03e6e96b157801c9f8ae08))
-* add the rauthy_scope resource and data source ([e59d494](https://github.com/fluencelabs/terraform-provider-rauthy/commit/e59d494cf59eb41ce0ab92dc3676eafdbc5439f7))
-* add the rauthy_user resource and data source ([554dabc](https://github.com/fluencelabs/terraform-provider-rauthy/commit/554dabc832a882e576b600652bfec8ad78d43d67))
-* add the rauthy_user resource and data source ([272e2c1](https://github.com/fluencelabs/terraform-provider-rauthy/commit/272e2c1ad6ab6d0732fd744715006ba7bb4a18d0))
-* add the rauthy_user_attribute resource and data source ([105cd73](https://github.com/fluencelabs/terraform-provider-rauthy/commit/105cd737c5a1c1237b947d474f7fd11662d6a5fb))
-* keep supplied secrets out of Terraform state with write-only attributes ([88f8e03](https://github.com/fluencelabs/terraform-provider-rauthy/commit/88f8e03d1f8ac8f3ec67e14a721744e0aea22e14))
-* manage per-client logo and favicon ([c1e076f](https://github.com/fluencelabs/terraform-provider-rauthy/commit/c1e076f62e914599694d6df4397639b305f3a305))
-* manage Rauthy's PAM subsystem ([23a0dd6](https://github.com/fluencelabs/terraform-provider-rauthy/commit/23a0dd65e26d59bdfa5ed552c6aad2f7e0b9e889))
-* manage Rauthy's PAM subsystem ([c38da8d](https://github.com/fluencelabs/terraform-provider-rauthy/commit/c38da8dd9a51b4d49110b32ccb2d3b9d9e7f00c8))
-* retry transient failures in the API client ([ffb4597](https://github.com/fluencelabs/terraform-provider-rauthy/commit/ffb459778c6d9258cd1ea0d0d5f68cedfcaac532))
-* run the acceptance tests against a live Rauthy in CI ([4ee81d8](https://github.com/fluencelabs/terraform-provider-rauthy/commit/4ee81d83c74c79d9d2b79b72f5a615dd4b6357ac))
-* run the acceptance tests against a live Rauthy in CI ([b3f3bf6](https://github.com/fluencelabs/terraform-provider-rauthy/commit/b3f3bf6821dae73eb838b77cadb28ac5318c9ee1))
-* take secrets out of state with write-only attributes ([346db71](https://github.com/fluencelabs/terraform-provider-rauthy/commit/346db71fd9ef35af2220d0af7f2cd5c9cc10c9c9))
+* **Terraform 1.11 or newer is now required.** The provider uses write-only attributes, which older Terraform does not understand. Configurations on Terraform 1.10 and below will fail to load the provider.
+* **Client ids are validated more strictly.** Rauthy 0.36 narrowed its own rule for `rauthy_client.id` to `^[a-zA-Z0-9._\-]{2,256}$`, and the provider now matches it. An id containing `/`, `:`, `%` or other punctuation that used to pass validation is now rejected at plan time. Such ids are already refused by any Rauthy 0.36 server, so this moves the failure from apply to plan rather than introducing one — but a plan that used to succeed may now stop.
 
+### Secrets in state
 
-### Bug Fixes
+Supplied secrets no longer sit in Terraform state: `rauthy_user.password` and `rauthy_auth_provider.client_secret` are replaced by the write-only `password_wo` and `client_secret_wo`, each with a rotation trigger. Because a write-only value is invisible to the plan, the trigger is what makes an update happen at all.
 
-* keep an empty attribute mapping distinct from an absent one ([e9355b5](https://github.com/fluencelabs/terraform-provider-rauthy/commit/e9355b58e168967318257367d8145f88bdd89f4e))
-* make rauthy_user work against a live Rauthy ([f708891](https://github.com/fluencelabs/terraform-provider-rauthy/commit/f708891267dbb224b63d60f1e7179ee235f7cca4))
-* make the acceptance job unable to pass while testing nothing ([561e6b5](https://github.com/fluencelabs/terraform-provider-rauthy/commit/561e6b5f1d2e0d9533854062de353dacf2d56b87))
-* rauthy_password_policy could not be refreshed or imported ([29719eb](https://github.com/fluencelabs/terraform-provider-rauthy/commit/29719eb617c913d24c9c5f5f6fb057d11a692ee7))
-* rauthy_password_policy could not be refreshed or imported ([c43e243](https://github.com/fluencelabs/terraform-provider-rauthy/commit/c43e243590bfedcde03e016a189243a252a770d0))
+Two secrets deliberately remain in state. `rauthy_client.secret` and `rauthy_api_key.secret` are generated by Rauthy and exist to be passed onward to another configuration or an output; a write-only attribute only carries values *into* the provider, so converting them would remove the feature rather than protect it. The provider documentation now says so explicitly, and a state file holding either must be treated as a credential store.
+
+### New resources and data sources
+
+* `rauthy_user` and its data source, plus `rauthy_user_attribute` and its data source — custom attributes can now be created by Terraform and referenced from `rauthy_scope`, which previously required creating them by hand.
+* `rauthy_auth_provider` for upstream federated identity providers, with a lookup data source and `rauthy_auth_provider_lookup` for OIDC discovery.
+* `rauthy_api_key` for Rauthy's own admin API keys, including secret rotation. This is possible only from Rauthy 0.36, which added the `ApiKeys` access group.
+* `rauthy_pam_group`, `rauthy_pam_user` and `rauthy_pam_host`, covering Rauthy as an authentication source for hosts and SSH.
+* `rauthy_client_logo` and `rauthy_client_favicon` for per-client branding.
+* `rauthy_blacklist_ip` for blocking an address until an expiry.
+* `rauthy_scope` and its data source, and a `rauthy_client` data source, completing the lookup coverage.
+
+### Other changes
+
+* Rauthy 0.36.2 is now the pinned and tested version, and the vendored OpenAPI document was refreshed to match.
+* The API client retries transient failures — connection errors, 429 and 5xx — for idempotent requests. Creating `POST` requests are deliberately not retried past the dial, so a lost response cannot duplicate a resource.
+* The acceptance suite runs against a live Rauthy in CI, on both the pinned version and the latest release.
+
+### Bug fixes
+
+* `rauthy_password_policy` could not be refreshed or imported ([c43e243](https://github.com/fluencelabs/terraform-provider-rauthy/commit/c43e243590bfedcde03e016a189243a252a770d0))
+* An empty attribute mapping on `rauthy_scope` is kept distinct from an absent one ([e9355b5](https://github.com/fluencelabs/terraform-provider-rauthy/commit/e9355b58e168967318257367d8145f88bdd89f4e))
+* `rauthy_user` required `given_name`, which Rauthy demands on update despite documenting it as optional ([f708891](https://github.com/fluencelabs/terraform-provider-rauthy/commit/f708891267dbb224b63d60f1e7179ee235f7cca4))
+* The acceptance CI job can no longer pass while testing nothing ([561e6b5](https://github.com/fluencelabs/terraform-provider-rauthy/commit/561e6b5f1d2e0d9533854062de353dacf2d56b87))
 
 ## [0.2.0](https://github.com/fluencelabs/terraform-provider-rauthy/compare/v0.1.1...v0.2.0) (2026-08-29)
 
