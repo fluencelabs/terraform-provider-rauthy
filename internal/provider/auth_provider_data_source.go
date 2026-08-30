@@ -57,7 +57,8 @@ func (d *authProviderDataSource) Schema(
 			"an error here rather than an arbitrary pick.\n\n" +
 			"The upstream `client_secret` is deliberately not exposed. Rauthy does return it in " +
 			"the clear on a read, but a lookup of somebody else's provider has no use for it and " +
-			"writing it into this state file would only spread it further.\n\n" +
+			"writing it into this state file would only spread it further. `rauthy_auth_provider` " +
+			"now drops it for the same reason; see its `client_secret_wo`.\n\n" +
 			"Requires the `AuthProviders:read` API key right.",
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{

@@ -35,7 +35,8 @@ type authProviderResourceModel struct {
 	UserinfoEndpoint      types.String `tfsdk:"userinfo_endpoint"`
 	JwksEndpoint          types.String `tfsdk:"jwks_endpoint"`
 	ClientID              types.String `tfsdk:"client_id"`
-	ClientSecret          types.String `tfsdk:"client_secret"`
+	ClientSecretWO        types.String `tfsdk:"client_secret_wo"`
+	ClientSecretTrigger   types.String `tfsdk:"client_secret_rotation_trigger"`
 	Scopes                types.Set    `tfsdk:"scopes"`
 	AdminClaimPath        types.String `tfsdk:"admin_claim_path"`
 	AdminClaimValue       types.String `tfsdk:"admin_claim_value"`
@@ -94,7 +95,8 @@ func (r *authProviderResource) Create(
 		return
 	}
 
-	body := buildAuthProviderRequest(ctx, &plan, &resp.Diagnostics)
+	secret := writeOnlyString(ctx, req.Config, path.Root("client_secret_wo"), &resp.Diagnostics)
+	body := buildAuthProviderRequest(ctx, &plan, secret, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -142,8 +144,13 @@ func (r *authProviderResource) Update(
 		return
 	}
 
+	// PUT is a full replacement and a body without the secret erases the stored
+	// one, so the write-only value has to be pulled out of the configuration on
+	// every single update, not just the ones that mean to change it.
+	secret := writeOnlyString(ctx, req.Config, path.Root("client_secret_wo"), &resp.Diagnostics)
+
 	id := plan.ID.ValueString()
-	body := buildAuthProviderRequest(ctx, &plan, &resp.Diagnostics)
+	body := buildAuthProviderRequest(ctx, &plan, secret, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}

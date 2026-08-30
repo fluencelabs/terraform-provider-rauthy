@@ -72,7 +72,7 @@ func TestAuthProviderScope_ReadThenWriteIsAcceptable(t *testing.T) {
 	applyAuthProviderResponse(m, &client.AuthProviderResponse{Scope: "openid+profile+email"})
 
 	var diags diag.Diagnostics
-	got := buildAuthProviderRequest(context.Background(), m, &diags)
+	got := buildAuthProviderRequest(context.Background(), m, types.StringNull(), &diags)
 	if diags.HasError() {
 		t.Fatalf("diagnostics: %v", diags)
 	}
@@ -87,19 +87,15 @@ func TestBuildAuthProviderRequest_AlwaysCarriesTheSecret(t *testing.T) {
 	t.Parallel()
 
 	var diags diag.Diagnostics
-	m := &authProviderResourceModel{
-		ClientSecret: types.StringValue("upstream-secret"),
-		Scopes:       scopeSetOf("openid"),
-	}
-	got := buildAuthProviderRequest(context.Background(), m, &diags)
+	m := &authProviderResourceModel{Scopes: scopeSetOf("openid")}
+	got := buildAuthProviderRequest(context.Background(), m, types.StringValue("upstream-secret"), &diags)
 	if got.ClientSecret == nil || *got.ClientSecret != "upstream-secret" {
 		t.Errorf("client_secret = %v, want it resent", got.ClientSecret)
 	}
 
 	// A configuration with no secret sends none, which is how a secret is
 	// removed from a provider.
-	m.ClientSecret = types.StringNull()
-	got = buildAuthProviderRequest(context.Background(), m, &diags)
+	got = buildAuthProviderRequest(context.Background(), m, types.StringNull(), &diags)
 	if got.ClientSecret != nil {
 		t.Errorf("client_secret = %v, want it omitted", *got.ClientSecret)
 	}

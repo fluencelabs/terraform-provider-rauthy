@@ -62,6 +62,7 @@ func splitAuthProviderScope(scope string) []string {
 func buildAuthProviderRequest(
 	ctx context.Context,
 	m *authProviderResourceModel,
+	clientSecret types.String,
 	diags *diag.Diagnostics,
 ) client.AuthProviderRequest {
 	return client.AuthProviderRequest{
@@ -75,8 +76,9 @@ func buildAuthProviderRequest(
 		JwksEndpoint:          stringPtr(m.JwksEndpoint),
 		ClientID:              m.ClientID.ValueString(),
 		// Always resent, never omitted: a PUT without this field erases the
-		// stored secret rather than leaving it alone.
-		ClientSecret:      stringPtr(m.ClientSecret),
+		// stored secret rather than leaving it alone. The value arrives from
+		// the configuration rather than the model, because it is write-only.
+		ClientSecret:      stringPtr(clientSecret),
 		Scope:             joinAuthProviderScopes(ctx, m.Scopes, diags),
 		AdminClaimPath:    stringPtr(m.AdminClaimPath),
 		AdminClaimValue:   stringPtr(m.AdminClaimValue),
@@ -103,7 +105,10 @@ func applyAuthProviderResponse(m *authProviderResourceModel, resp *client.AuthPr
 	m.UserinfoEndpoint = types.StringValue(resp.UserinfoEndpoint)
 	m.JwksEndpoint = optionalString(resp.JwksEndpoint)
 	m.ClientID = types.StringValue(resp.ClientID)
-	m.ClientSecret = optionalString(resp.ClientSecret)
+	// resp.ClientSecret is deliberately dropped on the floor. Rauthy does hand
+	// the upstream secret back in the clear, but the attribute that carries it
+	// is write-only, so there is nowhere to put it: storing it would be exactly
+	// the leak this resource is trying not to have.
 	m.Scopes = stringsToSet(splitAuthProviderScope(resp.Scope))
 	m.AdminClaimPath = optionalString(resp.AdminClaimPath)
 	m.AdminClaimValue = optionalString(resp.AdminClaimValue)
