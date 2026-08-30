@@ -154,5 +154,6 @@ func (p *rauthyProvider) DataSources(_ context.Context) []func() datasource.Data
 		NewScopeDataSource,
 		NewGroupDataSource,
 		NewUserDataSource,
+		NewClientDataSource,
 	}
 }

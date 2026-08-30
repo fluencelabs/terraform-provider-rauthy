@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -172,6 +173,70 @@ resource "rauthy_client" "public" {
 }
 `,
 				Check: resource.TestCheckNoResourceAttr("rauthy_client.public", "secret"),
+			},
+		},
+	})
+}
+
+// The data source is read-only parity for the resource: it must surface the
+// same settings, and deliberately must not surface the secret.
+func TestAccClientDataSource_lookupByID(t *testing.T) {
+	factories := acctest.Setup(t)
+
+	config := `
+resource "rauthy_client" "test" {
+  id            = "tf-acc-ds-client"
+  name          = "TF Acc DS Client"
+  confidential  = true
+  redirect_uris = ["https://app.example.com/callback"]
+
+  scopes         = ["openid", "profile"]
+  default_scopes = ["openid"]
+}
+
+data "rauthy_client" "test" {
+  id         = rauthy_client.test.id
+  depends_on = [rauthy_client.test]
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"data.rauthy_client.test", "id", "rauthy_client.test", "id"),
+					resource.TestCheckResourceAttrPair(
+						"data.rauthy_client.test", "name", "rauthy_client.test", "name"),
+					resource.TestCheckResourceAttrPair(
+						"data.rauthy_client.test", "confidential", "rauthy_client.test", "confidential"),
+					resource.TestCheckResourceAttrPair(
+						"data.rauthy_client.test", "redirect_uris.#", "rauthy_client.test", "redirect_uris.#"),
+					resource.TestCheckTypeSetElemAttr(
+						"data.rauthy_client.test", "redirect_uris.*", "https://app.example.com/callback"),
+					resource.TestCheckResourceAttrPair(
+						"data.rauthy_client.test", "scopes.#", "rauthy_client.test", "scopes.#"),
+					resource.TestCheckResourceAttrPair(
+						"data.rauthy_client.test", "default_scopes.#", "rauthy_client.test", "default_scopes.#"),
+					resource.TestCheckNoResourceAttr("data.rauthy_client.test", "secret"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccClientDataSource_notFound(t *testing.T) {
+	factories := acctest.Setup(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{
+				Config:      `data "rauthy_client" "test" { id = "tf-acc-does-not-exist" }`,
+				ExpectError: regexp.MustCompile(`not found`),
 			},
 		},
 	})
