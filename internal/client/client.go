@@ -86,37 +86,9 @@ func (c *Client) BaseURL() string { return c.baseURL }
 // do executes a request against path (relative to the API root), sending body
 // as JSON when non-nil and decoding the response into out when non-nil.
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
-	var reader io.Reader
-	if body != nil {
-		raw, err := json.Marshal(body)
-		if err != nil {
-			return fmt.Errorf("marshal %s %s body: %w", method, path, err)
-		}
-		reader = bytes.NewReader(raw)
-	}
-
-	req, err := c.newRequest(ctx, method, path, reader)
+	raw, err := c.doRaw(ctx, method, path, body, "application/json")
 	if err != nil {
 		return err
-	}
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("%s %s: %w", method, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read %s %s response: %w", method, path, err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return newAPIError(method, path, resp.StatusCode, raw)
 	}
 
 	if out == nil || len(bytes.TrimSpace(raw)) == 0 {
@@ -126,6 +98,60 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		return fmt.Errorf("decode %s %s response: %w", method, path, decodeErr)
 	}
 	return nil
+}
+
+// doText executes a request whose response is a bare string rather than JSON.
+//
+// Two Rauthy endpoints answer with `text/plain`: POST /api_keys and
+// PUT /api_keys/{name}/secret both hand back the new API key as a naked
+// `<name>$<secret>` line with no envelope around it. Feeding that to do() would
+// fail in json.Unmarshal, so it gets its own path rather than a special case
+// inside the JSON one.
+func (c *Client) doText(ctx context.Context, method, path string, body any) (string, error) {
+	raw, err := c.doRaw(ctx, method, path, body, "text/plain")
+	if err != nil {
+		return "", err
+	}
+	return string(bytes.TrimSpace(raw)), nil
+}
+
+// doRaw sends body as JSON and returns the response body untouched. accept is
+// sent as the Accept header; Rauthy ignores it, but it keeps the intent of each
+// call visible on the wire. The binary endpoints do not come through here —
+// they build on newRequest directly, since they neither send nor receive JSON.
+func (c *Client) doRaw(ctx context.Context, method, path string, body any, accept string) ([]byte, error) {
+	var reader io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal %s %s body: %w", method, path, err)
+		}
+		reader = bytes.NewReader(encoded)
+	}
+
+	req, err := c.newRequest(ctx, method, path, reader)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", accept)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s %s: %w", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read %s %s response: %w", method, path, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, newAPIError(method, path, resp.StatusCode, raw)
+	}
+	return raw, nil
 }
 
 // newRequest builds an authenticated request against path, relative to the API
