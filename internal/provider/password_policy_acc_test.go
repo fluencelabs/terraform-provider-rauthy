@@ -76,7 +76,7 @@ resource "rauthy_password_policy" "test" {
 				PlanOnly: true,
 			},
 			{
-				// Import cannot work against Rauthy v0.35.2: it needs
+				// Import cannot work against Rauthy v0.36.2: it needs
 				// GET /password_policy, which accepts only session auth.
 				// Asserting the refusal keeps us honest — if a future Rauthy
 				// opens the endpoint, this step fails and import can be

@@ -81,7 +81,7 @@ func (r *passwordPolicyResource) Schema(
 			"Every optional attribute left unset is sent as null, which **disables** that rule rather than " +
 			"leaving it at its previous value: the API replaces the policy wholesale.\n\n" +
 			"Requires the `Secrets:update` API key right.\n\n" +
-			"**Drift is not detected.** Rauthy v0.35.2 guards `GET /password_policy` with session " +
+			"**Drift is not detected.** Rauthy v0.36.2 guards `GET /password_policy` with session " +
 			"authentication and accepts no API key there, so the provider cannot read the policy back. " +
 			"A change made in the Admin UI stays invisible to Terraform until the next apply overwrites " +
 			"it, and `terraform import` is unavailable for the same reason.",
@@ -146,7 +146,7 @@ func (r *passwordPolicyResource) Configure(
 }
 
 // ImportState adopts the instance's policy — when Rauthy lets it. Reading the
-// policy needs GET /password_policy, which v0.35.2 restricts to session
+// policy needs GET /password_policy, which v0.36.2 restricts to session
 // authentication, so an API key cannot import. The attempt is still made: a
 // future Rauthy that opens the endpoint makes import work with no code change.
 func (r *passwordPolicyResource) ImportState(
@@ -158,7 +158,7 @@ func (r *passwordPolicyResource) ImportState(
 	if isSessionOnly(err) {
 		resp.Diagnostics.AddError(
 			"Rauthy does not allow importing the password policy",
-			"Importing requires reading the policy through GET /password_policy, and Rauthy v0.35.2 "+
+			"Importing requires reading the policy through GET /password_policy, and Rauthy v0.36.2 "+
 				"guards that endpoint with session authentication — an API key is rejected. Write the "+
 				"desired policy as a rauthy_password_policy resource and apply it instead: the resource "+
 				"replaces whatever policy the instance currently has.",
@@ -242,7 +242,7 @@ func (r *passwordPolicyResource) Read(
 		return
 	}
 
-	// Rauthy v0.35.2 accepts only a session on GET /password_policy, so this
+	// Rauthy v0.36.2 accepts only a session on GET /password_policy, so this
 	// refresh is expected to be refused. Keeping the prior state is the only
 	// option that does not break every plan: the resource then reports no
 	// drift rather than failing. The call is still attempted so that a Rauthy
