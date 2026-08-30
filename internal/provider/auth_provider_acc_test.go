@@ -1,0 +1,247 @@
+package provider_test
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
+
+	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/acctest"
+)
+
+// These run against a live Rauthy instance and are gated on TF_ACC; see
+// internal/provider/acctest.
+//
+// What cannot be exercised here: nothing in this file makes a real federated
+// login work. Rauthy stores the endpoints without contacting them, so a
+// provider pointing at idp.example.com is created, read, updated and deleted
+// exactly like a real one — but the callback, link and login flows, and
+// anything that depends on the upstream's actual claims (auto_link,
+// auto_onboarding, the admin and MFA claim mappings), are only stored and read
+// back here, never observed doing their job. Exercising those would need a
+// second identity provider the acceptance suite could stand up alongside
+// Rauthy.
+//
+// rauthy_auth_provider_lookup is not exercised here either, for a different
+// reason: the discovery request is made by the Rauthy container, so a test for
+// it would be a test of the container's internet access. It was verified by
+// hand against accounts.google.com on a live 0.36.2 — see the note in
+// splitAuthProviderScope about the space-separated form that endpoint returns.
+
+const accAuthProviderName = "TF Acc Upstream"
+
+func testAccAuthProviderConfig(name, secret string, scopes string) string {
+	return fmt.Sprintf(`
+resource "rauthy_auth_provider" "test" {
+  name = %q
+  type = "oidc"
+
+  issuer                 = "https://idp.example.com"
+  authorization_endpoint = "https://idp.example.com/authorize"
+  token_endpoint         = "https://idp.example.com/token"
+  userinfo_endpoint      = "https://idp.example.com/userinfo"
+  jwks_endpoint          = "https://idp.example.com/jwks"
+
+  client_id     = "rauthy-acc"
+  client_secret = %q
+  scopes        = %s
+}
+`, name, secret, scopes)
+}
+
+func testAccCheckAuthProviderDestroyed(s *terraform.State) error {
+	for _, rs := range s.RootModule().Resources {
+		if rs.Type != "rauthy_auth_provider" {
+			continue
+		}
+		c, err := client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+		if err != nil {
+			return err
+		}
+		_, err = c.GetAuthProvider(context.Background(), rs.Primary.ID)
+		if err == nil {
+			return fmt.Errorf("auth provider %s still exists after destroy", rs.Primary.ID)
+		}
+		if !client.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func TestAccAuthProvider_lifecycle(t *testing.T) {
+	factories := acctest.Setup(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckAuthProviderDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAuthProviderConfig(accAuthProviderName, "acc-upstream-secret",
+					`["openid", "profile", "email"]`),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("rauthy_auth_provider.test", "id"),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "name", accAuthProviderName),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "type", "oidc"),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "scopes.#", "3"),
+					resource.TestCheckTypeSetElemAttr("rauthy_auth_provider.test", "scopes.*", "openid"),
+					// The upstream secret, unlike an OIDC client's, is supplied
+					// rather than generated and comes back on a read.
+					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "client_secret",
+						"acc-upstream-secret"),
+					// Defaults the configuration does not mention.
+					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "enabled", "true"),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "use_pkce", "true"),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "auto_link", "false"),
+				),
+			},
+			{
+				// A rename, a new secret and a shorter scope list in one apply.
+				// The scope change is the interesting half: it is the field
+				// Rauthy hands back in a form it will not accept.
+				Config: testAccAuthProviderConfig("TF Acc Upstream Renamed", "acc-upstream-secret-2",
+					`["openid", "email"]`),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "name",
+						"TF Acc Upstream Renamed"),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "client_secret",
+						"acc-upstream-secret-2"),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "scopes.#", "2"),
+					resource.TestCheckNoResourceAttr("rauthy_auth_provider.test", "admin_claim_path"),
+				),
+			},
+			{
+				ResourceName: "rauthy_auth_provider.test",
+				ImportState:  true,
+				// Nothing is ignored here on purpose. Every attribute of this
+				// resource, the secret included, survives a round trip through
+				// Rauthy, so a full verify is the honest test.
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+// Applying the same configuration twice must produce an empty plan. That is not
+// a formality for this resource: Rauthy rewrites `scope` on the way in, so a
+// provider that stored the string it sent rather than the string Rauthy kept
+// would show a permanent diff here.
+func TestAccAuthProvider_scopesAreStableAcrossApplies(t *testing.T) {
+	factories := acctest.Setup(t)
+
+	cfg := `
+resource "rauthy_auth_provider" "scopes" {
+  name = "TF Acc Scopes"
+  type = "custom"
+
+  issuer                 = "https://idp2.example.com"
+  authorization_endpoint = "https://idp2.example.com/authorize"
+  token_endpoint         = "https://idp2.example.com/token"
+  userinfo_endpoint      = "https://idp2.example.com/userinfo"
+
+  client_id = "rauthy-acc-2"
+  scopes    = ["openid", "profile", "email", "groups"]
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckAuthProviderDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("rauthy_auth_provider.scopes", "scopes.#", "4"),
+					// No secret was configured, so none is stored.
+					resource.TestCheckNoResourceAttr("rauthy_auth_provider.scopes", "client_secret"),
+				),
+			},
+			{
+				Config:   cfg,
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// The claim mappings and the onboarding switches are stored and read back
+// verbatim. What they do at login time is not observable without a real
+// upstream; this pins the configuration surface only.
+func TestAccAuthProvider_claimMappings(t *testing.T) {
+	factories := acctest.Setup(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckAuthProviderDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "rauthy_auth_provider" "claims" {
+  name    = "TF Acc Claims"
+  type    = "custom"
+  enabled = false
+
+  issuer                 = "https://idp3.example.com"
+  authorization_endpoint = "https://idp3.example.com/authorize"
+  token_endpoint         = "https://idp3.example.com/token"
+  userinfo_endpoint      = "https://idp3.example.com/userinfo"
+
+  client_id = "rauthy-acc-3"
+  scopes    = ["openid"]
+
+  admin_claim_path  = "$.roles"
+  admin_claim_value = "rauthy-admin"
+  mfa_claim_path    = "$.amr"
+  mfa_claim_value   = "mfa"
+
+  auto_onboarding = true
+  auto_link       = true
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("rauthy_auth_provider.claims", "enabled", "false"),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.claims", "admin_claim_path", "$.roles"),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.claims", "mfa_claim_value", "mfa"),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.claims", "auto_onboarding", "true"),
+					resource.TestCheckResourceAttr("rauthy_auth_provider.claims", "auto_link", "true"),
+				),
+			},
+		},
+	})
+}
+
+// The data source resolves a provider the same configuration created, which is
+// the only way to look one up: there is no GET /providers/{id}.
+func TestAccAuthProviderDataSource_byName(t *testing.T) {
+	factories := acctest.Setup(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckAuthProviderDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAuthProviderConfig("TF Acc Lookup Target", "acc-secret",
+					`["openid", "profile"]`) + `
+data "rauthy_auth_provider" "found" {
+  name       = rauthy_auth_provider.test.name
+  depends_on = [rauthy_auth_provider.test]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"data.rauthy_auth_provider.found", "id",
+						"rauthy_auth_provider.test", "id"),
+					resource.TestCheckResourceAttr("data.rauthy_auth_provider.found", "type", "oidc"),
+					resource.TestCheckResourceAttr("data.rauthy_auth_provider.found", "scopes.#", "2"),
+					resource.TestCheckResourceAttr("data.rauthy_auth_provider.found",
+						"issuer", "https://idp.example.com"),
+					// The data source deliberately does not carry the secret.
+					resource.TestCheckNoResourceAttr("data.rauthy_auth_provider.found", "client_secret"),
+				),
+			},
+		},
+	})
+}

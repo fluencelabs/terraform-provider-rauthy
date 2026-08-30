@@ -359,3 +359,127 @@ func TestContract_ScopeResponseShapeDivergesFromTheSpec(t *testing.T) {
 			"API may have been reconciled — re-check whether AttrList still needs to decode both")
 	}
 }
+
+func TestContract_AuthProviderRequest(t *testing.T) {
+	v := newContractValidator(t)
+
+	secret := "upstream-secret"
+	jwks := "https://idp.example.com/jwks"
+	body := client.AuthProviderRequest{
+		Name:                  "Example IdP",
+		Typ:                   "oidc",
+		Enabled:               true,
+		Issuer:                "https://idp.example.com",
+		AuthorizationEndpoint: "https://idp.example.com/authorize",
+		TokenEndpoint:         "https://idp.example.com/token",
+		UserinfoEndpoint:      "https://idp.example.com/userinfo",
+		JwksEndpoint:          &jwks,
+		ClientID:              "rauthy",
+		ClientSecret:          &secret,
+		Scope:                 "email openid profile",
+		UsePKCE:               true,
+		ClientSecretBasic:     true,
+	}
+
+	ok, msg := validateRequest(t, v, http.MethodPost, apiPath("/providers/create"), body)
+	if !ok {
+		t.Errorf("POST /providers/create body rejected by the spec: %s", msg)
+	}
+
+	// The same type serves both verbs; a body good enough to create with must
+	// be good enough to update with.
+	ok, msg = validateRequest(t, v, http.MethodPut, apiPath("/providers/provider-1"), body)
+	if !ok {
+		t.Errorf("PUT /providers/{id} body rejected by the spec: %s", msg)
+	}
+}
+
+// Creating an upstream provider is POST /providers/create; POST /providers is
+// the listing. The spec is the authority for that, so pin it: if POST /providers
+// ever stops accepting an empty body, the two have swapped roles.
+func TestContract_AuthProviderCreateIsNotPostProviders(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, _ := validateRequest(t, v, http.MethodPost, apiPath("/providers"), nil)
+	if !ok {
+		t.Error("POST /providers no longer accepts an empty body; it may no longer be the list endpoint")
+	}
+}
+
+func TestContract_AuthProviderResponse(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateResponse(t, v, http.MethodPost, apiPath("/providers"), http.StatusOK,
+		`[{"id":"provider-1","name":"Example IdP","typ":"oidc","enabled":true,`+
+			`"issuer":"https://idp.example.com",`+
+			`"authorization_endpoint":"https://idp.example.com/authorize",`+
+			`"token_endpoint":"https://idp.example.com/token",`+
+			`"userinfo_endpoint":"https://idp.example.com/userinfo","jwks_endpoint":null,`+
+			`"client_id":"rauthy","client_secret":"upstream-secret",`+
+			`"scope":"email+openid+profile",`+
+			`"admin_claim_path":null,"admin_claim_value":null,`+
+			`"mfa_claim_path":null,"mfa_claim_value":null,`+
+			`"use_pkce":true,"client_secret_basic":true,"client_secret_post":false,`+
+			`"auto_onboarding":false,"auto_link":false}]`)
+	if !ok {
+		t.Errorf("POST /providers response rejected by the spec: %s", msg)
+	}
+}
+
+// KNOWN API/SPEC DIVERGENCE, and the one that shapes the whole resource: an
+// upstream provider's `scope` cannot be sent back in the form it is read in.
+//
+// The document types the field as a plain string in both directions and says
+// nothing more, because utoipa drops the `validator` constraints. A live 0.36.2
+// validates writes against ^[a-zA-Z0-9-_/:\s*]{0,512}$, which has no `+` in the
+// character class, and yet stores and returns the list `+`-joined. Creating with
+// "openid profile email" answers 200 with "openid+profile+email", and feeding
+// that back to the update endpoint answers 400 with a payload validation error
+// naming the scope field.
+//
+// Both forms satisfy the document, so the contract validator cannot see any of
+// this — which is exactly why it is written down here. The provider package
+// models the field as a set and converts in both directions.
+func TestContract_AuthProviderScopeIsNotRoundTrippable(t *testing.T) {
+	v := newContractValidator(t)
+
+	for _, scope := range []string{"openid profile email", "openid+profile+email"} {
+		ok, msg := validateRequest(t, v, http.MethodPut, apiPath("/providers/provider-1"),
+			client.AuthProviderRequest{
+				Name: "Example IdP", Typ: "oidc", Enabled: true,
+				Issuer:                "https://idp.example.com",
+				AuthorizationEndpoint: "https://idp.example.com/authorize",
+				TokenEndpoint:         "https://idp.example.com/token",
+				UserinfoEndpoint:      "https://idp.example.com/userinfo",
+				ClientID:              "rauthy",
+				Scope:                 scope,
+			})
+		if !ok {
+			t.Errorf("the spec now rejects scope %q, so it may have grown the pattern a live "+
+				"server enforces; re-check splitAuthProviderScope: %s", scope, msg)
+		}
+	}
+}
+
+func TestContract_AuthProviderLookup(t *testing.T) {
+	v := newContractValidator(t)
+
+	issuer := "accounts.google.com"
+	ok, msg := validateRequest(t, v, http.MethodPost, apiPath("/providers/lookup"),
+		client.AuthProviderLookupRequest{Issuer: &issuer})
+	if !ok {
+		t.Errorf("POST /providers/lookup body rejected by the spec: %s", msg)
+	}
+
+	ok, msg = validateResponse(t, v, http.MethodPost, apiPath("/providers/lookup"), http.StatusOK,
+		`{"issuer":"https://accounts.google.com",`+
+			`"authorization_endpoint":"https://accounts.google.com/o/oauth2/v2/auth",`+
+			`"token_endpoint":"https://oauth2.googleapis.com/token",`+
+			`"userinfo_endpoint":"https://openidconnect.googleapis.com/v1/userinfo",`+
+			`"jwks_endpoint":"https://www.googleapis.com/oauth2/v3/certs",`+
+			`"scope":"openid profile email ","use_pkce":true,`+
+			`"client_secret_basic":true,"client_secret_post":true}`)
+	if !ok {
+		t.Errorf("POST /providers/lookup response rejected by the spec: %s", msg)
+	}
+}
