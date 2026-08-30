@@ -19,7 +19,6 @@ import (
 	"net/netip"
 	"regexp"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/helpers/validatordiag"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -420,19 +419,39 @@ func PamHostAliasSet() validator.Set {
 // a 422 and no indication of which field was at fault; checking here turns that
 // into a plan-time error naming the attribute.
 func PamHostIPSet() validator.Set {
-	return setvalidator.ValueStringsAre(ipAddress{})
+	return setvalidator.ValueStringsAre(ipAddressValidator{})
 }
 
-// ipAddress is a string validator for a bare IP address, v4 or v6. There is no
-// regex for this upstream — Rauthy relies on the parse — so this is the one
-// validator in the file that reimplements a check rather than transcribing one.
-type ipAddress struct{}
+// blacklistExpMin is the lower bound Rauthy puts on a blacklist entry's `exp`.
+// It is a fixed timestamp (2024-07-01T00:00:00Z) rather than "now", read off a
+// live 0.36.2 rejection: `"exp": range, params: {"min": 1719784800}`. It rules
+// out obviously nonsensical values while still accepting a timestamp that is
+// merely in the recent past — which the server then silently discards. See the
+// note on Client.BlacklistIP.
+const blacklistExpMin = 1719784800
 
-func (ipAddress) Description(context.Context) string { return "must be an IPv4 or IPv6 address" }
+// BlacklistExp bounds a blacklist entry's expiry. It deliberately does not
+// check that the value lies in the future: a bound derived from time.Now()
+// would make a saved plan expire between plan and apply.
+func BlacklistExp() validator.Int64 {
+	return int64validator.AtLeast(blacklistExpMin)
+}
 
-func (v ipAddress) MarkdownDescription(ctx context.Context) string { return v.Description(ctx) }
+// ipAddressValidator checks that a string parses as an IPv4 or IPv6 address.
+// Rauthy deserialises the field into a Rust IpAddr and answers a bare 400 with
+// a serde message when it does not parse; validating here names the attribute
+// instead.
+type ipAddressValidator struct{}
 
-func (v ipAddress) ValidateString(
+func (ipAddressValidator) Description(context.Context) string {
+	return "must be an IPv4 or IPv6 address"
+}
+
+func (v ipAddressValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v ipAddressValidator) ValidateString(
 	ctx context.Context,
 	req validator.StringRequest,
 	resp *validator.StringResponse,
@@ -441,8 +460,17 @@ func (v ipAddress) ValidateString(
 		return
 	}
 	if _, err := netip.ParseAddr(req.ConfigValue.ValueString()); err != nil {
-		resp.Diagnostics.Append(validatordiag.InvalidAttributeValueDiagnostic(
-			req.Path, v.Description(ctx), req.ConfigValue.ValueString(),
-		))
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid IP address",
+			"Attribute "+req.Path.String()+" "+v.Description(ctx)+
+				", got: "+req.ConfigValue.ValueString(),
+		)
 	}
+}
+
+// IPAddress validates a bare IPv4 or IPv6 address, with no port and no prefix
+// length.
+func IPAddress() validator.String {
+	return ipAddressValidator{}
 }

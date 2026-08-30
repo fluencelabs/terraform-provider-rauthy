@@ -270,3 +270,42 @@ func TestPamValidators(t *testing.T) {
 		}
 	}
 }
+func TestIPAddress(t *testing.T) {
+	t.Parallel()
+
+	v := validators.IPAddress()
+	for _, in := range []string{"203.0.113.7", "2001:db8::2", "2001:0DB8:0000:0000:0000:0000:0000:0002"} {
+		if !acceptsString(v, in) {
+			t.Errorf("IPAddress rejected %q", in)
+		}
+	}
+	// A CIDR prefix, a port and a hostname are all things a user might reach
+	// for; Rauthy accepts none of them.
+	for _, in := range []string{"203.0.113.0/24", "203.0.113.7:443", "example.com", ""} {
+		if acceptsString(v, in) {
+			t.Errorf("IPAddress accepted %q", in)
+		}
+	}
+}
+
+func TestBlacklistExp(t *testing.T) {
+	t.Parallel()
+
+	v := validators.BlacklistExp()
+	req := func(n int64) bool {
+		resp := &validator.Int64Response{}
+		v.ValidateInt64(context.Background(),
+			validator.Int64Request{Path: path.Root("exp"), ConfigValue: types.Int64Value(n)}, resp)
+		return !resp.Diagnostics.HasError()
+	}
+
+	if req(1719784799) {
+		t.Error("BlacklistExp accepted a value below Rauthy's fixed lower bound")
+	}
+	if !req(1719784800) {
+		t.Error("BlacklistExp rejected Rauthy's own lower bound")
+	}
+	if !req(4102444800) {
+		t.Error("BlacklistExp rejected a far-future timestamp")
+	}
+}
