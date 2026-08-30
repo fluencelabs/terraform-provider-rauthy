@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,6 +27,11 @@ type Client struct {
 	baseURL    string
 	apiKey     string
 	httpClient *http.Client
+	// userAttrMu serialises writes to the user attribute definitions, which
+	// Rauthy stores as one cached list and rewrites without locking. See the
+	// note above userAttrPathBase in user_attributes.go for what happens
+	// without it.
+	userAttrMu sync.Mutex
 }
 
 // Option customises a Client.
