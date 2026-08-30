@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strings"
 	"sync"
@@ -93,12 +95,10 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		reader = bytes.NewReader(raw)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
+	req, err := c.newRequest(ctx, method, path, reader)
 	if err != nil {
-		return fmt.Errorf("build %s %s: %w", method, path, err)
+		return err
 	}
-	// Rauthy expects the key as `API-Key <name>$<secret>`.
-	req.Header.Set("Authorization", "API-Key "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -126,4 +126,93 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		return fmt.Errorf("decode %s %s response: %w", method, path, decodeErr)
 	}
 	return nil
+}
+
+// newRequest builds an authenticated request against path, relative to the API
+// root. Content negotiation is left to the caller, because the branding
+// endpoints neither send nor receive JSON.
+func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	if err != nil {
+		return nil, fmt.Errorf("build %s %s: %w", method, path, err)
+	}
+	// Rauthy expects the key as `API-Key <name>$<secret>`.
+	req.Header.Set("Authorization", "API-Key "+c.apiKey)
+	return req, nil
+}
+
+// download issues a GET and returns the raw body with its content type, for
+// the endpoints that serve binary rather than JSON.
+func (c *Client) download(ctx context.Context, path string) ([]byte, string, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, "", err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("%s %s: %w", http.MethodGet, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("read %s %s response: %w", http.MethodGet, path, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", newAPIError(http.MethodGet, path, resp.StatusCode, raw)
+	}
+	return raw, resp.Header.Get("Content-Type"), nil
+}
+
+// upload issues a PUT with a pre-encoded body and an explicit content type.
+func (c *Client) upload(ctx context.Context, path, contentType string, body []byte) error {
+	req, err := c.newRequest(ctx, http.MethodPut, path, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s %s: %w", http.MethodPut, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read %s %s response: %w", http.MethodPut, path, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return newAPIError(http.MethodPut, path, resp.StatusCode, raw)
+	}
+	return nil
+}
+
+// multipartBody encodes one image as a single multipart/form-data part and
+// returns the body together with the boundary-bearing content type.
+func multipartBody(field string, img Image) ([]byte, string, error) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+
+	// The part carries both a filename and an explicit Content-Type: Rauthy
+	// reads the declared type to decide how to handle the bytes, and the
+	// filename is what marks the part as a file upload. The filename's value is
+	// never used, so it only has to be present.
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, field, field))
+	h.Set("Content-Type", img.ContentType)
+
+	part, err := w.CreatePart(h)
+	if err != nil {
+		return nil, "", fmt.Errorf("create multipart part: %w", err)
+	}
+	if _, writeErr := part.Write(img.Data); writeErr != nil {
+		return nil, "", fmt.Errorf("write multipart part: %w", writeErr)
+	}
+	if closeErr := w.Close(); closeErr != nil {
+		return nil, "", fmt.Errorf("close multipart writer: %w", closeErr)
+	}
+	return buf.Bytes(), w.FormDataContentType(), nil
 }
