@@ -39,8 +39,10 @@ key_secret="tfaccSecretDoNotUseAnywhereElse0123456789abcdefghijklmnopqrstuvwxyz"
 # Every access group this provider touches. password_policy is Secrets:update,
 # not a group of its own — Rauthy has no `Config` group. Rauthy 0.36 moved
 # /users/attr off the `Users` group onto `UserAttributes`; without that entry
-# every user-attribute call 403s before a test runs. `Blacklist` guards
-# /blacklist, taken from the live 403 message rather than guessed.
+# every user-attribute call 403s before a test runs. The same release added
+# `ApiKeys`, which is what makes rauthy_api_key manageable by an API key at all
+# — before it, /api_keys accepted only an admin browser session. `Blacklist`
+# guards /blacklist, taken from the live 403 message rather than guessed.
 read -r -d '' key_json <<'JSON' || true
 {
   "name": "tfacc",
@@ -53,8 +55,9 @@ read -r -d '' key_json <<'JSON' || true
     {"group": "Users",   "access_rights": ["read", "create", "update", "delete"]},
     {"group": "UserAttributes", "access_rights": ["read", "create", "update", "delete"]},
     {"group": "AuthProviders", "access_rights": ["read", "create", "update", "delete"]},
-    {"group": "Pam",     "access_rights": ["read", "create", "update", "delete"]},
-    {"group": "Blacklist", "access_rights": ["read", "create", "update", "delete"]}
+    {"group": "Blacklist", "access_rights": ["read", "create", "update", "delete"]},
+    {"group": "ApiKeys", "access_rights": ["read", "create", "update", "delete"]},
+    {"group": "Pam",     "access_rights": ["read", "create", "update", "delete"]}
   ]
 }
 JSON

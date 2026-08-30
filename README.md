@@ -47,6 +47,7 @@ Create the key in the Rauthy Admin UI under *API Keys* with exactly these access
 | Group     | Rights                        | Used for                                              |
 |-----------|-------------------------------|-------------------------------------------------------|
 | `Clients` | read, create, update, delete  | the whole `rauthy_client` lifecycle                   |
+| `Clients` | update                        | `rauthy_client_logo` and `rauthy_client_favicon`      |
 | `Secrets` | read                          | reading the secret of a confidential client on every refresh |
 | `Secrets` | update                        | rotating a client secret                              |
 
