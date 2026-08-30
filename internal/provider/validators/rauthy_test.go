@@ -232,6 +232,44 @@ func TestLifetimeBounds(t *testing.T) {
 	}
 }
 
+// The PAM validators. The IP one is the only validator in the package that is
+// not a transcribed regex — Rauthy just parses the value into a Rust IpAddr and
+// answers a malformed one with a bare 422 — so its edges are worth pinning.
+func TestPamValidators(t *testing.T) {
+	t.Parallel()
+
+	for _, in := range []string{"immutable", "host", "user", "generic", "local"} {
+		if !acceptsString(validators.PamGroupType(), in) {
+			t.Errorf("PamGroupType rejected %q", in)
+		}
+	}
+	if acceptsString(validators.PamGroupType(), "Generic") {
+		t.Error("PamGroupType accepted a capitalised type; Rauthy's enum is lower-case")
+	}
+
+	for _, in := range []string{"build01", "build01.example.com", "a1"} {
+		if !acceptsString(validators.PamHostname(), in) {
+			t.Errorf("PamHostname rejected %q", in)
+		}
+	}
+	// A single character fails the pattern's two anchored classes, which a live
+	// 0.36.2 confirms by refusing a one-character alias.
+	for _, in := range []string{"a", "-build", "build-", "build_01"} {
+		if acceptsString(validators.PamHostname(), in) {
+			t.Errorf("PamHostname accepted %q", in)
+		}
+	}
+
+	ips := []validator.Set{validators.PamHostIPSet()}
+	if !acceptsSet(ips, "10.0.0.10", "2001:db8::10") {
+		t.Error("PamHostIPSet rejected valid v4 and v6 addresses")
+	}
+	for _, bad := range []string{"notanip", "10.0.0.10/24", "10.0.0.10:22", ""} {
+		if acceptsSet(ips, bad) {
+			t.Errorf("PamHostIPSet accepted %q", bad)
+		}
+	}
+}
 func TestIPAddress(t *testing.T) {
 	t.Parallel()
 

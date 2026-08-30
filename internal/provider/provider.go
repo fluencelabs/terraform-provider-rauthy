@@ -47,8 +47,8 @@ func (p *rauthyProvider) Metadata(_ context.Context, _ provider.MetadataRequest,
 func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages OIDC clients, scopes, users, custom user attributes, roles, groups, " +
-			"upstream authentication providers, admin API keys, blacklisted IP addresses and the " +
-			"password policy of a " +
+			"upstream authentication providers, admin API keys, blacklisted IP addresses, " +
+			"the PAM subsystem and the password policy of a " +
 			"[Rauthy](https://github.com/sebadob/rauthy) identity provider through its admin API.",
 		Attributes: map[string]schema.Attribute{
 			"url": schema.StringAttribute{
@@ -74,6 +74,8 @@ func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 					"(also 0.36 and later only — before it, `/api_keys` accepted an admin browser " +
 					"session and nothing else); " +
 					"`Blacklist` read, create, delete for `rauthy_blacklist_ip`; " +
+					"`Pam` read, create, update, delete for `rauthy_pam_group`, `rauthy_pam_user` and " +
+					"`rauthy_pam_host`; " +
 					"`Secrets:update` for `rauthy_password_policy`. `Secrets:read` is used on every refresh of a " +
 					"confidential client, `Secrets:update` only when rotating a secret.\n\n" +
 					"Granting `ApiKeys` makes the configured key able to mint further keys with any " +
@@ -164,6 +166,9 @@ func (p *rauthyProvider) Resources(_ context.Context) []func() resource.Resource
 		NewAuthProviderResource,
 		NewBlacklistIPResource,
 		NewAPIKeyResource,
+		NewPamGroupResource,
+		NewPamUserResource,
+		NewPamHostResource,
 	}
 }
 

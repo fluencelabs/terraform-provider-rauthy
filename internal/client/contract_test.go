@@ -484,6 +484,154 @@ func TestContract_AuthProviderLookup(t *testing.T) {
 	}
 }
 
+// The PAM contract tests come in two flavours. The ordinary ones assert that a
+// body this package sends or accepts matches the spec. The ones named
+// *_SpecDivergence assert the opposite — that the vendored spec rejects what a
+// live 0.36.2 requires — and exist so that a spec bump which finally fixes the
+// document fails here loudly instead of leaving a stale comment behind.
+
+func TestContract_CreatePamUserRequest(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateRequest(t, v, http.MethodPost, apiPath("/pam/users"), client.PamUserCreateRequest{
+		Username: "alice",
+		Email:    "alice@example.com",
+	})
+	if !ok {
+		t.Errorf("POST /pam/users body rejected by the spec: %s", msg)
+	}
+}
+
+func TestContract_UpdatePamUserRequest(t *testing.T) {
+	v := newContractValidator(t)
+
+	homeDir := "/home/alice"
+	ok, msg := validateRequest(t, v, http.MethodPut, apiPath("/pam/users/100000"), client.PamUserUpdateRequest{
+		Shell:   "/bin/zsh",
+		HomeDir: &homeDir,
+		Groups: []client.PamGroupUserLink{
+			{UID: 100000, GID: 100002, Wheel: true},
+		},
+	})
+	if !ok {
+		t.Errorf("PUT /pam/users/{uid} body rejected by the spec: %s", msg)
+	}
+}
+
+func TestContract_PamUserDetailsResponse(t *testing.T) {
+	v := newContractValidator(t)
+
+	body := `{"id":100000,"name":"alice","gid":100003,"email":"alice@example.com",` +
+		`"shell":"/bin/zsh","home_dir":"/home/alice",` +
+		`"groups":[{"uid":100000,"gid":100002,"wheel":true}],"authorized_keys":[]}`
+	ok, msg := validateResponse(t, v, http.MethodGet, apiPath("/pam/users/100000"), http.StatusOK, body)
+	if !ok {
+		t.Errorf("GET /pam/users/{uid} response rejected by the spec: %s", msg)
+	}
+
+	var got client.PamUserDetailsResponse
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.GID != 100003 || len(got.Groups) != 1 || !got.Groups[0].Wheel {
+		t.Errorf("decoded %+v", got)
+	}
+}
+
+func TestContract_PamGroupResponse(t *testing.T) {
+	v := newContractValidator(t)
+
+	// Validated against the create operation's response, which is the only
+	// place the spec describes a PamGroupResponse at all — see the divergence
+	// below for why that operation is not what its summary claims.
+	ok, msg := validateResponse(t, v, http.MethodPost, apiPath("/pam/groups"), http.StatusOK,
+		`[{"id":100002,"name":"developers","typ":"generic"}]`)
+	if !ok {
+		t.Errorf("PAM group response rejected by the spec: %s", msg)
+	}
+}
+
+// DIVERGENCE ONE, pinned. POST /pam/groups is documented as a listing: no
+// request body, and an array of groups in the response. A live server takes a
+// PamGroupCreateRequest there and answers with the single group it created,
+// which is the shape the spec refuses. The pin is on the response rather than
+// the request because the validator ignores a body on an operation that
+// declares none, so only the response half of the mix-up is observable here.
+func TestContract_CreatePamGroupResponse_SpecDivergence(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, _ := validateResponse(t, v, http.MethodPost, apiPath("/pam/groups"), http.StatusOK,
+		`{"id":100002,"name":"developers","typ":"generic"}`)
+	if ok {
+		t.Error("the spec now accepts a single group from POST /pam/groups; " +
+			"the create/list mix-up documented in client/pam.go may be fixed — re-check it")
+	}
+}
+
+// DIVERGENCE THREE, pinned. The spec has no POST /pam/hosts at all, so it
+// cannot validate the create body a live server accepts.
+func TestContract_CreatePamHostRequest_SpecDivergence(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, _ := validateRequest(t, v, http.MethodPost, apiPath("/pam/hosts"), client.PamHostCreateRequest{
+		Hostname: "build01",
+		GID:      100001,
+	})
+	if ok {
+		t.Error("the spec now describes POST /pam/hosts; " +
+			"the create operation documented as missing in client/pam.go may be back — re-check it")
+	}
+}
+
+// The address list divergence, pinned from both directions: the spec types
+// `ips` as a string, so the array a live server requires is rejected, and the
+// array a live server returns is rejected too.
+func TestContract_PamHostAddresses_SpecDivergence(t *testing.T) {
+	v := newContractValidator(t)
+
+	notes := "CI builder"
+	ok, _ := validateRequest(t, v, http.MethodPut, apiPath("/pam/hosts/h1"), client.PamHostUpdateRequest{
+		Hostname:          "build01",
+		GID:               100001,
+		ForceMfa:          true,
+		LocalPasswordOnly: false,
+		IPs:               []string{"10.0.0.10"},
+		Aliases:           []string{"ci"},
+		Notes:             &notes,
+	})
+	if ok {
+		t.Error("the spec now accepts an array for PamHostUpdateRequest.ips; " +
+			"the string/array divergence documented in client/pam.go may be fixed — re-check it")
+	}
+
+	body := `{"id":"h1","hostname":"build01","gid":100001,"force_mfa":true,` +
+		`"local_password_only":false,"notes":null,"ips":["10.0.0.10"],"aliases":["ci"]}`
+	ok, _ = validateResponse(t, v, http.MethodGet, apiPath("/pam/hosts/h1"), http.StatusOK, body)
+	if ok {
+		t.Error("the spec now accepts an array for PamHostDetailsResponse.ips; re-check the divergence")
+	}
+
+	// Whatever the document says, the shape the server actually sends must
+	// decode cleanly into the wire type.
+	var got client.PamHostDetailsResponse
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.IPs) != 1 || got.IPs[0] != "10.0.0.10" {
+		t.Errorf("decoded %+v", got)
+	}
+}
+
+func TestContract_PamHostSecretResponse(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateResponse(t, v, http.MethodPost, apiPath("/pam/hosts/h1/secret"), http.StatusOK,
+		`{"id":"h1","secret":"s3cr3t"}`)
+	if !ok {
+		t.Errorf("POST /pam/hosts/{id}/secret response rejected by the spec: %s", msg)
+	}
+}
+
 func TestContract_APIKeyRequest(t *testing.T) {
 	v := newContractValidator(t)
 

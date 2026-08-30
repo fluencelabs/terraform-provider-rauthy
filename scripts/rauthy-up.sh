@@ -56,7 +56,8 @@ read -r -d '' key_json <<'JSON' || true
     {"group": "UserAttributes", "access_rights": ["read", "create", "update", "delete"]},
     {"group": "AuthProviders", "access_rights": ["read", "create", "update", "delete"]},
     {"group": "Blacklist", "access_rights": ["read", "create", "update", "delete"]},
-    {"group": "ApiKeys", "access_rights": ["read", "create", "update", "delete"]}
+    {"group": "ApiKeys", "access_rights": ["read", "create", "update", "delete"]},
+    {"group": "Pam",     "access_rights": ["read", "create", "update", "delete"]}
   ]
 }
 JSON
