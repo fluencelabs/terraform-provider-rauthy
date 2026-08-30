@@ -299,3 +299,60 @@ func Timezone() validator.String {
 	return stringvalidator.RegexMatches(timezone,
 		"must be an IANA timezone such as Europe/Berlin")
 }
+
+// Constraints on an upstream auth provider, from the #[validate] attributes in
+// src/api_types/src/providers.rs.
+var (
+	// RE_PROVIDER_NAME. Narrower than RE_CLIENT_NAME: no CJK ranges.
+	authProviderName = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-\s]{2,128}$`)
+
+	// RE_URI as applied to a provider's endpoints and claim paths. It is not
+	// the same pattern the client resource uses: this one has no `@` but does
+	// allow `+`, so a JSONPath such as `$.roles` passes and an email-shaped
+	// value does not.
+	authProviderURI = regexp.MustCompile(`^[a-zA-Z0-9,.:/_\-&?=~#!$'()*+%]+$`)
+
+	// One element of the scope list. Rauthy validates the joined string
+	// against ^[a-zA-Z0-9-_/:\s*]{0,512}$; with the separator taken out, an
+	// element is that pattern minus the whitespace.
+	authProviderScope = regexp.MustCompile(`^[a-zA-Z0-9\-_/:*]+$`)
+)
+
+// Bound from #[validate(length(max = 256))] on ProviderRequest::client_secret.
+const authProviderSecretMax = 256
+
+// Enumeration of AuthProviderType.
+//
+//nolint:gochecknoglobals // transcribed upstream enumeration, read-only
+var authProviderTypes = []string{"custom", "github", "google", "oidc"}
+
+// AuthProviderName validates an upstream provider's display name.
+func AuthProviderName() validator.String {
+	return stringvalidator.RegexMatches(authProviderName,
+		"must be 2-128 characters of letters, digits, spaces or '-'")
+}
+
+// AuthProviderType validates an upstream provider's type.
+func AuthProviderType() validator.String {
+	return stringvalidator.OneOf(authProviderTypes...)
+}
+
+// AuthProviderURI validates one of an upstream provider's endpoints or claim
+// paths.
+func AuthProviderURI() validator.String {
+	return stringvalidator.RegexMatches(authProviderURI,
+		`must match ^[a-zA-Z0-9,.:/_\-&?=~#!$'()*+%]+$`)
+}
+
+// AuthProviderSecret bounds an upstream client secret's length.
+func AuthProviderSecret() validator.String {
+	return stringvalidator.LengthAtMost(authProviderSecretMax)
+}
+
+// AuthProviderScopeSet validates every element of an upstream provider's scope
+// list. The elements are joined with spaces on the wire, so an element may not
+// contain whitespace itself.
+func AuthProviderScopeSet() validator.Set {
+	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(authProviderScope,
+		`must match ^[a-zA-Z0-9\-_/:*]+$ (a single scope, with no spaces)`))
+}

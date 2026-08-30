@@ -46,7 +46,8 @@ func (p *rauthyProvider) Metadata(_ context.Context, _ provider.MetadataRequest,
 
 func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages OIDC clients, scopes, users, roles, groups and the password policy of a " +
+		MarkdownDescription: "Manages OIDC clients, scopes, users, roles, groups, upstream authentication " +
+			"providers and the password policy of a " +
 			"[Rauthy](https://github.com/sebadob/rauthy) identity provider through its admin API.",
 		Attributes: map[string]schema.Attribute{
 			"url": schema.StringAttribute{
@@ -64,6 +65,8 @@ func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 					"update, delete and `Secrets` read and update for `rauthy_client`; `Roles` and `Groups` " +
 					"read, create, update, delete for `rauthy_role`, `rauthy_group` and `rauthy_scope`; " +
 					"`Users` read, create, update, delete for `rauthy_user`; " +
+					"`AuthProviders` read, create, update, delete for `rauthy_auth_provider` " +
+					"(that access group exists only from Rauthy 0.36 onwards); " +
 					"`Secrets:update` for `rauthy_password_policy`. `Secrets:read` is used on every refresh of a " +
 					"confidential client, `Secrets:update` only when rotating a secret.",
 			},
@@ -145,6 +148,7 @@ func (p *rauthyProvider) Resources(_ context.Context) []func() resource.Resource
 		NewGroupResource,
 		NewPasswordPolicyResource,
 		NewUserResource,
+		NewAuthProviderResource,
 	}
 }
 
@@ -154,5 +158,7 @@ func (p *rauthyProvider) DataSources(_ context.Context) []func() datasource.Data
 		NewScopeDataSource,
 		NewGroupDataSource,
 		NewUserDataSource,
+		NewAuthProviderDataSource,
+		NewAuthProviderLookupDataSource,
 	}
 }
