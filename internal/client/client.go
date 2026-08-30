@@ -34,6 +34,8 @@ type Client struct {
 	// note above userAttrPathBase in user_attributes.go for what happens
 	// without it.
 	userAttrMu sync.Mutex
+	// retry bounds how hard every request tries before giving up. See retry.go.
+	retry retryPolicy
 }
 
 // Option customises a Client.
@@ -42,6 +44,23 @@ type Option func(*Client)
 // WithHTTPClient replaces the underlying HTTP client. Used by tests.
 func WithHTTPClient(hc *http.Client) Option {
 	return func(c *Client) { c.httpClient = hc }
+}
+
+// WithRetryPolicy replaces the retry budget. Used by tests, which need a
+// backoff measured in microseconds rather than in seconds.
+//
+// This is deliberately not surfaced as a provider schema attribute. The budget
+// is a property of how flaky the network between Terraform and Rauthy is, which
+// the operator cannot usefully predict at configuration time, and every value
+// worth choosing is already covered: the defaults ride out a blip, and a
+// failure that outlives them is one a human should see rather than one the
+// provider should keep hammering. Exposing `max_retries` would add a knob whose
+// only honest documentation is "leave this alone", and a wrong setting turns a
+// visible failure into a silent multi-minute stall inside an apply.
+func WithRetryPolicy(maxAttempts int, baseDelay, maxDelay time.Duration) Option {
+	return func(c *Client) {
+		c.retry = retryPolicy{maxAttempts: maxAttempts, baseDelay: baseDelay, maxDelay: maxDelay}
+	}
 }
 
 // New builds a Client for a Rauthy instance. rawURL is the instance root, for
@@ -73,6 +92,11 @@ func New(rawURL, apiKey string, opts ...Option) (*Client, error) {
 		baseURL:    base,
 		apiKey:     apiKey,
 		httpClient: &http.Client{Timeout: defaultTimeout},
+		retry: retryPolicy{
+			maxAttempts: defaultMaxAttempts,
+			baseDelay:   defaultBaseDelay,
+			maxDelay:    defaultMaxDelay,
+		},
 	}
 	for _, o := range opts {
 		o(c)
@@ -118,40 +142,24 @@ func (c *Client) doText(ctx context.Context, method, path string, body any) (str
 // doRaw sends body as JSON and returns the response body untouched. accept is
 // sent as the Accept header; Rauthy ignores it, but it keeps the intent of each
 // call visible on the wire. The binary endpoints do not come through here —
-// they build on newRequest directly, since they neither send nor receive JSON.
+// they call send directly, since they neither send nor receive JSON.
 func (c *Client) doRaw(ctx context.Context, method, path string, body any, accept string) ([]byte, error) {
-	var reader io.Reader
+	headers := map[string]string{"Accept": accept}
+
+	var encoded []byte
 	if body != nil {
-		encoded, err := json.Marshal(body)
-		if err != nil {
+		var err error
+		if encoded, err = json.Marshal(body); err != nil {
 			return nil, fmt.Errorf("marshal %s %s body: %w", method, path, err)
 		}
-		reader = bytes.NewReader(encoded)
+		headers["Content-Type"] = "application/json"
 	}
 
-	req, err := c.newRequest(ctx, method, path, reader)
+	resp, err := c.send(ctx, method, path, encoded, headers)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", accept)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%s %s: %w", method, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read %s %s response: %w", method, path, err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, newAPIError(method, path, resp.StatusCode, raw)
-	}
-	return raw, nil
+	return resp.body, nil
 }
 
 // newRequest builds an authenticated request against path, relative to the API
@@ -170,50 +178,22 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 // download issues a GET and returns the raw body with its content type, for
 // the endpoints that serve binary rather than JSON.
 func (c *Client) download(ctx context.Context, path string) ([]byte, string, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, path, nil)
+	resp, err := c.send(ctx, http.MethodGet, path, nil, nil)
 	if err != nil {
 		return nil, "", err
 	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, "", fmt.Errorf("%s %s: %w", http.MethodGet, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, "", fmt.Errorf("read %s %s response: %w", http.MethodGet, path, err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, "", newAPIError(http.MethodGet, path, resp.StatusCode, raw)
-	}
-	return raw, resp.Header.Get("Content-Type"), nil
+	return resp.body, resp.contentType, nil
 }
 
 // upload issues a PUT with a pre-encoded body and an explicit content type.
 func (c *Client) upload(ctx context.Context, path, contentType string, body []byte) error {
-	req, err := c.newRequest(ctx, http.MethodPut, path, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("%s %s: %w", http.MethodPut, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read %s %s response: %w", http.MethodPut, path, err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return newAPIError(http.MethodPut, path, resp.StatusCode, raw)
-	}
-	return nil
+	// The multipart body is already encoded in full, so replaying it on a retry
+	// costs nothing beyond a fresh reader over the same bytes.
+	_, err := c.send(ctx, http.MethodPut, path, body, map[string]string{
+		"Content-Type": contentType,
+		"Accept":       "application/json",
+	})
+	return err
 }
 
 // multipartBody encodes one image as a single multipart/form-data part and
