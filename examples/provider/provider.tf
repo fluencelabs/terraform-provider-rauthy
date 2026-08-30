@@ -1,4 +1,9 @@
 terraform {
+  # 1.11 is the floor, not a preference: rauthy_user.password_wo and
+  # rauthy_auth_provider.client_secret_wo are write-only attributes, which
+  # earlier versions of Terraform cannot parse at all.
+  required_version = ">= 1.11.0"
+
   required_providers {
     rauthy = {
       source = "fluencelabs/rauthy"

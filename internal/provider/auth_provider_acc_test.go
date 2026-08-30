@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfversion"
 
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/acctest"
@@ -45,11 +46,16 @@ resource "rauthy_auth_provider" "test" {
   userinfo_endpoint      = "https://idp.example.com/userinfo"
   jwks_endpoint          = "https://idp.example.com/jwks"
 
-  client_id     = "rauthy-acc"
-  client_secret = %q
-  scopes        = %s
+  client_id        = "rauthy-acc"
+  client_secret_wo = %q
+  scopes           = %s
+
+  # A write-only value is invisible to the plan, so the trigger is what makes a
+  # changed secret produce an apply at all. Keying it on the secret itself is
+  # fine in a test; a real configuration would use a version counter.
+  client_secret_rotation_trigger = %q
 }
-`, name, secret, scopes)
+`, name, secret, scopes, secret)
 }
 
 func testAccCheckAuthProviderDestroyed(s *terraform.State) error {
@@ -72,10 +78,51 @@ func testAccCheckAuthProviderDestroyed(s *terraform.State) error {
 	return nil
 }
 
+// testAccCheckAuthProviderSecretInRauthy asks Rauthy itself what secret it is
+// holding for a provider.
+//
+// This is the check a write-only attribute needs and a state-based one cannot
+// give. `client_secret_wo` is null in state whether the provider forwarded the
+// configured value faithfully or dropped it on the floor, so asserting on state
+// would pass just as happily against a provider that sends nothing at all.
+// Rauthy returns the upstream secret in the clear on a read, which is what
+// makes the round trip observable from out here. Pass "" to assert Rauthy holds
+// no secret at all.
+func testAccCheckAuthProviderSecretInRauthy(resourceName, want string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", resourceName)
+		}
+		c, err := client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+		if err != nil {
+			return err
+		}
+		got, err := c.GetAuthProvider(context.Background(), rs.Primary.ID)
+		if err != nil {
+			return err
+		}
+		stored := ""
+		if got.ClientSecret != nil {
+			stored = *got.ClientSecret
+		}
+		if stored != want {
+			return fmt.Errorf("Rauthy holds client_secret %q for %s, want %q",
+				stored, rs.Primary.ID, want)
+		}
+		return nil
+	}
+}
+
 func TestAccAuthProvider_lifecycle(t *testing.T) {
 	factories := acctest.Setup(t)
 
 	resource.Test(t, resource.TestCase{
+		// client_secret_wo is a write-only attribute, which Terraform only
+		// understands from 1.11 onwards.
+		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
+			tfversion.SkipBelow(tfversion.Version1_11_0),
+		},
 		ProtoV6ProviderFactories: factories,
 		CheckDestroy:             testAccCheckAuthProviderDestroyed,
 		Steps: []resource.TestStep{
@@ -88,9 +135,11 @@ func TestAccAuthProvider_lifecycle(t *testing.T) {
 					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "type", "oidc"),
 					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "scopes.#", "3"),
 					resource.TestCheckTypeSetElemAttr("rauthy_auth_provider.test", "scopes.*", "openid"),
-					// The upstream secret, unlike an OIDC client's, is supplied
-					// rather than generated and comes back on a read.
-					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "client_secret",
+					// The secret is write-only, so it is absent from state by
+					// construction. The check that carries weight is the next
+					// one: that Rauthy actually received it.
+					resource.TestCheckNoResourceAttr("rauthy_auth_provider.test", "client_secret_wo"),
+					testAccCheckAuthProviderSecretInRauthy("rauthy_auth_provider.test",
 						"acc-upstream-secret"),
 					// Defaults the configuration does not mention.
 					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "enabled", "true"),
@@ -107,7 +156,7 @@ func TestAccAuthProvider_lifecycle(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "name",
 						"TF Acc Upstream Renamed"),
-					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "client_secret",
+					testAccCheckAuthProviderSecretInRauthy("rauthy_auth_provider.test",
 						"acc-upstream-secret-2"),
 					resource.TestCheckResourceAttr("rauthy_auth_provider.test", "scopes.#", "2"),
 					resource.TestCheckNoResourceAttr("rauthy_auth_provider.test", "admin_claim_path"),
@@ -116,10 +165,14 @@ func TestAccAuthProvider_lifecycle(t *testing.T) {
 			{
 				ResourceName: "rauthy_auth_provider.test",
 				ImportState:  true,
-				// Nothing is ignored here on purpose. Every attribute of this
-				// resource, the secret included, survives a round trip through
-				// Rauthy, so a full verify is the honest test.
+				// Every attribute of this resource survives a round trip
+				// through Rauthy — except the two carrying the secret, which
+				// are not in state to survive anything. Rauthy would hand the
+				// secret back; the provider deliberately drops it.
 				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"client_secret_wo", "client_secret_rotation_trigger",
+				},
 			},
 		},
 	})
@@ -155,8 +208,8 @@ resource "rauthy_auth_provider" "scopes" {
 				Config: cfg,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("rauthy_auth_provider.scopes", "scopes.#", "4"),
-					// No secret was configured, so none is stored.
-					resource.TestCheckNoResourceAttr("rauthy_auth_provider.scopes", "client_secret"),
+					// No secret was configured, so Rauthy holds none.
+					testAccCheckAuthProviderSecretInRauthy("rauthy_auth_provider.scopes", ""),
 				),
 			},
 			{
@@ -219,6 +272,11 @@ func TestAccAuthProviderDataSource_byName(t *testing.T) {
 	factories := acctest.Setup(t)
 
 	resource.Test(t, resource.TestCase{
+		// client_secret_wo is a write-only attribute, which Terraform only
+		// understands from 1.11 onwards.
+		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
+			tfversion.SkipBelow(tfversion.Version1_11_0),
+		},
 		ProtoV6ProviderFactories: factories,
 		CheckDestroy:             testAccCheckAuthProviderDestroyed,
 		Steps: []resource.TestStep{
@@ -240,6 +298,8 @@ data "rauthy_auth_provider" "found" {
 						"issuer", "https://idp.example.com"),
 					// The data source deliberately does not carry the secret.
 					resource.TestCheckNoResourceAttr("data.rauthy_auth_provider.found", "client_secret"),
+					// And the resource did put the configured one into Rauthy.
+					testAccCheckAuthProviderSecretInRauthy("rauthy_auth_provider.test", "acc-secret"),
 				),
 			},
 		},

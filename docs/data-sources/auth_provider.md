@@ -5,7 +5,7 @@ subcategory: ""
 description: |-
   Looks up an existing upstream authentication provider by name, for referring to a provider this configuration does not manage.
   Rauthy does not enforce unique provider names, so a name shared by two providers is an error here rather than an arbitrary pick.
-  The upstream client_secret is deliberately not exposed. Rauthy does return it in the clear on a read, but a lookup of somebody else's provider has no use for it and writing it into this state file would only spread it further.
+  The upstream client_secret is deliberately not exposed. Rauthy does return it in the clear on a read, but a lookup of somebody else's provider has no use for it and writing it into this state file would only spread it further. rauthy_auth_provider now drops it for the same reason; see its client_secret_wo.
   Requires the AuthProviders:read API key right.
 ---
 
@@ -15,7 +15,7 @@ Looks up an existing upstream authentication provider by name, for referring to 
 
 Rauthy does not enforce unique provider names, so a name shared by two providers is an error here rather than an arbitrary pick.
 
-The upstream `client_secret` is deliberately not exposed. Rauthy does return it in the clear on a read, but a lookup of somebody else's provider has no use for it and writing it into this state file would only spread it further.
+The upstream `client_secret` is deliberately not exposed. Rauthy does return it in the clear on a read, but a lookup of somebody else's provider has no use for it and writing it into this state file would only spread it further. `rauthy_auth_provider` now drops it for the same reason; see its `client_secret_wo`.
 
 Requires the `AuthProviders:read` API key right.
 

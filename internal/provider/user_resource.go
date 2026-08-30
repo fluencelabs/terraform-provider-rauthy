@@ -36,21 +36,22 @@ type userValuesModel struct {
 }
 
 type userResourceModel struct {
-	ID                types.String     `tfsdk:"id"`
-	Email             types.String     `tfsdk:"email"`
-	GivenName         types.String     `tfsdk:"given_name"`
-	FamilyName        types.String     `tfsdk:"family_name"`
-	Language          types.String     `tfsdk:"language"`
-	Enabled           types.Bool       `tfsdk:"enabled"`
-	EmailVerified     types.Bool       `tfsdk:"email_verified"`
-	Roles             types.Set        `tfsdk:"roles"`
-	Groups            types.Set        `tfsdk:"groups"`
-	UserExpires       types.Int64      `tfsdk:"user_expires"`
-	Password          types.String     `tfsdk:"password"`
-	UserValues        *userValuesModel `tfsdk:"user_values"`
-	AccountType       types.String     `tfsdk:"account_type"`
-	CreatedAt         types.Int64      `tfsdk:"created_at"`
-	PreferredUsername types.String     `tfsdk:"preferred_username"`
+	ID                      types.String     `tfsdk:"id"`
+	Email                   types.String     `tfsdk:"email"`
+	GivenName               types.String     `tfsdk:"given_name"`
+	FamilyName              types.String     `tfsdk:"family_name"`
+	Language                types.String     `tfsdk:"language"`
+	Enabled                 types.Bool       `tfsdk:"enabled"`
+	EmailVerified           types.Bool       `tfsdk:"email_verified"`
+	Roles                   types.Set        `tfsdk:"roles"`
+	Groups                  types.Set        `tfsdk:"groups"`
+	UserExpires             types.Int64      `tfsdk:"user_expires"`
+	PasswordWO              types.String     `tfsdk:"password_wo"`
+	PasswordRotationTrigger types.String     `tfsdk:"password_rotation_trigger"`
+	UserValues              *userValuesModel `tfsdk:"user_values"`
+	AccountType             types.String     `tfsdk:"account_type"`
+	CreatedAt               types.Int64      `tfsdk:"created_at"`
+	PreferredUsername       types.String     `tfsdk:"preferred_username"`
 }
 
 func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -116,7 +117,12 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	plan.ID = types.StringValue(created.ID)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), created.ID)...)
 
-	updated, err := r.api.UpdateUser(ctx, created.ID, buildUpdateUserRequest(ctx, &plan, &resp.Diagnostics))
+	password := writeOnlyString(ctx, req.Config, path.Root("password_wo"), &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	updated, err := r.api.UpdateUser(ctx, created.ID, buildUpdateUserRequest(ctx, &plan, password, &resp.Diagnostics))
 	if err != nil {
 		resp.Diagnostics.AddError("Could not configure Rauthy user "+created.ID, err.Error())
 		return
@@ -155,8 +161,15 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
+	// The write-only password comes out of the configuration, not the plan:
+	// the plan reports it as null because Terraform refuses to carry it.
+	password := writeOnlyString(ctx, req.Config, path.Root("password_wo"), &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	id := plan.ID.ValueString()
-	updated, err := r.api.UpdateUser(ctx, id, buildUpdateUserRequest(ctx, &plan, &resp.Diagnostics))
+	updated, err := r.api.UpdateUser(ctx, id, buildUpdateUserRequest(ctx, &plan, password, &resp.Diagnostics))
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -185,6 +198,7 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 func buildUpdateUserRequest(
 	ctx context.Context,
 	m *userResourceModel,
+	password types.String,
 	diags *diag.Diagnostics,
 ) client.UpdateUserRequest {
 	req := client.UpdateUserRequest{
@@ -196,7 +210,7 @@ func buildUpdateUserRequest(
 		GivenName:     stringPtr(m.GivenName),
 		FamilyName:    stringPtr(m.FamilyName),
 		Language:      stringPtr(m.Language),
-		Password:      stringPtr(m.Password),
+		Password:      stringPtr(password),
 		UserExpires:   int64Ptr(m.UserExpires),
 	}
 	if m.UserValues != nil {
@@ -221,7 +235,8 @@ func buildUpdateUserRequest(
 // equal the configuration exactly. Rauthy collapses an empty set and an absent
 // one into the same null, so the response alone cannot tell `[]` from unset.
 //
-// `password` is never returned and is left untouched for the same reason.
+// The password is write-only and never returned, so there is nothing to fold
+// back for it at all.
 func applyUser(m *userResourceModel, u *client.UserResponse) {
 	m.ID = types.StringValue(u.ID)
 	m.Email = types.StringValue(u.Email)

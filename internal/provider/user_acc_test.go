@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfversion"
 
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/acctest"
@@ -119,9 +120,11 @@ func TestAccUser_lifecycle(t *testing.T) {
 				ResourceName:      "rauthy_user.test",
 				ImportState:       true,
 				ImportStateVerify: true,
-				// Never returned by Rauthy, so it cannot be verified against a
-				// fresh import.
-				ImportStateVerifyIgnore: []string{"password"},
+				// Write-only, so it is in neither the imported state nor the
+				// prior one; there is nothing to compare.
+				ImportStateVerifyIgnore: []string{
+					"password_wo", "password_rotation_trigger",
+				},
 			},
 		},
 	})
@@ -201,6 +204,76 @@ data "rauthy_user" "test" {
 }
 `,
 				ExpectError: regexpConflictingSelectors,
+			},
+		},
+	})
+}
+
+// A write-only password must actually reach Rauthy.
+//
+// The trap this test exists to avoid: `password_wo` is null in state whether
+// the provider forwarded it or dropped it, so every state assertion available
+// here passes just as well against a provider that sends nothing at all. The
+// observable proof is `account_type`, which Rauthy reports as `new` for an
+// account with no credential and flips to `password` the moment one is set.
+// Verified by hand against 0.36.2 before being relied on here.
+func TestAccUser_writeOnlyPasswordReachesRauthy(t *testing.T) {
+	factories := acctest.Setup(t)
+
+	const email = "tf-acc-user-wo@example.com"
+
+	resource.Test(t, resource.TestCase{
+		// Write-only attributes are a Terraform 1.11 feature; against anything
+		// older the configuration below is not even parseable.
+		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
+			tfversion.SkipBelow(tfversion.Version1_11_0),
+		},
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckUsersDestroyed,
+		Steps: []resource.TestStep{
+			{
+				// No password yet: the baseline that makes the next step mean
+				// something.
+				Config: testAccUserConfig(email, ""),
+				Check: resource.TestCheckResourceAttr(
+					"rauthy_user.test", "account_type", "new"),
+			},
+			{
+				Config: testAccUserConfig(email, `
+  password_wo               = "TfAccWriteOnlyPassw0rd!"
+  password_rotation_trigger = "v1"
+`),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Rauthy now holds a password, which it did not a step ago.
+					resource.TestCheckResourceAttr("rauthy_user.test", "account_type", "password"),
+					// And Terraform holds none: not the value, not a hash, not
+					// an empty string — the attribute is simply not in state.
+					resource.TestCheckNoResourceAttr("rauthy_user.test", "password_wo"),
+					// The trigger, by contrast, is tracked; that is its job.
+					resource.TestCheckResourceAttr("rauthy_user.test", "password_rotation_trigger", "v1"),
+				),
+			},
+			{
+				// The same configuration must not plan a change. A write-only
+				// attribute that leaked into state would show up here.
+				Config: testAccUserConfig(email, `
+  password_wo               = "TfAccWriteOnlyPassw0rd!"
+  password_rotation_trigger = "v1"
+`),
+				PlanOnly: true,
+			},
+			{
+				// Rotation: a new password behind a bumped trigger. Rauthy
+				// accepts it, which is all that is observable from here — the
+				// account is already `password`.
+				Config: testAccUserConfig(email, `
+  password_wo               = "TfAccWriteOnlyPassw0rd!v2"
+  password_rotation_trigger = "v2"
+`),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("rauthy_user.test", "account_type", "password"),
+					resource.TestCheckResourceAttr("rauthy_user.test", "password_rotation_trigger", "v2"),
+				),
 			},
 		},
 	})

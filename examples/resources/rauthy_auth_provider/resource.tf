@@ -15,9 +15,15 @@ resource "rauthy_auth_provider" "corp" {
   userinfo_endpoint      = data.rauthy_auth_provider_lookup.corp.userinfo_endpoint
   jwks_endpoint          = data.rauthy_auth_provider_lookup.corp.jwks_endpoint
 
-  client_id     = "rauthy"
-  client_secret = var.corp_client_secret
-  scopes        = ["openid", "profile", "email"]
+  client_id = "rauthy"
+  scopes    = ["openid", "profile", "email"]
+
+  # The upstream secret is write-only: Terraform hands it to the provider and
+  # stores nothing, so it never lands in the state file. That needs Terraform
+  # 1.11 or later, and it means the value is invisible to the plan — bump the
+  # trigger in the same commit as the secret, or the apply is skipped.
+  client_secret_wo               = var.corp_client_secret
+  client_secret_rotation_trigger = var.corp_client_secret_version
 
   # Everyone in the upstream's rauthy-admins group administers Rauthy too.
   admin_claim_path  = "$.groups"
@@ -40,9 +46,11 @@ resource "rauthy_auth_provider" "github" {
   token_endpoint         = "https://github.com/login/oauth/access_token"
   userinfo_endpoint      = "https://api.github.com/user"
 
-  client_id     = var.github_client_id
-  client_secret = var.github_client_secret
-  scopes        = ["user:email"]
+  client_id = var.github_client_id
+  scopes    = ["user:email"]
+
+  client_secret_wo               = var.github_client_secret
+  client_secret_rotation_trigger = var.github_client_secret_version
 
   client_secret_post = true
 }

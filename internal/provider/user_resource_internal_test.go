@@ -64,15 +64,24 @@ func TestApplyUser_KeepsEmptySetDistinctFromUnset(t *testing.T) {
 	}
 }
 
-// The password is never returned by Rauthy. Deriving it from a response would
-// blank it out on the first refresh, so applyUser must leave it alone.
-func TestApplyUser_LeavesPasswordAlone(t *testing.T) {
+// The password is write-only, so it comes from the configuration rather than
+// from the model, and applyUser has nothing to say about it either way.
+func TestBuildUpdateUserRequest_CarriesTheWriteOnlyPassword(t *testing.T) {
 	t.Parallel()
 
-	m := &userResourceModel{Password: types.StringValue("hunter2hunter2")}
-	applyUser(m, &client.UserResponse{ID: "u-1", Email: "ada@example.com", Language: "en"})
-	if m.Password.ValueString() != "hunter2hunter2" {
-		t.Errorf("password = %v, want it untouched", m.Password)
+	var diags diag.Diagnostics
+	m := &userResourceModel{Email: types.StringValue("ada@example.com")}
+
+	got := buildUpdateUserRequest(context.Background(), m, types.StringValue("hunter2hunter2"), &diags)
+	if got.Password == nil || *got.Password != "hunter2hunter2" {
+		t.Errorf("password = %v, want the configured value sent to Rauthy", got.Password)
+	}
+
+	// No password configured means none sent — not an empty one, which Rauthy
+	// would reject against the password policy.
+	got = buildUpdateUserRequest(context.Background(), m, types.StringNull(), &diags)
+	if got.Password != nil {
+		t.Errorf("password = %q, want it omitted", *got.Password)
 	}
 }
 

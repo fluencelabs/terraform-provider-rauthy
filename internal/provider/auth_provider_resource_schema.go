@@ -22,8 +22,10 @@ const authProviderResourceDescription = "An upstream authentication provider: a 
 	"`GET /providers/{id}` at all: reading one back means fetching the whole list and picking it " +
 	"out, which the provider does for you.\n\n" +
 	"`PUT /providers/{id}` is a full replacement and the provider always sends every field, " +
-	"`client_secret` included. Do not omit `client_secret` from a configuration that had one: an " +
-	"update that does not carry it erases the stored secret.\n\n" +
+	"`client_secret_wo` included. Do not omit `client_secret_wo` from a configuration that had " +
+	"one: an update that does not carry it erases the stored secret.\n\n" +
+	"The upstream secret is a write-only attribute and is never written to Terraform state. " +
+	"That requires Terraform 1.11 or later; see `client_secret_wo` for what it costs.\n\n" +
 	"Rauthy assigns the id, so the endpoints, the client credentials and even the type can all be " +
 	"changed in place; nothing on this resource forces a replacement.\n\n" +
 	"The branding image at `/providers/{id}/img` is not managed here.\n\n" +
@@ -135,17 +137,41 @@ func authProviderCredentialAttributes() map[string]schema.Attribute {
 			MarkdownDescription: "The client id Rauthy was issued by the upstream.",
 			Validators:          []validator.String{validators.AuthProviderURI()},
 		},
-		"client_secret": schema.StringAttribute{
+		"client_secret_wo": schema.StringAttribute{
 			Optional:  true,
-			Sensitive: true,
+			WriteOnly: true,
 			MarkdownDescription: "The client secret Rauthy was issued by the upstream. At most 256 " +
 				"characters. Omit it for a public client that authenticates with PKCE alone.\n\n" +
-				"Unlike `rauthy_client.secret`, this one is supplied rather than generated, and " +
-				"Rauthy does hand it back in the clear on a read — so it survives an import and a " +
-				"refresh notices when somebody changes it in the Admin UI.\n\n" +
-				"Removing it from the configuration removes it from the provider: the update that " +
-				"follows carries no secret and Rauthy stores none.",
+				"This is a **write-only** attribute: Terraform hands it to the provider on the apply " +
+				"that uses it and stores nothing, so the upstream credential reaches neither the " +
+				"state file nor a saved plan. Requires Terraform 1.11 or later.\n\n" +
+				"That trade is deliberate and it does cost something. Rauthy *does* return this " +
+				"secret in the clear on a read, so the provider could track it — and until this " +
+				"attribute became write-only it did, which is how a refresh used to notice a secret " +
+				"changed in the Admin UI and how an import used to recover a complete resource. " +
+				"Both of those are now gone: a drifted secret is invisible, and after " +
+				"`terraform import` the first apply re-asserts whatever the configuration says. " +
+				"Keeping a working upstream credential out of every state file was judged worth " +
+				"more than either.\n\n" +
+				"Because nothing is stored, changing the value on its own produces no plan. Change " +
+				"`client_secret_rotation_trigger` alongside it to make Terraform apply the new " +
+				"secret.\n\n" +
+				"Removing it from the configuration removes it from the provider: `PUT " +
+				"/providers/{id}` is a full replacement, so the update that follows carries no " +
+				"secret and Rauthy stores none.",
 			Validators: []validator.String{validators.AuthProviderSecret()},
+		},
+		"client_secret_rotation_trigger": schema.StringAttribute{
+			Optional: true,
+			MarkdownDescription: "An arbitrary value whose every change makes the provider re-send " +
+				"`client_secret_wo`. Setting it for the first time, or removing it, counts as a " +
+				"change.\n\n" +
+				"It exists because a write-only attribute is invisible to the plan: with no companion " +
+				"value that *is* tracked, Terraform cannot tell an apply carrying a new secret from " +
+				"one carrying the old, and skips the update entirely. This is the same mechanism " +
+				"`rauthy_api_key.secret_rotation_trigger` uses.\n\n" +
+				"Any other change to the provider re-sends the secret too, since the update is a " +
+				"full replacement.",
 		},
 		"scopes": schema.SetAttribute{
 			Required:    true,

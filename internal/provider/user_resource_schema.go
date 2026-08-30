@@ -19,7 +19,7 @@ import (
 const userResourceDescription = "Manages a user account in Rauthy.\n\n" +
 	"Creating a user takes two API calls: Rauthy's create endpoint accepts only the email, " +
 	"language, roles and groups, so everything else — `enabled`, `email_verified`, the profile " +
-	"values and an initial `password` — is written by the update that follows. A user created " +
+	"values and an initial `password_wo` — is written by the update that follows. A user created " +
 	"through the API has no password and no passkey until one is set, either by this resource " +
 	"or by the account-initialisation email Rauthy sends.\n\n" +
 	"`given_name` is required even though Rauthy's own API documentation calls it optional: " +
@@ -117,14 +117,30 @@ func userAccessAttributes() map[string]schema.Attribute {
 			MarkdownDescription: "Unix timestamp in seconds at which the account expires. " +
 				"Omit for an account that does not expire.",
 		},
-		"password": schema.StringAttribute{
+		"password_wo": schema.StringAttribute{
 			Optional:  true,
-			Sensitive: true,
-			MarkdownDescription: "Password to set on the account. Rauthy never returns it, so this " +
-				"is write-only: the provider cannot detect a password changed elsewhere, and " +
-				"removing the attribute leaves the last one set rather than clearing it. The value " +
-				"is stored in the Terraform state in clear text — prefer leaving it unset and " +
-				"letting the user set their own password through Rauthy's reset flow.",
+			WriteOnly: true,
+			MarkdownDescription: "Password to set on the account.\n\n" +
+				"This is a **write-only** attribute: Terraform hands it to the provider on the apply " +
+				"that uses it and stores nothing, so the password reaches neither the state file nor " +
+				"a saved plan. Nothing is lost by that here — Rauthy never returns a password " +
+				"either, so the provider could not detect one changed elsewhere in any case, and " +
+				"removing the attribute leaves the last one set rather than clearing it.\n\n" +
+				"Because nothing is stored, changing the value on its own produces no plan. Change " +
+				"`password_rotation_trigger` alongside it to make Terraform apply the new password.\n\n" +
+				"Requires Terraform 1.11 or later. Prefer leaving it unset and letting the user set " +
+				"their own password through Rauthy's reset flow.",
+		},
+		"password_rotation_trigger": schema.StringAttribute{
+			Optional: true,
+			MarkdownDescription: "An arbitrary value whose every change makes the provider re-send " +
+				"`password_wo`. Setting it for the first time, or removing it, counts as a change.\n\n" +
+				"It exists because a write-only attribute is invisible to the plan: with no companion " +
+				"value that *is* tracked, Terraform cannot tell an apply carrying a new password from " +
+				"one carrying the old, and skips the update entirely. This is the same mechanism " +
+				"`rauthy_api_key.secret_rotation_trigger` uses.\n\n" +
+				"Any other change to the user re-sends the password too, since Rauthy's user update " +
+				"is a full replacement.",
 		},
 	}
 }
