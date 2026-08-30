@@ -8,7 +8,7 @@ It exists because a confidential client's secret cannot be set from outside: Rau
 attribute read back from Rauthy, which rules out managing clients with `random_password` and a
 hand-written bootstrap file.
 
-Tracks Rauthy **0.35.2**.
+Tracks Rauthy **0.36.2**.
 
 ## Installation
 
@@ -105,7 +105,7 @@ Rauthy only serves `/auth/v1/docs/openapi.json` when `swagger_ui_enable = true`,
 deployments, so the spec is scraped from the release container:
 
 ```sh
-make openapi-refresh RAUTHY_VERSION=0.35.2
+make openapi-refresh RAUTHY_VERSION=0.36.2
 ```
 
 This needs Docker and is run **by hand when bumping the Rauthy version** — CI has no Docker and

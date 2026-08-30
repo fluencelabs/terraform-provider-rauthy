@@ -8,7 +8,7 @@ import (
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 )
 
-// Rauthy v0.35.2 guards GET /password_policy with session authentication and
+// Rauthy v0.36.2 guards GET /password_policy with session authentication and
 // rejects an API key outright. The provider has to recognise that refusal and
 // keep prior state, or every refresh of the resource fails.
 func TestIsSessionOnly(t *testing.T) {

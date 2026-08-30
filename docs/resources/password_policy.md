@@ -5,7 +5,7 @@ description: |-
   The policy is a singleton: every Rauthy instance has exactly one and it can be neither created nor deleted. Declaring this resource adopts the existing policy and replaces it; destroying it only drops it from Terraform state and leaves the policy in place. For the same reason, at most one rauthy_password_policy should exist per instance — two would fight over the same object on every apply.
   Every optional attribute left unset is sent as null, which disables that rule rather than leaving it at its previous value: the API replaces the policy wholesale.
   Requires the Secrets:update API key right.
-  Drift is not detected. Rauthy v0.35.2 guards GET /password_policy with session authentication and accepts no API key there, so the provider cannot read the policy back. A change made in the Admin UI stays invisible to Terraform until the next apply overwrites it, and terraform import is unavailable for the same reason.
+  Drift is not detected. Rauthy v0.36.2 guards GET /password_policy with session authentication and accepts no API key there, so the provider cannot read the policy back. A change made in the Admin UI stays invisible to Terraform until the next apply overwrites it, and terraform import is unavailable for the same reason.
 ---
 
 # rauthy_password_policy (Resource)
@@ -18,7 +18,7 @@ Every optional attribute left unset is sent as null, which **disables** that rul
 
 Requires the `Secrets:update` API key right.
 
-**Drift is not detected.** Rauthy v0.35.2 guards `GET /password_policy` with session authentication and accepts no API key there, so the provider cannot read the policy back. A change made in the Admin UI stays invisible to Terraform until the next apply overwrites it, and `terraform import` is unavailable for the same reason.
+**Drift is not detected.** Rauthy v0.36.2 guards `GET /password_policy` with session authentication and accepts no API key there, so the provider cannot read the policy back. A change made in the Admin UI stays invisible to Terraform until the next apply overwrites it, and `terraform import` is unavailable for the same reason.
 
 ## Example Usage
 

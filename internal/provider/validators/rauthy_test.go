@@ -58,8 +58,8 @@ func TestClientID(t *testing.T) {
 		[]string{
 			"app",
 			"my-app_2",
-			"https://app.example.com",
-			"a+b%c",
+			"app.example.com",
+			"MixedCase.App-1_2",
 		},
 		[]string{
 			"",             // shorter than 2
@@ -67,6 +67,8 @@ func TestClientID(t *testing.T) {
 			"has space",    // space is not in the class
 			"quote\"quote", // double quote is not in the class
 			"<script>",
+			"https://app.example.com", // 0.36 dropped `:` and `/` from RE_CLIENT_ID
+			"a+b%c",                   // and `+` and `%` with them
 		},
 	)
 }

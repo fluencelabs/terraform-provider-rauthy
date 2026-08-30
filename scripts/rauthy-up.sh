@@ -2,7 +2,7 @@
 # Boot a throwaway Rauthy for the acceptance tests and print the environment
 # they need.
 #
-#   eval "$(scripts/rauthy-up.sh 0.35.2)"
+#   eval "$(scripts/rauthy-up.sh 0.36.2)"
 #   TF_ACC=1 go test ./... -p 1
 #   scripts/rauthy-down.sh
 #
@@ -37,7 +37,9 @@ key_name="tfacc"
 key_secret="tfaccSecretDoNotUseAnywhereElse0123456789abcdefghijklmnopqrstuvwxyz"
 
 # Every access group this provider touches. password_policy is Secrets:update,
-# not a group of its own — Rauthy has no `Config` group.
+# not a group of its own — Rauthy has no `Config` group. Rauthy 0.36 moved
+# /users/attr off the `Users` group onto `UserAttributes`; without that entry
+# every user-attribute call 403s before a test runs.
 read -r -d '' key_json <<'JSON' || true
 {
   "name": "tfacc",
@@ -47,8 +49,8 @@ read -r -d '' key_json <<'JSON' || true
     {"group": "Roles",   "access_rights": ["read", "create", "update", "delete"]},
     {"group": "Groups",  "access_rights": ["read", "create", "update", "delete"]},
     {"group": "Scopes",  "access_rights": ["read", "create", "update", "delete"]},
-    {"group": "UserAttributes", "access_rights": ["read", "create", "update", "delete"]},
-    {"group": "Users",   "access_rights": ["read", "create", "update", "delete"]}
+    {"group": "Users",   "access_rights": ["read", "create", "update", "delete"]},
+    {"group": "UserAttributes", "access_rights": ["read", "create", "update", "delete"]}
   ]
 }
 JSON

@@ -1,6 +1,6 @@
 package client
 
-// Wire types mirroring Rauthy's `rauthy_api_types::clients` at v0.35.2.
+// Wire types mirroring Rauthy's `rauthy_api_types::clients` at v0.36.2.
 //
 // Field sets and JSON names are load-bearing: the API silently ignores unknown
 // fields on POST /clients and rejects a PUT that omits a required one. The
