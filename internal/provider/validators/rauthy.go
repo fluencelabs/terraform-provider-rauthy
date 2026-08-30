@@ -15,6 +15,8 @@
 package validators
 
 import (
+	"context"
+	"net/netip"
 	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -417,4 +419,57 @@ func AccessGroup() validator.String {
 // AccessRightsSet validates every element of an access-rights set.
 func AccessRightsSet() validator.Set {
 	return setvalidator.ValueStringsAre(stringvalidator.OneOf(accessRights...))
+}
+
+// blacklistExpMin is the lower bound Rauthy puts on a blacklist entry's `exp`.
+// It is a fixed timestamp (2024-07-01T00:00:00Z) rather than "now", read off a
+// live 0.36.2 rejection: `"exp": range, params: {"min": 1719784800}`. It rules
+// out obviously nonsensical values while still accepting a timestamp that is
+// merely in the recent past — which the server then silently discards. See the
+// note on Client.BlacklistIP.
+const blacklistExpMin = 1719784800
+
+// BlacklistExp bounds a blacklist entry's expiry. It deliberately does not
+// check that the value lies in the future: a bound derived from time.Now()
+// would make a saved plan expire between plan and apply.
+func BlacklistExp() validator.Int64 {
+	return int64validator.AtLeast(blacklistExpMin)
+}
+
+// ipAddressValidator checks that a string parses as an IPv4 or IPv6 address.
+// Rauthy deserialises the field into a Rust IpAddr and answers a bare 400 with
+// a serde message when it does not parse; validating here names the attribute
+// instead.
+type ipAddressValidator struct{}
+
+func (ipAddressValidator) Description(context.Context) string {
+	return "must be an IPv4 or IPv6 address"
+}
+
+func (v ipAddressValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v ipAddressValidator) ValidateString(
+	ctx context.Context,
+	req validator.StringRequest,
+	resp *validator.StringResponse,
+) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	if _, err := netip.ParseAddr(req.ConfigValue.ValueString()); err != nil {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid IP address",
+			"Attribute "+req.Path.String()+" "+v.Description(ctx)+
+				", got: "+req.ConfigValue.ValueString(),
+		)
+	}
+}
+
+// IPAddress validates a bare IPv4 or IPv6 address, with no port and no prefix
+// length.
+func IPAddress() validator.String {
+	return ipAddressValidator{}
 }

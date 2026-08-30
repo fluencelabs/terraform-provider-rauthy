@@ -566,3 +566,25 @@ func TestContract_APIKeyTestEndpointIsNotARead(t *testing.T) {
 			"has become a usable per-key read")
 	}
 }
+
+func TestContract_BlacklistIPRequest(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateRequest(t, v, http.MethodPost, apiPath("/blacklist"), client.IPBlacklistRequest{
+		IP:  "203.0.113.7",
+		Exp: 4102444800,
+	})
+	if !ok {
+		t.Errorf("POST /blacklist body rejected by the spec: %s", msg)
+	}
+}
+
+func TestContract_BlacklistResponse(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateResponse(t, v, http.MethodGet, apiPath("/blacklist"), http.StatusOK,
+		`{"ips":[{"ip":"203.0.113.7","exp":4102444800},{"ip":"2001:db8::2","exp":4102444800}]}`)
+	if !ok {
+		t.Errorf("GET /blacklist response rejected by the spec: %s", msg)
+	}
+}
