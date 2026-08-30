@@ -483,3 +483,86 @@ func TestContract_AuthProviderLookup(t *testing.T) {
 		t.Errorf("POST /providers/lookup response rejected by the spec: %s", msg)
 	}
 }
+
+func TestContract_APIKeyRequest(t *testing.T) {
+	v := newContractValidator(t)
+
+	exp := int64(1900000000)
+	body := client.APIKeyRequest{
+		Name: "deploy",
+		Exp:  &exp,
+		Access: []client.APIKeyAccess{
+			{Group: "Users", AccessRights: []string{"read", "create"}},
+			// An empty rights list is legal and has to stay legal: it is what
+			// the provider sends for a group the practitioner listed but gave
+			// nothing.
+			{Group: "ApiKeys", AccessRights: []string{}},
+		},
+	}
+
+	ok, msg := validateRequest(t, v, http.MethodPost, apiPath("/api_keys"), body)
+	if !ok {
+		t.Errorf("POST /api_keys body rejected by the spec: %s", msg)
+	}
+
+	// The same type serves both verbs, and the PUT insists the name in the body
+	// match the path.
+	ok, msg = validateRequest(t, v, http.MethodPut, apiPath("/api_keys/deploy"), body)
+	if !ok {
+		t.Errorf("PUT /api_keys/{name} body rejected by the spec: %s", msg)
+	}
+}
+
+func TestContract_APIKeyResponse(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, msg := validateResponse(t, v, http.MethodGet, apiPath("/api_keys"), http.StatusOK,
+		`{"keys":[{"name":"deploy","created":1788076923,"expires":1900000000,`+
+			`"access":[{"group":"Users","access_rights":["read"]},`+
+			`{"group":"ApiKeys","access_rights":[]}]}]}`)
+	if !ok {
+		t.Errorf("GET /api_keys response rejected by the spec: %s", msg)
+	}
+}
+
+// The secret comes back as `text/plain`, not JSON, and the whole reason this
+// package carries a second response path is that the spec says so and a live
+// 0.36.2 agrees. If the spec ever declares application/json here, the plain
+// path has become wrong.
+func TestContract_APIKeySecretIsPlainText(t *testing.T) {
+	v := newContractValidator(t)
+
+	for _, tc := range []struct {
+		method, path string
+	}{
+		{http.MethodPost, apiPath("/api_keys")},
+		{http.MethodPut, apiPath("/api_keys/deploy/secret")},
+	} {
+		req := httptest.NewRequest(tc.method, "http://rauthy.test"+tc.path, nil)
+		rec := httptest.NewRecorder()
+		rec.Header().Set("Content-Type", "text/plain")
+		rec.WriteHeader(http.StatusOK)
+		_, _ = rec.WriteString("deploy$s3cr3t")
+
+		ok, valErrs := v.ValidateHttpResponse(req, rec.Result())
+		if !ok {
+			t.Errorf("%s %s no longer answers text/plain: %s", tc.method, tc.path, joinErrs(valErrs))
+		}
+	}
+}
+
+// GET /api_keys/{name}/test is not a read of the named key. On a live 0.36.2 it
+// validates the *caller's own* credential against that name and answers
+// `403 Wrong API Key given` for anybody else's, which is why GetAPIKey filters
+// the listing instead. The spec cannot express that, so all this pins is that
+// the endpoint is still shaped like the trap it is.
+func TestContract_APIKeyTestEndpointIsNotARead(t *testing.T) {
+	v := newContractValidator(t)
+
+	ok, _ := validateResponse(t, v, http.MethodGet, apiPath("/api_keys/deploy/test"), http.StatusOK,
+		`{"name":"deploy","created":1788076923,"expires":null,"access":[]}`)
+	if !ok {
+		t.Error("GET /api_keys/{name}/test no longer returns an ApiKeyResponse; re-check whether it " +
+			"has become a usable per-key read")
+	}
+}

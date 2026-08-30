@@ -378,3 +378,43 @@ func AuthProviderScopeSet() validator.Set {
 	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(authProviderScope,
 		`must match ^[a-zA-Z0-9\-_/:*]+$ (a single scope, with no spaces)`))
 }
+
+// Constraints on an API key, from src/api_types/src/api_keys.rs.
+//
+// The key's name. Note the `/` inside the character class: it is part of the
+// upstream pattern as written (`^[a-zA-Z0-9_-/]{2,24}$`), which Rust's regex
+// crate reads as a literal range end rather than as an escape.
+var apiKeyName = regexp.MustCompile(`^[a-zA-Z0-9_\-/]{2,24}$`)
+
+// Enumerations of AccessGroup and AccessRights.
+//
+// `ApiKeys` exists only from Rauthy 0.36 onwards; the rest go further back.
+// Rauthy rejects an unknown group in serde, before its own validation runs, so
+// the server-side error is a bare deserialize message naming no attribute —
+// exactly the case these validators exist to improve on.
+//
+//nolint:gochecknoglobals // transcribed upstream enumerations, read-only
+var (
+	accessGroups = []string{
+		"Blacklist", "Clients", "Events", "Generic", "Groups", "Roles", "Secrets",
+		"Sessions", "Scopes", "UserAttributes", "Users", "Pam", "AuthProviders", "ApiKeys",
+	}
+
+	accessRights = []string{"read", "create", "update", "delete"}
+)
+
+// APIKeyName validates an API key's name.
+func APIKeyName() validator.String {
+	return stringvalidator.RegexMatches(apiKeyName,
+		`must match ^[a-zA-Z0-9_\-/]{2,24}$`)
+}
+
+// AccessGroup validates one access group of an API key.
+func AccessGroup() validator.String {
+	return stringvalidator.OneOf(accessGroups...)
+}
+
+// AccessRightsSet validates every element of an access-rights set.
+func AccessRightsSet() validator.Set {
+	return setvalidator.ValueStringsAre(stringvalidator.OneOf(accessRights...))
+}

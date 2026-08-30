@@ -47,7 +47,7 @@ func (p *rauthyProvider) Metadata(_ context.Context, _ provider.MetadataRequest,
 func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages OIDC clients, scopes, users, custom user attributes, roles, groups, " +
-			"upstream authentication providers and the password policy of a " +
+			"upstream authentication providers, admin API keys and the password policy of a " +
 			"[Rauthy](https://github.com/sebadob/rauthy) identity provider through its admin API.",
 		Attributes: map[string]schema.Attribute{
 			"url": schema.StringAttribute{
@@ -68,8 +68,14 @@ func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 					"`UserAttributes` read, create, update, delete for `rauthy_user_attribute`; " +
 					"`AuthProviders` read, create, update, delete for `rauthy_auth_provider` " +
 					"(that access group exists only from Rauthy 0.36 onwards); " +
+					"`ApiKeys` read, create, update, delete for `rauthy_api_key` " +
+					"(also 0.36 and later only — before it, `/api_keys` accepted an admin browser " +
+					"session and nothing else); " +
 					"`Secrets:update` for `rauthy_password_policy`. `Secrets:read` is used on every refresh of a " +
-					"confidential client, `Secrets:update` only when rotating a secret.",
+					"confidential client, `Secrets:update` only when rotating a secret.\n\n" +
+					"Granting `ApiKeys` makes the configured key able to mint further keys with any " +
+					"rights at all, including rights it does not itself hold. Grant it only to the key " +
+					"that actually manages `rauthy_api_key` resources.",
 			},
 		},
 	}
@@ -151,6 +157,7 @@ func (p *rauthyProvider) Resources(_ context.Context) []func() resource.Resource
 		NewUserResource,
 		NewUserAttributeResource,
 		NewAuthProviderResource,
+		NewAPIKeyResource,
 	}
 }
 
