@@ -15,8 +15,11 @@
 package validators
 
 import (
+	"context"
+	"net/netip"
 	"regexp"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/helpers/validatordiag"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -75,6 +78,11 @@ var (
 	street      = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-.\s]{0,48}$`)
 	addressPart = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-\s]{0,48}$`)
 	timezone    = regexp.MustCompile(`^[A-Za-z]+(?:/[A-Za-z0-9_+-]+)*$`)
+
+	// A PAM host's hostname and each of its aliases. This one Rauthy does
+	// publish, in the field descriptions of PamHostCreateRequest and
+	// PamHostUpdateRequest.
+	pamHostname = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-.]*[a-zA-Z0-9]$`)
 )
 
 // Bounds from the #[validate(range(...))] attributes in
@@ -122,6 +130,12 @@ var (
 
 	// Language.
 	languages = []string{"de", "en", "fr", "ko", "nb", "ru", "uk", "zhhans"}
+
+	// PamGroupType. A live 0.36.2 accepts every one of these on create,
+	// `immutable` and `user` included, even though those two are meant for
+	// Rauthy's own built-ins and for the personal group it creates alongside
+	// each PAM user.
+	pamGroupTypes = []string{"immutable", "host", "user", "generic", "local"}
 )
 
 // ClientID validates a client id against RE_CLIENT_ID.
@@ -377,4 +391,58 @@ func AuthProviderSecret() validator.String {
 func AuthProviderScopeSet() validator.Set {
 	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(authProviderScope,
 		`must match ^[a-zA-Z0-9\-_/:*]+$ (a single scope, with no spaces)`))
+}
+
+// PamGroupType validates a PAM group's `typ` against Rauthy's PamGroupType
+// enum.
+func PamGroupType() validator.String {
+	return stringvalidator.OneOf(pamGroupTypes...)
+}
+
+// PamHostname validates a PAM host's hostname. The bound is implicit in the
+// pattern rather than stated: the two anchored character classes make two
+// characters the shortest legal hostname, which a live 0.36.2 confirms by
+// rejecting a one-character alias.
+func PamHostname() validator.String {
+	return stringvalidator.RegexMatches(pamHostname,
+		`must match ^[a-zA-Z0-9][a-zA-Z0-9-.]*[a-zA-Z0-9]$ (at least two characters)`)
+}
+
+// PamHostAliasSet validates every alias of a PAM host. Aliases carry the same
+// pattern as the hostname itself.
+func PamHostAliasSet() validator.Set {
+	return setvalidator.ValueStringsAre(PamHostname())
+}
+
+// PamHostIPSet validates every element of a PAM host's address list as an IP
+// address. Rauthy parses these into a Rust `IpAddr` before its own validation
+// runs, so a malformed entry comes back as a bare "Deserialization error" with
+// a 422 and no indication of which field was at fault; checking here turns that
+// into a plan-time error naming the attribute.
+func PamHostIPSet() validator.Set {
+	return setvalidator.ValueStringsAre(ipAddress{})
+}
+
+// ipAddress is a string validator for a bare IP address, v4 or v6. There is no
+// regex for this upstream — Rauthy relies on the parse — so this is the one
+// validator in the file that reimplements a check rather than transcribing one.
+type ipAddress struct{}
+
+func (ipAddress) Description(context.Context) string { return "must be an IPv4 or IPv6 address" }
+
+func (v ipAddress) MarkdownDescription(ctx context.Context) string { return v.Description(ctx) }
+
+func (v ipAddress) ValidateString(
+	ctx context.Context,
+	req validator.StringRequest,
+	resp *validator.StringResponse,
+) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	if _, err := netip.ParseAddr(req.ConfigValue.ValueString()); err != nil {
+		resp.Diagnostics.Append(validatordiag.InvalidAttributeValueDiagnostic(
+			req.Path, v.Description(ctx), req.ConfigValue.ValueString(),
+		))
+	}
 }
