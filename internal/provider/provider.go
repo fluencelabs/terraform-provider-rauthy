@@ -63,7 +63,8 @@ func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				MarkdownDescription: "Rauthy API key in `<name>$<secret>` form. Falls back to the `" + EnvAPIKey +
 					"` environment variable.\n\n" +
 					"The key needs the access rights of the resources it manages: `Clients` read, create, " +
-					"update, delete and `Secrets` read and update for `rauthy_client`; `Roles` and `Groups` " +
+					"update, delete and `Secrets` read and update for `rauthy_client`; `Clients:update` for " +
+					"`rauthy_client_logo` and `rauthy_client_favicon`; `Roles` and `Groups` " +
 					"read, create, update, delete for `rauthy_role`, `rauthy_group` and `rauthy_scope`; " +
 					"`Users` read, create, update, delete for `rauthy_user`; " +
 					"`UserAttributes` read, create, update, delete for `rauthy_user_attribute`; " +
@@ -152,6 +153,8 @@ func (p *rauthyProvider) Configure(
 func (p *rauthyProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewClientResource,
+		NewClientLogoResource,
+		NewClientFaviconResource,
 		NewRoleResource,
 		NewScopeResource,
 		NewGroupResource,
