@@ -39,7 +39,8 @@ key_secret="tfaccSecretDoNotUseAnywhereElse0123456789abcdefghijklmnopqrstuvwxyz"
 # Every access group this provider touches. password_policy is Secrets:update,
 # not a group of its own — Rauthy has no `Config` group. Rauthy 0.36 moved
 # /users/attr off the `Users` group onto `UserAttributes`; without that entry
-# every user-attribute call 403s before a test runs.
+# every user-attribute call 403s before a test runs. `Blacklist` guards
+# /blacklist, taken from the live 403 message rather than guessed.
 read -r -d '' key_json <<'JSON' || true
 {
   "name": "tfacc",
@@ -51,7 +52,8 @@ read -r -d '' key_json <<'JSON' || true
     {"group": "Scopes",  "access_rights": ["read", "create", "update", "delete"]},
     {"group": "Users",   "access_rights": ["read", "create", "update", "delete"]},
     {"group": "UserAttributes", "access_rights": ["read", "create", "update", "delete"]},
-    {"group": "AuthProviders", "access_rights": ["read", "create", "update", "delete"]}
+    {"group": "AuthProviders", "access_rights": ["read", "create", "update", "delete"]},
+    {"group": "Blacklist", "access_rights": ["read", "create", "update", "delete"]}
   ]
 }
 JSON
