@@ -88,9 +88,10 @@ func (r *scopeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 					"`custom`." + optionalComputedNote,
 				// Rauthy's PUT replaces the scope wholesale, so the provider has to send a value on
 				// every update; with the prior one planned, an update that is about something else
-				// keeps what Rauthy has.
+				// keeps what Rauthy has. Non-null only: state written before this attribute existed
+				// has none, and the plan then stays unknown for Update to fill in from Rauthy.
 				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
+					boolplanmodifier.UseNonNullStateForUnknown(),
 				},
 			},
 		},

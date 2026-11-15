@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -115,7 +117,7 @@ func TestApplyScope_ReadsClaimsAtRoot(t *testing.T) {
 	}
 }
 
-// Optional and computed with UseStateForUnknown: a configuration that does
+// Optional and computed, planning the prior value: a configuration that does
 // not mention claims_at_root plans the prior value rather than an unknown, so
 // the update above sends what Rauthy already has.
 func TestScopeSchema_ClaimsAtRootKeepsThePriorValue(t *testing.T) {
@@ -129,7 +131,7 @@ func TestScopeSchema_ClaimsAtRootKeepsThePriorValue(t *testing.T) {
 	}
 	if !a.Optional || !a.Computed || len(a.PlanModifiers) == 0 {
 		t.Errorf("claims_at_root: optional=%v computed=%v plan modifiers=%d, want optional, computed and "+
-			"UseStateForUnknown", a.Optional, a.Computed, len(a.PlanModifiers))
+			"a state-for-unknown modifier", a.Optional, a.Computed, len(a.PlanModifiers))
 	}
 }
 
@@ -173,3 +175,34 @@ func TestScopeUpdate_UnknownClaimsAtRootKeepsTheServerValue(t *testing.T) {
 		t.Errorf("claims_at_root in state = %v, want true", got.ClaimsAtRoot)
 	}
 }
+
+// With state that has no claims_at_root, the plan must stay unknown rather
+// than copy the null: Update then fills it in from Rauthy, and a null plan
+// would make the applied value an "inconsistent result after apply".
+func TestScopeSchema_ClaimsAtRootStaysUnknownWithoutAPriorValue(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	r := NewScopeResource()
+	var sresp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &sresp)
+	a, _ := sresp.Schema.Attributes["claims_at_root"].(schema.BoolAttribute)
+
+	state := resourceState(t, r, ptr(scopeModel(types.BoolNull())))
+	req := planmodifier.BoolRequest{
+		Path:        path.Root("claims_at_root"),
+		State:       state,
+		StateValue:  types.BoolNull(),
+		ConfigValue: types.BoolNull(),
+		PlanValue:   types.BoolUnknown(),
+	}
+	resp := &planmodifier.BoolResponse{PlanValue: req.PlanValue}
+	for _, m := range a.PlanModifiers {
+		m.PlanModifyBool(ctx, req, resp)
+	}
+	if !resp.PlanValue.IsUnknown() {
+		t.Errorf("planned claims_at_root = %v, want unknown", resp.PlanValue)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
