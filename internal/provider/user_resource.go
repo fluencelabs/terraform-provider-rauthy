@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 var (
@@ -22,7 +22,7 @@ var (
 func NewUserResource() resource.Resource { return &userResource{} }
 
 type userResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type userValuesModel struct {
@@ -62,11 +62,11 @@ func (r *userResource) Configure(_ context.Context, req resource.ConfigureReques
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -97,7 +97,7 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	created, err := r.api.CreateUser(ctx, client.NewUserRequest{
+	created, err := r.api.CreateUser(ctx, rauthy.NewUserRequest{
 		Email:       plan.Email.ValueString(),
 		Language:    plan.Language.ValueString(),
 		Roles:       setToStringsNonNil(ctx, plan.Roles, &resp.Diagnostics),
@@ -141,7 +141,7 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	id := state.ID.ValueString()
 	got, err := r.api.GetUser(ctx, id)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -190,7 +190,7 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	}
 
 	id := state.ID.ValueString()
-	if err := r.api.DeleteUser(ctx, id); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeleteUser(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy user "+id, err.Error())
 	}
 }
@@ -200,8 +200,8 @@ func buildUpdateUserRequest(
 	m *userResourceModel,
 	password types.String,
 	diags *diag.Diagnostics,
-) client.UpdateUserRequest {
-	req := client.UpdateUserRequest{
+) rauthy.UpdateUserRequest {
+	req := rauthy.UpdateUserRequest{
 		Email:         m.Email.ValueString(),
 		Enabled:       m.Enabled.ValueBool(),
 		EmailVerified: m.EmailVerified.ValueBool(),
@@ -214,7 +214,7 @@ func buildUpdateUserRequest(
 		UserExpires:   int64Ptr(m.UserExpires),
 	}
 	if m.UserValues != nil {
-		req.UserValues = &client.UserValues{
+		req.UserValues = &rauthy.UserValues{
 			Birthdate: stringPtr(m.UserValues.Birthdate),
 			City:      stringPtr(m.UserValues.City),
 			Country:   stringPtr(m.UserValues.Country),
@@ -237,7 +237,7 @@ func buildUpdateUserRequest(
 //
 // The password is write-only and never returned, so there is nothing to fold
 // back for it at all.
-func applyUser(m *userResourceModel, u *client.UserResponse) {
+func applyUser(m *userResourceModel, u *rauthy.UserResponse) {
 	m.ID = types.StringValue(u.ID)
 	m.Email = types.StringValue(u.Email)
 	m.Enabled = types.BoolValue(u.Enabled)

@@ -13,8 +13,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 var (
@@ -27,7 +27,7 @@ var (
 func NewScopeResource() resource.Resource { return &scopeResource{} }
 
 type scopeResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type scopeResourceModel struct {
@@ -87,11 +87,11 @@ func (r *scopeResource) Configure(_ context.Context, req resource.ConfigureReque
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -139,7 +139,7 @@ func (r *scopeResource) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	id := state.ID.ValueString()
 	got, err := r.api.GetScope(ctx, id)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -184,7 +184,7 @@ func (r *scopeResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	id := state.ID.ValueString()
-	if err := r.api.DeleteScope(ctx, id); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeleteScope(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy scope "+id, err.Error())
 	}
 }
@@ -195,8 +195,8 @@ func (r *scopeResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 // exist and keeps only the names it recognises — silently, with a 200. Left
 // unchecked that produces state which does not match the configuration, so the
 // drop is turned into a plain error naming what went missing.
-func checkAttrsKept(sent client.ScopeRequest, got *client.ScopeResponse, diags *diag.Diagnostics) {
-	report := func(attr string, requested []string, kept client.AttrList) {
+func checkAttrsKept(sent rauthy.ScopeRequest, got *rauthy.ScopeResponse, diags *diag.Diagnostics) {
+	report := func(attr string, requested []string, kept rauthy.AttrList) {
 		have := make(map[string]struct{}, len(kept))
 		for _, k := range kept {
 			have[k] = struct{}{}
@@ -226,8 +226,8 @@ func checkAttrsKept(sent client.ScopeRequest, got *client.ScopeResponse, diags *
 	report("attr_include_id", sent.AttrIncludeID, got.AttrIncludeID)
 }
 
-func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.Diagnostics) client.ScopeRequest {
-	return client.ScopeRequest{
+func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.Diagnostics) rauthy.ScopeRequest {
+	return rauthy.ScopeRequest{
 		Scope:             m.Name.ValueString(),
 		AttrIncludeAccess: setToStrings(ctx, m.AttrIncludeAccess, diags),
 		AttrIncludeID:     setToStrings(ctx, m.AttrIncludeID, diags),
@@ -241,7 +241,7 @@ func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.D
 // The model's own values are read before being overwritten: at Create and
 // Update they hold the plan, at Read the prior state, and both are needed to
 // tell an empty mapping from an absent one — see attrSet.
-func applyScope(m *scopeResourceModel, s *client.ScopeResponse) {
+func applyScope(m *scopeResourceModel, s *rauthy.ScopeResponse) {
 	m.ID = types.StringValue(s.ID)
 	m.Name = types.StringValue(s.Name)
 	m.AttrIncludeAccess = attrSet(s.AttrIncludeAccess, m.AttrIncludeAccess)
@@ -256,7 +256,7 @@ func applyScope(m *scopeResourceModel, s *client.ScopeResponse) {
 // deriving null from the response would abort an apply that wrote `[]` with
 // "inconsistent result after apply". When the response carries nothing, the
 // value the configuration (or prior state) expressed is therefore kept.
-func attrSet(values client.AttrList, prior types.Set) types.Set {
+func attrSet(values rauthy.AttrList, prior types.Set) types.Set {
 	if len(values) > 0 {
 		return stringsToSet(values)
 	}

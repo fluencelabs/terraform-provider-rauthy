@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 var (
@@ -20,7 +20,7 @@ var (
 func NewGroupDataSource() datasource.DataSource { return &groupDataSource{} }
 
 type groupDataSource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type groupDataSourceModel struct {
@@ -61,11 +61,11 @@ func (d *groupDataSource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -81,7 +81,7 @@ func (d *groupDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 
 	name := config.Name.ValueString()
 	got, err := d.api.GetGroupByName(ctx, name)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError(
 			"Rauthy group "+name+" not found",
 			"No group with that name exists on the configured Rauthy instance.",

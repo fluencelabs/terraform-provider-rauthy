@@ -8,8 +8,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/acctest"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 const accImageClientID = "tf-acc-branding"
@@ -59,17 +59,17 @@ resource "rauthy_client_favicon" "test" {
 // at the client, which the same config destroys: a 404 from the image endpoint
 // covers both "no image" and "no client", which is exactly what we want here.
 func testAccCheckClientImagesDestroyed(s *terraform.State) error {
-	c, err := client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+	c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
 	if err != nil {
 		return err
 	}
 	for _, rs := range s.RootModule().Resources {
-		var kind client.ImageKind
+		var kind rauthy.ImageKind
 		switch rs.Type {
 		case "rauthy_client_logo":
-			kind = client.ImageLogo
+			kind = rauthy.ImageLogo
 		case "rauthy_client_favicon":
-			kind = client.ImageFavicon
+			kind = rauthy.ImageFavicon
 		default:
 			continue
 		}
@@ -78,7 +78,7 @@ func testAccCheckClientImagesDestroyed(s *terraform.State) error {
 		if lookupErr == nil {
 			return fmt.Errorf("%s of client %s still exists after destroy", kind, id)
 		}
-		if !client.IsNotFound(lookupErr) {
+		if !rauthy.IsNotFound(lookupErr) {
 			return lookupErr
 		}
 	}
@@ -87,9 +87,9 @@ func testAccCheckClientImagesDestroyed(s *terraform.State) error {
 
 // testAccCheckImagePresent confirms Rauthy really serves the image, and that
 // what it serves has the content type the transcode is expected to produce.
-func testAccCheckImagePresent(kind client.ImageKind, wantContentType string) resource.TestCheckFunc {
+func testAccCheckImagePresent(kind rauthy.ImageKind, wantContentType string) resource.TestCheckFunc {
 	return func(_ *terraform.State) error {
-		c, err := client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+		c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
 		if err != nil {
 			return err
 		}
@@ -122,9 +122,9 @@ func TestAccClientImage_lifecycle(t *testing.T) {
 				Config: testAccClientImageConfig(testAccLogoPNG),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("rauthy_client_logo.test", "client_id", accImageClientID),
-					resource.TestCheckResourceAttr("rauthy_client_logo.test", "content_type", client.MimePNG),
+					resource.TestCheckResourceAttr("rauthy_client_logo.test", "content_type", rauthy.MimePNG),
 					resource.TestCheckResourceAttrSet("rauthy_client_logo.test", "stored_hash"),
-					testAccCheckImagePresent(client.ImageLogo, "image/webp"),
+					testAccCheckImagePresent(rauthy.ImageLogo, "image/webp"),
 					extractAttr("rauthy_client_logo.test", "stored_hash", &firstHash),
 				),
 			},
@@ -132,7 +132,7 @@ func TestAccClientImage_lifecycle(t *testing.T) {
 				// Replace in place: a different PNG must move stored_hash.
 				Config: testAccClientImageConfig(testAccLogoPNGAlt),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					testAccCheckImagePresent(client.ImageLogo, "image/webp"),
+					testAccCheckImagePresent(rauthy.ImageLogo, "image/webp"),
 					checkAttrDiffers("rauthy_client_logo.test", "stored_hash", &firstHash),
 				),
 			},
@@ -142,10 +142,10 @@ func TestAccClientImage_lifecycle(t *testing.T) {
 				// still re-serialises it through the sanitiser.
 				Config: testAccClientImageConfig(testAccLogoSVGAndFavicon),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("rauthy_client_logo.test", "content_type", client.MimeSVG),
-					resource.TestCheckResourceAttr("rauthy_client_favicon.test", "content_type", client.MimeSVG),
-					testAccCheckImagePresent(client.ImageLogo, client.MimeSVG),
-					testAccCheckImagePresent(client.ImageFavicon, client.MimeSVG),
+					resource.TestCheckResourceAttr("rauthy_client_logo.test", "content_type", rauthy.MimeSVG),
+					resource.TestCheckResourceAttr("rauthy_client_favicon.test", "content_type", rauthy.MimeSVG),
+					testAccCheckImagePresent(rauthy.ImageLogo, rauthy.MimeSVG),
+					testAccCheckImagePresent(rauthy.ImageFavicon, rauthy.MimeSVG),
 				),
 			},
 			{
@@ -153,8 +153,8 @@ func TestAccClientImage_lifecycle(t *testing.T) {
 				// client must delete the images and leave the client alone.
 				Config: testAccClientImageConfig(""),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					checkImageAbsent(client.ImageLogo),
-					checkImageAbsent(client.ImageFavicon),
+					checkImageAbsent(rauthy.ImageLogo),
+					checkImageAbsent(rauthy.ImageFavicon),
 					resource.TestCheckResourceAttr("rauthy_client.branding", "id", accImageClientID),
 				),
 			},
@@ -173,7 +173,7 @@ func TestAccClientImage_recreatedAfterOutOfBandDelete(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccClientImageConfig(testAccLogoPNG),
-				Check:  testAccCheckImagePresent(client.ImageLogo, "image/webp"),
+				Check:  testAccCheckImagePresent(rauthy.ImageLogo, "image/webp"),
 			},
 			{
 				// Delete behind Terraform's back; the refresh must notice the
@@ -181,13 +181,13 @@ func TestAccClientImage_recreatedAfterOutOfBandDelete(t *testing.T) {
 				PreConfig: func() {
 					c := acctest.RealClient(t)
 					if err := c.DeleteClientImage(
-						context.Background(), accImageClientID, client.ImageLogo,
+						context.Background(), accImageClientID, rauthy.ImageLogo,
 					); err != nil {
 						t.Fatalf("out-of-band delete: %v", err)
 					}
 				},
 				Config: testAccClientImageConfig(testAccLogoPNG),
-				Check:  testAccCheckImagePresent(client.ImageLogo, "image/webp"),
+				Check:  testAccCheckImagePresent(rauthy.ImageLogo, "image/webp"),
 			},
 		},
 	})
@@ -217,9 +217,9 @@ func checkAttrDiffers(resourceName, attr string, previous *string) resource.Test
 	}
 }
 
-func checkImageAbsent(kind client.ImageKind) resource.TestCheckFunc {
+func checkImageAbsent(kind rauthy.ImageKind) resource.TestCheckFunc {
 	return func(_ *terraform.State) error {
-		c, err := client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+		c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
 		if err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ func checkImageAbsent(kind client.ImageKind) resource.TestCheckFunc {
 		if lookupErr == nil {
 			return fmt.Errorf("%s is still served after its resource was removed", kind)
 		}
-		if !client.IsNotFound(lookupErr) {
+		if !rauthy.IsNotFound(lookupErr) {
 			return lookupErr
 		}
 		return nil

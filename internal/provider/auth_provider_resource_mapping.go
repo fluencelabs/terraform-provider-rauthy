@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 // joinAuthProviderScopes renders the scope set as the string Rauthy's request
@@ -64,8 +64,8 @@ func buildAuthProviderRequest(
 	m *authProviderResourceModel,
 	clientSecret types.String,
 	diags *diag.Diagnostics,
-) client.AuthProviderRequest {
-	return client.AuthProviderRequest{
+) rauthy.AuthProviderRequest {
+	return rauthy.AuthProviderRequest{
 		Name:                  m.Name.ValueString(),
 		Typ:                   m.Type.ValueString(),
 		Enabled:               m.Enabled.ValueBool(),
@@ -94,7 +94,7 @@ func buildAuthProviderRequest(
 
 // applyAuthProviderResponse copies a provider as Rauthy reports it into the
 // model.
-func applyAuthProviderResponse(m *authProviderResourceModel, resp *client.AuthProviderResponse) {
+func applyAuthProviderResponse(m *authProviderResourceModel, resp *rauthy.AuthProviderResponse) {
 	m.ID = types.StringValue(resp.ID)
 	m.Name = types.StringValue(resp.Name)
 	m.Type = types.StringValue(resp.Typ)

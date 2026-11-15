@@ -3,7 +3,7 @@
 # Rauthy version the vendored OpenAPI spec was generated from. Bump together
 # with the spec file (see openapi-refresh).
 RAUTHY_VERSION ?= 0.36.2
-SPEC := internal/client/mock/testdata/rauthy-openapi-$(RAUTHY_VERSION).json
+SPEC := rauthy/mock/testdata/rauthy-openapi-$(RAUTHY_VERSION).json
 
 build:
 	go build ./...

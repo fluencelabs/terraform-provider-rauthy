@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 var (
@@ -23,20 +23,20 @@ var (
 
 // NewClientLogoResource returns the rauthy_client_logo resource.
 func NewClientLogoResource() resource.Resource {
-	return &clientImageResource{kind: client.ImageLogo}
+	return &clientImageResource{kind: rauthy.ImageLogo}
 }
 
 // NewClientFaviconResource returns the rauthy_client_favicon resource.
 func NewClientFaviconResource() resource.Resource {
-	return &clientImageResource{kind: client.ImageFavicon}
+	return &clientImageResource{kind: rauthy.ImageFavicon}
 }
 
 // clientImageResource backs both branding resources. The logo and the favicon
 // differ only in their path segment and in the sizing advice in their docs, so
 // they share one implementation rather than two near-identical copies.
 type clientImageResource struct {
-	api  *client.Client
-	kind client.ImageKind
+	api  *rauthy.Client
+	kind rauthy.ImageKind
 }
 
 type clientImageResourceModel struct {
@@ -62,11 +62,11 @@ func (r *clientImageResource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -132,7 +132,7 @@ func (r *clientImageResource) Read(ctx context.Context, req resource.ReadRequest
 
 	id := state.ClientID.ValueString()
 	got, err := r.api.GetClientImage(ctx, id, r.kind)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		// A 404 means either the image was deleted out of band or the client
 		// itself is gone. Both call for the same thing: drop the resource so
 		// the next apply recreates it, which for a missing client will fail
@@ -157,7 +157,7 @@ func (r *clientImageResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 
 	id := state.ClientID.ValueString()
-	if err := r.api.DeleteClientImage(ctx, id, r.kind); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeleteClientImage(ctx, id, r.kind); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete the "+string(r.kind)+" of Rauthy client "+id, err.Error())
 	}
 }
@@ -182,7 +182,7 @@ func (r *clientImageResource) put(ctx context.Context, plan *clientImageResource
 
 	contentType := plan.ContentType.ValueString()
 	if plan.ContentType.IsUnknown() || plan.ContentType.IsNull() {
-		contentType, err = client.SniffImageMime(data)
+		contentType, err = rauthy.SniffImageMime(data)
 		if err != nil {
 			diags.AddAttributeError(
 				path.Root("content_base64"),
@@ -193,7 +193,7 @@ func (r *clientImageResource) put(ctx context.Context, plan *clientImageResource
 		}
 	}
 
-	upload := client.Image{Data: data, ContentType: contentType}
+	upload := rauthy.Image{Data: data, ContentType: contentType}
 	if putErr := r.api.PutClientImage(ctx, id, r.kind, upload); putErr != nil {
 		diags.AddError("Could not upload the "+string(r.kind)+" of Rauthy client "+id, putErr.Error())
 		return

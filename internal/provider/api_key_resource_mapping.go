@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 // apiKeyAccessAttrTypes is the shape of one `access` element. It is spelled out
@@ -28,7 +28,7 @@ func apiKeyAccessObjectType() types.ObjectType {
 //
 // It leaves `secret` and `secret_rotation_trigger` alone: the first is
 // unreadable after creation, the second exists only in Terraform.
-func applyAPIKeyResponse(m *apiKeyResourceModel, resp *client.APIKeyResponse) {
+func applyAPIKeyResponse(m *apiKeyResourceModel, resp *rauthy.APIKeyResponse) {
 	m.Name = types.StringValue(resp.Name)
 	m.CreatedAt = types.Int64Value(resp.Created)
 	if resp.Expires == nil {
@@ -48,8 +48,8 @@ func buildAPIKeyRequest(
 	ctx context.Context,
 	m *apiKeyResourceModel,
 	diags *diag.Diagnostics,
-) client.APIKeyRequest {
-	return client.APIKeyRequest{
+) rauthy.APIKeyRequest {
+	return rauthy.APIKeyRequest{
 		Name:   m.Name.ValueString(),
 		Exp:    int64Ptr(m.ExpiresAt),
 		Access: apiKeyAccessFromSet(ctx, m.Access, diags),
@@ -61,8 +61,8 @@ func buildAPIKeyRequest(
 // A nil result would marshal as `"access": null`, which Rauthy's deserializer
 // refuses, so an unset or empty set becomes an empty slice: a key with no
 // grants at all is something Rauthy accepts and stores.
-func apiKeyAccessFromSet(ctx context.Context, set types.Set, diags *diag.Diagnostics) []client.APIKeyAccess {
-	out := []client.APIKeyAccess{}
+func apiKeyAccessFromSet(ctx context.Context, set types.Set, diags *diag.Diagnostics) []rauthy.APIKeyAccess {
+	out := []rauthy.APIKeyAccess{}
 	if set.IsNull() || set.IsUnknown() {
 		return out
 	}
@@ -78,7 +78,7 @@ func apiKeyAccessFromSet(ctx context.Context, set types.Set, diags *diag.Diagnos
 		if rights == nil {
 			rights = []string{}
 		}
-		out = append(out, client.APIKeyAccess{
+		out = append(out, rauthy.APIKeyAccess{
 			Group:        models[i].Group.ValueString(),
 			AccessRights: rights,
 		})
@@ -91,7 +91,7 @@ func apiKeyAccessFromSet(ctx context.Context, set types.Set, diags *diag.Diagnos
 // Rauthy echoes the grants back exactly as they were sent, order and all, and
 // does not normalise them — so the set on both sides is Terraform's doing, not
 // the server's, and it is what keeps a reordered list from reading as a diff.
-func apiKeyAccessToSet(access []client.APIKeyAccess) types.Set {
+func apiKeyAccessToSet(access []rauthy.APIKeyAccess) types.Set {
 	elems := make([]attr.Value, 0, len(access))
 	for i := range access {
 		rights := access[i].AccessRights

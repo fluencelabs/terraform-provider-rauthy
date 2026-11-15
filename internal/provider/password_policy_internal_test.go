@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 // Rauthy v0.36.2 guards GET /password_policy with session authentication and
@@ -34,7 +34,7 @@ func TestIsSessionOnly(t *testing.T) {
 }
 
 func newStatusErr(status int) error {
-	return &client.APIError{
+	return &rauthy.APIError{
 		Method:     http.MethodGet,
 		Path:       "/password_policy",
 		StatusCode: status,

@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 var (
@@ -23,7 +23,7 @@ var (
 func NewPamHostResource() resource.Resource { return &pamHostResource{} }
 
 type pamHostResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type pamHostResourceModel struct {
@@ -54,11 +54,11 @@ func (r *pamHostResource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -87,7 +87,7 @@ func (r *pamHostResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	created, err := r.api.CreatePamHost(ctx, client.PamHostCreateRequest{
+	created, err := r.api.CreatePamHost(ctx, rauthy.PamHostCreateRequest{
 		Hostname:          plan.Hostname.ValueString(),
 		GID:               plan.GID.ValueInt64(),
 		ForceMfa:          plan.ForceMfa.ValueBool(),
@@ -120,7 +120,7 @@ func (r *pamHostResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	id := state.ID.ValueString()
-	if _, err := r.api.GetPamHost(ctx, id); client.IsNotFound(err) {
+	if _, err := r.api.GetPamHost(ctx, id); rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -159,7 +159,7 @@ func (r *pamHostResource) Delete(ctx context.Context, req resource.DeleteRequest
 	}
 
 	id := state.ID.ValueString()
-	if err := r.api.DeletePamHost(ctx, id); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeletePamHost(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy PAM host "+id, err.Error())
 	}
 }
@@ -213,7 +213,7 @@ func (r *pamHostResource) refresh(
 func applyPamHostDetails(
 	ctx context.Context,
 	model *pamHostResourceModel,
-	got *client.PamHostDetailsResponse,
+	got *rauthy.PamHostDetailsResponse,
 	secret string,
 ) diag.Diagnostics {
 	ips, diags := types.SetValueFrom(ctx, types.StringType, got.IPs)
@@ -245,8 +245,8 @@ func applyPamHostDetails(
 func pamHostUpdateBody(
 	ctx context.Context,
 	plan *pamHostResourceModel,
-	current *client.PamHostDetailsResponse,
-) (client.PamHostUpdateRequest, diag.Diagnostics) {
+	current *rauthy.PamHostDetailsResponse,
+) (rauthy.PamHostUpdateRequest, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	ips, d := pamHostStringSet(ctx, plan.IPs, current.IPs)
@@ -254,7 +254,7 @@ func pamHostUpdateBody(
 	aliases, d := pamHostStringSet(ctx, plan.Aliases, current.Aliases)
 	diags.Append(d...)
 
-	req := client.PamHostUpdateRequest{
+	req := rauthy.PamHostUpdateRequest{
 		Hostname:          plan.Hostname.ValueString(),
 		GID:               plan.GID.ValueInt64(),
 		ForceMfa:          plan.ForceMfa.ValueBool(),

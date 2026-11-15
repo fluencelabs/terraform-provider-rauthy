@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 // Rauthy stores the default as parsed JSON and re-serialises it its own way, so
@@ -71,7 +71,7 @@ func TestApplyUserAttr_KeepsANonStringDefault(t *testing.T) {
 	t.Parallel()
 
 	model := userAttributeResourceModel{}
-	applyUserAttr(&model, &client.UserAttrResponse{
+	applyUserAttr(&model, &rauthy.UserAttrResponse{
 		Name:         "department",
 		DefaultValue: json.RawMessage(`{"code": 7, "label": "eng"}`),
 		UserEditable: true,

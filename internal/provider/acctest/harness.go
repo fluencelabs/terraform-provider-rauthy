@@ -10,8 +10,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 // Setup verifies the environment and returns provider factories pointed at the
@@ -36,10 +36,10 @@ func Setup(t *testing.T) map[string]func() (tfprotov6.ProviderServer, error) {
 
 // RealClient returns a client pointed at the same instance the provider under
 // test talks to, for assertions that need to look at Rauthy directly.
-func RealClient(t *testing.T) *client.Client {
+func RealClient(t *testing.T) *rauthy.Client {
 	t.Helper()
 
-	c, err := client.New(os.Getenv("RAUTHY_URL"), os.Getenv("RAUTHY_API_KEY"))
+	c, err := rauthy.New(os.Getenv("RAUTHY_URL"), os.Getenv("RAUTHY_API_KEY"))
 	if err != nil {
 		t.Fatalf("build acceptance test client: %v", err)
 	}

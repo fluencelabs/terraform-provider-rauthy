@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 var (
@@ -24,7 +24,7 @@ var (
 func NewClientResource() resource.Resource { return &clientResource{} }
 
 type clientResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type scimModel struct {
@@ -70,11 +70,11 @@ func (r *clientResource) Configure(_ context.Context, req resource.ConfigureRequ
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -101,7 +101,7 @@ func (r *clientResource) Create(ctx context.Context, req resource.CreateRequest,
 	// Creating a fully configured client takes two calls. POST /clients accepts
 	// only id, name, confidential and the two URI lists, and silently drops
 	// everything else; the rest has to follow in a PUT.
-	created, err := r.api.CreateClient(ctx, client.NewClientRequest{
+	created, err := r.api.CreateClient(ctx, rauthy.NewClientRequest{
 		ID:                     id,
 		Name:                   stringPtr(plan.Name),
 		Confidential:           plan.Confidential.ValueBool(),
@@ -166,7 +166,7 @@ func (r *clientResource) Read(ctx context.Context, req resource.ReadRequest, res
 
 	id := state.ID.ValueString()
 	got, err := r.api.GetClient(ctx, id)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -246,7 +246,7 @@ func (r *clientResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	id := state.ID.ValueString()
 	err := r.api.DeleteClient(ctx, id)
-	if err != nil && !client.IsNotFound(err) {
+	if err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy client "+id, err.Error())
 	}
 }

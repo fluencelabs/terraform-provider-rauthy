@@ -11,8 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/acctest"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 // These run against a live Rauthy instance and are gated on TF_ACC; see
@@ -42,7 +42,7 @@ func testAccCheckClientDestroyed(s *terraform.State) error {
 		if rs.Type != "rauthy_client" {
 			continue
 		}
-		c, err := client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+		c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
 		if err != nil {
 			return err
 		}
@@ -50,7 +50,7 @@ func testAccCheckClientDestroyed(s *terraform.State) error {
 		if err == nil {
 			return fmt.Errorf("client %s still exists after destroy", rs.Primary.ID)
 		}
-		if !client.IsNotFound(err) {
+		if !rauthy.IsNotFound(err) {
 			return err
 		}
 	}

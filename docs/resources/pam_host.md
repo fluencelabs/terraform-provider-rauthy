@@ -2,7 +2,7 @@
 page_title: "rauthy_pam_host Resource - rauthy"
 description: |-
     Manages a host in Rauthy's PAM subsystem — a machine whose logins Rauthy authenticates, identified to Rauthy by its id and the shared secret below.
-  Rauthy's published OpenAPI document has no create operation for a host, which reads as though hosts could only register themselves. A live 0.36.2 does accept POST /pam/hosts, so this is an ordinary managed resource; see the note in internal/client/pam.go for the evidence.
+  Rauthy's published OpenAPI document has no create operation for a host, which reads as though hosts could only register themselves. A live 0.36.2 does accept POST /pam/hosts, so this is an ordinary managed resource; see the note in rauthy/pam.go for the evidence.
   Requires these API key rights: Pam read, create, update, delete.
 ---
 
@@ -10,7 +10,7 @@ description: |-
 
 Manages a host in Rauthy's PAM subsystem — a machine whose logins Rauthy authenticates, identified to Rauthy by its id and the shared secret below.
 
-Rauthy's published OpenAPI document has no create operation for a host, which reads as though hosts could only register themselves. A live 0.36.2 does accept `POST /pam/hosts`, so this is an ordinary managed resource; see the note in `internal/client/pam.go` for the evidence.
+Rauthy's published OpenAPI document has no create operation for a host, which reads as though hosts could only register themselves. A live 0.36.2 does accept `POST /pam/hosts`, so this is an ordinary managed resource; see the note in `rauthy/pam.go` for the evidence.
 
 Requires these API key rights: `Pam` read, create, update, delete.
 

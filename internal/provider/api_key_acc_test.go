@@ -10,8 +10,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/acctest"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 // These run against a live Rauthy instance and are gated on TF_ACC; see
@@ -40,7 +40,7 @@ func testAccCheckAPIKeyDestroyed(s *terraform.State) error {
 		if rs.Type != "rauthy_api_key" {
 			continue
 		}
-		c, err := client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+		c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
 		if err != nil {
 			return err
 		}
@@ -55,7 +55,7 @@ func testAccCheckAPIKeyDestroyed(s *terraform.State) error {
 		if err == nil {
 			return fmt.Errorf("api key %s still exists after destroy", name)
 		}
-		if !client.IsNotFound(err) {
+		if !rauthy.IsNotFound(err) {
 			return err
 		}
 	}
@@ -224,12 +224,12 @@ func TestAccAPIKey_renameReplaces(t *testing.T) {
 						}),
 					// And the old one must be gone.
 					func(*terraform.State) error {
-						c, err := client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+						c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
 						if err != nil {
 							return err
 						}
 						_, err = c.GetAPIKey(context.Background(), "tf-acc-rename-a")
-						if !client.IsNotFound(err) {
+						if !rauthy.IsNotFound(err) {
 							return fmt.Errorf("tf-acc-rename-a still exists after the rename: %w", err)
 						}
 						return nil
@@ -260,7 +260,7 @@ func TestAccAPIKey_mintedKeyAuthenticates(t *testing.T) {
   ]`, ""),
 				Check: resource.TestCheckResourceAttrWith("rauthy_api_key.test", "secret",
 					func(value string) error {
-						c, err := client.New(envOrEmpty("RAUTHY_URL"), value)
+						c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), value)
 						if err != nil {
 							return err
 						}
@@ -271,7 +271,7 @@ func TestAccAPIKey_mintedKeyAuthenticates(t *testing.T) {
 						// of all into /api_keys, where it could grant itself
 						// anything.
 						_, keysErr := c.ListAPIKeys(context.Background())
-						if !client.IsForbidden(keysErr) {
+						if !rauthy.IsForbidden(keysErr) {
 							return fmt.Errorf(
 								"the minted key reached /api_keys without an ApiKeys grant: %w", keysErr)
 						}

@@ -10,8 +10,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/acctest"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 // Far enough in the future that these never expire while the suite runs; the
@@ -34,7 +34,7 @@ resource "rauthy_blacklist_ip" "test" {
 }
 
 func testAccCheckBlacklistIPsDestroyed(s *terraform.State) error {
-	c, err := client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+	c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func testAccCheckBlacklistIPsDestroyed(s *terraform.State) error {
 		if lookupErr == nil {
 			return fmt.Errorf("ip %s is still blacklisted after destroy", rs.Primary.ID)
 		}
-		if !client.IsNotFound(lookupErr) {
+		if !rauthy.IsNotFound(lookupErr) {
 			return lookupErr
 		}
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 func (r *clientImageResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -39,11 +39,11 @@ func (r *clientImageResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Optional: true,
 				Computed: true,
 				MarkdownDescription: "Mime type declared for the upload. Rauthy trusts this value rather than " +
-					"sniffing the bytes, and accepts only `" + client.MimePNG + "`, `" + client.MimeJPEG +
-					"` and `" + client.MimeSVG + "`. Left unset, the provider derives it from the image's own " +
+					"sniffing the bytes, and accepts only `" + rauthy.MimePNG + "`, `" + rauthy.MimeJPEG +
+					"` and `" + rauthy.MimeSVG + "`. Left unset, the provider derives it from the image's own " +
 					"leading bytes; set it explicitly if that guess is wrong.",
 				Validators: []validator.String{
-					stringvalidator.OneOf(client.MimePNG, client.MimeJPEG, client.MimeSVG),
+					stringvalidator.OneOf(rauthy.MimePNG, rauthy.MimeJPEG, rauthy.MimeSVG),
 				},
 			},
 			"stored_hash": schema.StringAttribute{
@@ -68,7 +68,7 @@ func (r *clientImageResource) description() string {
 		"Requires the `Clients:update` API key right. Note that the OpenAPI document claims the logo upload " +
 		"needs full `rauthy_admin` rights; on a live 0.36.2 an API key with `Clients:update` uploads both images."
 
-	if r.kind == client.ImageLogo {
+	if r.kind == rauthy.ImageLogo {
 		return "Manages the custom logo shown on the login page for a Rauthy client." + shared +
 			"\n\nRaster logos must be at least 84 pixels on a side; Rauthy rejects anything smaller. " +
 			"An SVG is not subject to that limit and is the better choice, since it is stored as SVG " +

@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 var (
@@ -21,7 +21,7 @@ var (
 func NewClientDataSource() datasource.DataSource { return &clientDataSource{} }
 
 type clientDataSource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type scimDataSourceModel struct {
@@ -230,11 +230,11 @@ func (d *clientDataSource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -250,7 +250,7 @@ func (d *clientDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 
 	id := config.ID.ValueString()
 	got, err := d.api.GetClient(ctx, id)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError(
 			"Rauthy client "+id+" not found",
 			"No client with that id exists on the configured Rauthy instance.",

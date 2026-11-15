@@ -8,7 +8,7 @@ import (
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 func strPtr(s string) *string { return &s }
@@ -19,8 +19,8 @@ func setOf(t *testing.T, values ...string) types.Set {
 }
 
 // fullResponse is a client as Rauthy reports it, with every optional field set.
-func fullResponse() *client.ClientResponse {
-	return &client.ClientResponse{
+func fullResponse() *rauthy.ClientResponse {
+	return &rauthy.ClientResponse{
 		ID:                     "example-app",
 		Name:                   strPtr("Example App"),
 		Enabled:                true,
@@ -41,7 +41,7 @@ func fullResponse() *client.ClientResponse {
 		Contacts:               []string{"ops@example.com"},
 		BackchannelLogoutURI:   strPtr("https://app.example.com/logout"),
 		RestrictGroupPrefix:    strPtr("staff"),
-		Scim: &client.ScimClientRequestResponse{
+		Scim: &rauthy.ScimClientRequestResponse{
 			BearerToken:     "scim-token",
 			BaseURI:         "https://app.example.com/scim/v2",
 			SyncGroups:      true,

@@ -12,8 +12,8 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 var (
@@ -26,7 +26,7 @@ var (
 func NewAuthProviderLookupDataSource() datasource.DataSource { return &authProviderLookupDataSource{} }
 
 type authProviderLookupDataSource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type authProviderLookupDataSourceModel struct {
@@ -132,11 +132,11 @@ func (d *authProviderLookupDataSource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -154,7 +154,7 @@ func (d *authProviderLookupDataSource) Read(
 		return
 	}
 
-	got, err := d.api.LookupAuthProvider(ctx, client.AuthProviderLookupRequest{
+	got, err := d.api.LookupAuthProvider(ctx, rauthy.AuthProviderLookupRequest{
 		Issuer:      stringPtr(config.Issuer),
 		MetadataURL: stringPtr(config.MetadataURL),
 	})

@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 // Rauthy requires `roles` and `groups` to be present on a PUT. A nil slice
@@ -44,7 +44,7 @@ func TestApplyUser_KeepsEmptySetDistinctFromUnset(t *testing.T) {
 	t.Parallel()
 
 	emptySet := types.SetValueMust(types.StringType, nil)
-	resp := &client.UserResponse{
+	resp := &rauthy.UserResponse{
 		ID:       "u-1",
 		Email:    "ada@example.com",
 		Language: "en",
@@ -92,11 +92,11 @@ func TestApplyUser_IgnoresUserValuesWhenBlockAbsent(t *testing.T) {
 	t.Parallel()
 
 	city := "London"
-	resp := &client.UserResponse{
+	resp := &rauthy.UserResponse{
 		ID:         "u-1",
 		Email:      "ada@example.com",
 		Language:   "en",
-		UserValues: client.UserValuesResponse{UserValues: client.UserValues{City: &city}},
+		UserValues: rauthy.UserValuesResponse{UserValues: rauthy.UserValues{City: &city}},
 	}
 
 	absent := &userResourceModel{}

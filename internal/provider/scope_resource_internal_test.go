@@ -5,7 +5,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 // Rauthy answers with null for an empty mapping and for an absent one alike.
@@ -68,7 +68,7 @@ func TestApplyScope_PreservesAnEmptyMappingFromThePlan(t *testing.T) {
 		AttrIncludeID:     types.SetNull(types.StringType),
 	}
 
-	applyScope(&plan, &client.ScopeResponse{ID: "scope-1", Name: "read:billing"})
+	applyScope(&plan, &rauthy.ScopeResponse{ID: "scope-1", Name: "read:billing"})
 
 	if plan.ID.ValueString() != "scope-1" {
 		t.Errorf("id = %q, want scope-1", plan.ID.ValueString())
@@ -86,10 +86,10 @@ func TestApplyScope_SplitsTheJoinedMapping(t *testing.T) {
 	t.Parallel()
 
 	model := scopeResourceModel{}
-	applyScope(&model, &client.ScopeResponse{
+	applyScope(&model, &rauthy.ScopeResponse{
 		ID:                "scope-1",
 		Name:              "read:billing",
-		AttrIncludeAccess: client.AttrList{"department", "cost_center"},
+		AttrIncludeAccess: rauthy.AttrList{"department", "cost_center"},
 	})
 
 	if want := setOf(t, "department", "cost_center"); !model.AttrIncludeAccess.Equal(want) {

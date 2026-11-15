@@ -464,7 +464,7 @@ linters:
       # have the same shape, all the way up through the resources and data
       # sources built on them. Folding them together behind generics would hide
       # which endpoints actually exist, so the repetition is deliberate.
-      - path: 'internal/client/(roles|groups)\.go'
+      - path: 'rauthy/(roles|groups)\.go'
         linters: [ dupl ]
       - path: 'internal/provider/(role|group)_(resource|data_source)\.go'
         linters: [ dupl ]

@@ -14,8 +14,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
+	"github.com/fluencelabs/terraform-provider-rauthy/rauthy"
 )
 
 var (
@@ -29,7 +29,7 @@ var (
 func NewPasswordPolicyResource() resource.Resource { return &passwordPolicyResource{} }
 
 type passwordPolicyResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 // passwordPolicySingletonID is the value of the synthetic `id` attribute. The
@@ -134,11 +134,11 @@ func (r *passwordPolicyResource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -179,7 +179,7 @@ func (r *passwordPolicyResource) ImportState(
 // endpoint that only accepts an admin session. GET /password_policy is the one
 // such endpoint this provider touches.
 func isSessionOnly(err error) bool {
-	return client.IsUnauthorized(err) || client.IsForbidden(err)
+	return rauthy.IsUnauthorized(err) || rauthy.IsForbidden(err)
 }
 
 // ValidateConfig catches a length range that cannot be satisfied at plan time,
@@ -307,7 +307,7 @@ func (r *passwordPolicyResource) put(
 	m *passwordPolicyResourceModel,
 	diags *diag.Diagnostics,
 ) {
-	_, err := r.api.UpdatePasswordPolicy(ctx, client.PasswordPolicy{
+	_, err := r.api.UpdatePasswordPolicy(ctx, rauthy.PasswordPolicy{
 		LengthMin:        clampInt32(m.LengthMin.ValueInt64()),
 		LengthMax:        clampInt32(m.LengthMax.ValueInt64()),
 		IncludeLowerCase: int32Ptr(m.IncludeLowerCase),
@@ -322,7 +322,7 @@ func (r *passwordPolicyResource) put(
 	}
 }
 
-func applyPasswordPolicy(m *passwordPolicyResourceModel, p *client.PasswordPolicy) {
+func applyPasswordPolicy(m *passwordPolicyResourceModel, p *rauthy.PasswordPolicy) {
 	m.ID = types.StringValue(passwordPolicySingletonID)
 	m.LengthMin = types.Int64Value(int64(p.LengthMin))
 	m.LengthMax = types.Int64Value(int64(p.LengthMax))

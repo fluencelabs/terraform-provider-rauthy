@@ -112,6 +112,15 @@ gone. Keeping a working upstream credential out of every state file was judged w
   API key (`principal.validate_admin_session()` in `src/api/src/api_keys.rs`), so a provider
   authenticated with an API key cannot create them. The bootstrap key is created by hand.
 
+## Go client
+
+The Rauthy admin API client the provider is built on is a public Go package,
+`github.com/fluencelabs/terraform-provider-rauthy/rauthy`, with no Terraform dependencies. Besides the
+client (`rauthy.New`, then methods such as `CreateClient`) it exports the value constraints Rauthy
+enforces on OIDC clients — id, name, URI, origin, scope and contact patterns, lifetime bounds and the
+accepted flows, signing algorithms and PKCE methods — so other tools can validate before calling the
+API. It tracks the same Rauthy version as the provider; see the package documentation for an example.
+
 ## Development
 
 ```sh
@@ -125,7 +134,7 @@ make docs
 
 The unit tests include a contract layer that validates every request body and response against the
 OpenAPI document Rauthy itself serves, so request/response drift is caught offline. The spec is
-vendored at `internal/client/mock/testdata/rauthy-openapi-<version>.json`.
+vendored at `rauthy/mock/testdata/rauthy-openapi-<version>.json`.
 
 Rauthy only serves `/auth/v1/docs/openapi.json` when `swagger_ui_enable = true`, which is off in our
 deployments, so the spec is scraped from the release container:
