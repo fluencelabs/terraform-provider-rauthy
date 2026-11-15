@@ -132,3 +132,44 @@ func TestScopeSchema_ClaimsAtRootKeepsThePriorValue(t *testing.T) {
 			"UseStateForUnknown", a.Optional, a.Computed, len(a.PlanModifiers))
 	}
 }
+
+// State written by a provider without claims_at_root has none, so with
+// -refresh=false the planned value stays unknown even with UseStateForUnknown.
+// The update must then carry what Rauthy holds, not a default.
+func TestScopeUpdate_UnknownClaimsAtRootKeepsTheServerValue(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	fake, api := newFakeRauthy(t)
+	fake.answer("GET /scopes", []rauthy.ScopeResponse{
+		{ID: "scope-1", Name: "read:billing", ClaimsAtRoot: true},
+	})
+	fake.handle("PUT /scopes/scope-1", echoScope("scope-1"))
+	r := &scopeResource{api: api}
+
+	state := scopeModel(types.BoolNull())
+	plan := scopeModel(types.BoolUnknown())
+	plan.Name = types.StringValue("read:invoices")
+
+	req := resource.UpdateRequest{Plan: resourcePlan(t, r, &plan), State: resourceState(t, r, &state)}
+	resp := resource.UpdateResponse{State: emptyState(t, r)}
+	r.Update(ctx, req, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("Update: %v", resp.Diagnostics)
+	}
+
+	var sent rauthy.ScopeRequest
+	fake.lastBody(t, "PUT /scopes/scope-1", &sent)
+	if sent.Scope != "read:invoices" {
+		t.Errorf("name sent = %q, want the planned read:invoices", sent.Scope)
+	}
+	if !sent.ClaimsAtRoot {
+		t.Error("the update switched claims_at_root off although Rauthy holds true")
+	}
+
+	var got scopeResourceModel
+	resp.Diagnostics.Append(resp.State.Get(ctx, &got)...)
+	if !got.ClaimsAtRoot.ValueBool() {
+		t.Errorf("claims_at_root in state = %v, want true", got.ClaimsAtRoot)
+	}
+}

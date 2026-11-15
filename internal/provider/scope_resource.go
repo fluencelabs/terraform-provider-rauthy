@@ -178,6 +178,17 @@ func (r *scopeResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// The PUT replaces the scope wholesale, so a value the plan does not know
+	// must come from Rauthy rather than default to false. That happens on state
+	// written before claims_at_root existed, planned with -refresh=false.
+	if plan.ClaimsAtRoot.IsUnknown() || plan.ClaimsAtRoot.IsNull() {
+		current, err := r.api.GetScope(ctx, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Could not read Rauthy scope "+id+" before updating it", err.Error())
+			return
+		}
+		body.ClaimsAtRoot = current.UpdateRequest().ClaimsAtRoot
+	}
 
 	updated, err := r.api.UpdateScope(ctx, id, body)
 	if err != nil {
@@ -245,7 +256,8 @@ func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.D
 		Scope:             m.Name.ValueString(),
 		AttrIncludeAccess: setToStrings(ctx, m.AttrIncludeAccess, diags),
 		AttrIncludeID:     setToStrings(ctx, m.AttrIncludeID, diags),
-		// Unknown only at a create that leaves it unset, where false is Rauthy's default.
+		// Unknown at a create that leaves it unset, where false is Rauthy's
+		// default; Update fills in an unknown value from Rauthy itself.
 		ClaimsAtRoot: m.ClaimsAtRoot.ValueBool(),
 	}
 }
