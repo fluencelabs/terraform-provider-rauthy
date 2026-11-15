@@ -19,6 +19,9 @@
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = [ pkgs.terraform pkgs.go pkgs.terraform-plugin-docs pkgs.goreleaser pkgs.gnupg ];
+          # go.mod asks for a newer Go than this nixpkgs ships; let the go
+          # command fetch that toolchain instead of refusing to build.
+          GOTOOLCHAIN = "auto";
         };
       });
 

@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
 )
 
@@ -28,7 +28,7 @@ var (
 func NewPamGroupResource() resource.Resource { return &pamGroupResource{} }
 
 type pamGroupResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type pamGroupResourceModel struct {
@@ -98,11 +98,11 @@ func (r *pamGroupResource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -134,7 +134,7 @@ func (r *pamGroupResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	created, err := r.api.CreatePamGroup(ctx, client.PamGroupCreateRequest{
+	created, err := r.api.CreatePamGroup(ctx, rauthy.PamGroupCreateRequest{
 		Name: plan.Name.ValueString(),
 		Typ:  plan.Typ.ValueString(),
 	})
@@ -158,7 +158,7 @@ func (r *pamGroupResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	gid := state.ID.ValueInt64()
 	got, err := r.api.GetPamGroup(ctx, gid)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -195,7 +195,7 @@ func (r *pamGroupResource) Delete(ctx context.Context, req resource.DeleteReques
 	// A group still referenced by a host's gid or by a user's membership comes
 	// back as a 400 carrying the raw SQLite message ("FOREIGN KEY constraint
 	// failed"). That is unhelpful enough to be worth translating.
-	if err := r.api.DeletePamGroup(ctx, gid); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeletePamGroup(ctx, gid); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError(
 			"Could not delete Rauthy PAM group "+strconv.FormatInt(gid, 10),
 			err.Error()+"\n\nRauthy refuses to delete a group that a host still points at or that a user is "+

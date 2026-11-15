@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 // Environment variables used as fallbacks for the provider configuration.
@@ -55,7 +55,10 @@ func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				Optional: true,
 				MarkdownDescription: "Base URL of the Rauthy instance, for example `https://auth.example.com`. " +
 					"The `/auth/v1` API path is appended by the provider. " +
-					"Falls back to the `" + EnvURL + "` environment variable.",
+					"Falls back to the `" + EnvURL + "` environment variable.\n\n" +
+					"Give the address Rauthy answers on directly, without a query or fragment: the provider " +
+					"does not follow redirects, so that the API key is never sent anywhere else, and a URL " +
+					"that redirects (from `http://` to `https://`, say) fails with an error naming the target.",
 			},
 			"api_key": schema.StringAttribute{
 				Optional:  true,
@@ -142,7 +145,7 @@ func (p *rauthyProvider) Configure(
 		return
 	}
 
-	c, err := client.New(url, apiKey)
+	c, err := rauthy.New(url, apiKey)
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid Rauthy provider configuration", err.Error())
 		return

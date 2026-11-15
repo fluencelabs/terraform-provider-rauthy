@@ -10,14 +10,14 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/acctest"
 )
 
 // accClient is the direct client the destroy checks use to look past Terraform
 // state at what Rauthy actually holds.
-func accClient() (*client.Client, error) {
-	return client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+func accClient() (*rauthy.Client, error) {
+	return rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
 }
 
 func testAccCheckPamDestroyed(s *terraform.State) error {
@@ -32,7 +32,7 @@ func testAccCheckPamDestroyed(s *terraform.State) error {
 		}
 		if lookupErr := lookup(rs.Primary.ID); lookupErr == nil {
 			return fmt.Errorf("%s %s still exists after destroy", rs.Type, rs.Primary.ID)
-		} else if !client.IsNotFound(lookupErr) {
+		} else if !rauthy.IsNotFound(lookupErr) {
 			return lookupErr
 		}
 	}
@@ -42,7 +42,7 @@ func testAccCheckPamDestroyed(s *terraform.State) error {
 // pamLookups maps a resource type to the read that must fail once the resource
 // is gone. Groups and users are addressed by a numeric id, hosts by a string,
 // so each one parses its own.
-func pamLookups(c *client.Client) map[string]func(id string) error {
+func pamLookups(c *rauthy.Client) map[string]func(id string) error {
 	byNumber := func(read func(context.Context, int64) error) func(string) error {
 		return func(id string) error {
 			n, err := strconv.ParseInt(id, 10, 64)

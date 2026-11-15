@@ -8,12 +8,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
 )
 
@@ -27,7 +28,7 @@ var (
 func NewScopeResource() resource.Resource { return &scopeResource{} }
 
 type scopeResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type scopeResourceModel struct {
@@ -35,6 +36,7 @@ type scopeResourceModel struct {
 	Name              types.String `tfsdk:"name"`
 	AttrIncludeAccess types.Set    `tfsdk:"attr_include_access"`
 	AttrIncludeID     types.Set    `tfsdk:"attr_include_id"`
+	ClaimsAtRoot      types.Bool   `tfsdk:"claims_at_root"`
 }
 
 func (r *scopeResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -79,6 +81,19 @@ func (r *scopeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				MarkdownDescription: "User attributes to include in the **ID token** when this scope is granted.",
 				Validators:          []validator.Set{validators.UserAttrNameSet()},
 			},
+			"claims_at_root": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				MarkdownDescription: "Put the mapped attributes at the root of the token instead of under " +
+					"`custom`." + optionalComputedNote,
+				// Rauthy's PUT replaces the scope wholesale, so the provider has to send a value on
+				// every update; with the prior one planned, an update that is about something else
+				// keeps what Rauthy has. Non-null only: state written before this attribute existed
+				// has none, and the plan then stays unknown for Update to fill in from Rauthy.
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseNonNullStateForUnknown(),
+				},
+			},
 		},
 	}
 }
@@ -87,11 +102,11 @@ func (r *scopeResource) Configure(_ context.Context, req resource.ConfigureReque
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -139,7 +154,7 @@ func (r *scopeResource) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	id := state.ID.ValueString()
 	got, err := r.api.GetScope(ctx, id)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -164,6 +179,17 @@ func (r *scopeResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// The PUT replaces the scope wholesale, so a value the plan does not know
+	// must come from Rauthy rather than default to false. That happens on state
+	// written before claims_at_root existed, planned with -refresh=false.
+	if plan.ClaimsAtRoot.IsUnknown() || plan.ClaimsAtRoot.IsNull() {
+		current, err := r.api.GetScope(ctx, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Could not read Rauthy scope "+id+" before updating it", err.Error())
+			return
+		}
+		body.ClaimsAtRoot = current.UpdateRequest().ClaimsAtRoot
+	}
 
 	updated, err := r.api.UpdateScope(ctx, id, body)
 	if err != nil {
@@ -184,7 +210,7 @@ func (r *scopeResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	id := state.ID.ValueString()
-	if err := r.api.DeleteScope(ctx, id); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeleteScope(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy scope "+id, err.Error())
 	}
 }
@@ -195,8 +221,8 @@ func (r *scopeResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 // exist and keeps only the names it recognises — silently, with a 200. Left
 // unchecked that produces state which does not match the configuration, so the
 // drop is turned into a plain error naming what went missing.
-func checkAttrsKept(sent client.ScopeRequest, got *client.ScopeResponse, diags *diag.Diagnostics) {
-	report := func(attr string, requested []string, kept client.AttrList) {
+func checkAttrsKept(sent rauthy.ScopeRequest, got *rauthy.ScopeResponse, diags *diag.Diagnostics) {
+	report := func(attr string, requested []string, kept rauthy.AttrList) {
 		have := make(map[string]struct{}, len(kept))
 		for _, k := range kept {
 			have[k] = struct{}{}
@@ -226,11 +252,14 @@ func checkAttrsKept(sent client.ScopeRequest, got *client.ScopeResponse, diags *
 	report("attr_include_id", sent.AttrIncludeID, got.AttrIncludeID)
 }
 
-func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.Diagnostics) client.ScopeRequest {
-	return client.ScopeRequest{
+func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.Diagnostics) rauthy.ScopeRequest {
+	return rauthy.ScopeRequest{
 		Scope:             m.Name.ValueString(),
 		AttrIncludeAccess: setToStrings(ctx, m.AttrIncludeAccess, diags),
 		AttrIncludeID:     setToStrings(ctx, m.AttrIncludeID, diags),
+		// Unknown at a create that leaves it unset, where false is Rauthy's
+		// default; Update fills in an unknown value from Rauthy itself.
+		ClaimsAtRoot: m.ClaimsAtRoot.ValueBool(),
 	}
 }
 
@@ -241,11 +270,12 @@ func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.D
 // The model's own values are read before being overwritten: at Create and
 // Update they hold the plan, at Read the prior state, and both are needed to
 // tell an empty mapping from an absent one — see attrSet.
-func applyScope(m *scopeResourceModel, s *client.ScopeResponse) {
+func applyScope(m *scopeResourceModel, s *rauthy.ScopeResponse) {
 	m.ID = types.StringValue(s.ID)
 	m.Name = types.StringValue(s.Name)
 	m.AttrIncludeAccess = attrSet(s.AttrIncludeAccess, m.AttrIncludeAccess)
 	m.AttrIncludeID = attrSet(s.AttrIncludeID, m.AttrIncludeID)
+	m.ClaimsAtRoot = types.BoolValue(s.ClaimsAtRoot)
 }
 
 // attrSet renders an attribute mapping, keeping `[]` distinct from unset.
@@ -256,7 +286,7 @@ func applyScope(m *scopeResourceModel, s *client.ScopeResponse) {
 // deriving null from the response would abort an apply that wrote `[]` with
 // "inconsistent result after apply". When the response carries nothing, the
 // value the configuration (or prior state) expressed is therefore kept.
-func attrSet(values client.AttrList, prior types.Set) types.Set {
+func attrSet(values rauthy.AttrList, prior types.Set) types.Set {
 	if len(values) > 0 {
 		return stringsToSet(values)
 	}

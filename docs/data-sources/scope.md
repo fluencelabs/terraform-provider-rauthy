@@ -33,4 +33,5 @@ data "rauthy_scope" "billing" {
 
 - `attr_include_access` (Set of String) User attributes this scope adds to the access token.
 - `attr_include_id` (Set of String) User attributes this scope adds to the ID token.
+- `claims_at_root` (Boolean) Whether the mapped attributes go at the root of the token instead of under `custom`.
 - `id` (String) Rauthy-assigned identifier of the scope.

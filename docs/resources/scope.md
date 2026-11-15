@@ -48,6 +48,9 @@ resource "rauthy_client" "billing_app" {
 
 - `attr_include_access` (Set of String) User attributes to include in the **access token** when this scope is granted.
 - `attr_include_id` (Set of String) User attributes to include in the **ID token** when this scope is granted.
+- `claims_at_root` (Boolean) Put the mapped attributes at the root of the token instead of under `custom`.
+
+Optional and computed: leaving this out adopts whatever Rauthy has, and removing it from the configuration later keeps the last applied value rather than reverting it. To change it, set it explicitly.
 
 ### Read-Only
 

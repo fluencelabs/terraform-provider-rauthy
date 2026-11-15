@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
 )
 
@@ -26,7 +26,7 @@ var (
 func NewGroupResource() resource.Resource { return &groupResource{} }
 
 type groupResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type groupResourceModel struct {
@@ -67,11 +67,11 @@ func (r *groupResource) Configure(_ context.Context, req resource.ConfigureReque
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -96,7 +96,7 @@ func (r *groupResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	created, err := r.api.CreateGroup(ctx, client.GroupRequest{Group: plan.Name.ValueString()})
+	created, err := r.api.CreateGroup(ctx, rauthy.GroupRequest{Group: plan.Name.ValueString()})
 	if err != nil {
 		resp.Diagnostics.AddError("Could not create Rauthy group "+plan.Name.ValueString(), err.Error())
 		return
@@ -116,7 +116,7 @@ func (r *groupResource) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	id := state.ID.ValueString()
 	got, err := r.api.GetGroup(ctx, id)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -138,7 +138,7 @@ func (r *groupResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	id := plan.ID.ValueString()
-	updated, err := r.api.UpdateGroup(ctx, id, client.GroupRequest{Group: plan.Name.ValueString()})
+	updated, err := r.api.UpdateGroup(ctx, id, rauthy.GroupRequest{Group: plan.Name.ValueString()})
 	if err != nil {
 		resp.Diagnostics.AddError("Could not update Rauthy group "+id, err.Error())
 		return
@@ -157,7 +157,7 @@ func (r *groupResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	id := state.ID.ValueString()
-	if err := r.api.DeleteGroup(ctx, id); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeleteGroup(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy group "+id, err.Error())
 	}
 }

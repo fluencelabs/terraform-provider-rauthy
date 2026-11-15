@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 var (
@@ -21,7 +21,7 @@ var (
 func NewUserDataSource() datasource.DataSource { return &userDataSource{} }
 
 type userDataSource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type userDataSourceModel struct {
@@ -123,11 +123,11 @@ func (d *userDataSource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -160,7 +160,7 @@ func (d *userDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	}
 
 	var (
-		got   *client.UserResponse
+		got   *rauthy.UserResponse
 		err   error
 		label string
 	)
@@ -171,7 +171,7 @@ func (d *userDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		label = "user " + email
 		got, err = d.api.GetUserByEmail(ctx, email)
 	}
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError(
 			"Rauthy "+label+" not found",
 			"No such user exists on the configured Rauthy instance.",

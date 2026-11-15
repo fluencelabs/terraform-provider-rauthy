@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 var (
@@ -21,7 +21,7 @@ var (
 func NewAuthProviderResource() resource.Resource { return &authProviderResource{} }
 
 type authProviderResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type authProviderResourceModel struct {
@@ -65,11 +65,11 @@ func (r *authProviderResource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -120,7 +120,7 @@ func (r *authProviderResource) Read(ctx context.Context, req resource.ReadReques
 
 	id := state.ID.ValueString()
 	got, err := r.api.GetAuthProvider(ctx, id)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -187,7 +187,7 @@ func (r *authProviderResource) Delete(
 
 	id := state.ID.ValueString()
 	err := r.api.DeleteAuthProvider(ctx, id)
-	if err == nil || client.IsNotFound(err) {
+	if err == nil || rauthy.IsNotFound(err) {
 		return
 	}
 

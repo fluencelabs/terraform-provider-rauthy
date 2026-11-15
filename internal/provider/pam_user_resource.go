@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 var (
@@ -23,7 +23,7 @@ var (
 func NewPamUserResource() resource.Resource { return &pamUserResource{} }
 
 type pamUserResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type pamUserResourceModel struct {
@@ -52,11 +52,11 @@ func (r *pamUserResource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -91,7 +91,7 @@ func (r *pamUserResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	username := plan.Username.ValueString()
-	created, err := r.api.CreatePamUser(ctx, client.PamUserCreateRequest{
+	created, err := r.api.CreatePamUser(ctx, rauthy.PamUserCreateRequest{
 		Username: username,
 		Email:    plan.Email.ValueString(),
 	})
@@ -129,7 +129,7 @@ func (r *pamUserResource) Read(ctx context.Context, req resource.ReadRequest, re
 
 	uid := state.ID.ValueInt64()
 	got, err := r.api.GetPamUser(ctx, uid)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -172,7 +172,7 @@ func (r *pamUserResource) Delete(ctx context.Context, req resource.DeleteRequest
 	}
 
 	uid := state.ID.ValueInt64()
-	if err := r.api.DeletePamUser(ctx, uid); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeletePamUser(ctx, uid); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy PAM user "+strconv.FormatInt(uid, 10), err.Error())
 	}
 }

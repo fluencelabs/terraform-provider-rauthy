@@ -1,9 +1,9 @@
-.PHONY: docs build test testacc rauthy-up rauthy-down print-rauthy-version fmt vet openapi-refresh
+.PHONY: docs build test testacc rauthy-up rauthy-down print-rauthy-version fmt vet
 
-# Rauthy version the vendored OpenAPI spec was generated from. Bump together
-# with the spec file (see openapi-refresh).
+# Rauthy version the provider tracks and the acceptance tests boot. Bump it
+# together with the github.com/fluencelabs/rauthy-go release that tracks the
+# same version.
 RAUTHY_VERSION ?= 0.36.2
-SPEC := internal/client/mock/testdata/rauthy-openapi-$(RAUTHY_VERSION).json
 
 build:
 	go build ./...
@@ -30,7 +30,7 @@ rauthy-down:
 	@./scripts/rauthy-down.sh
 
 # The single place the pinned Rauthy version lives; CI reads it from here so a
-# spec bump cannot leave the acceptance matrix on the old release.
+# version bump cannot leave the acceptance matrix on the old release.
 print-rauthy-version:
 	@echo $(RAUTHY_VERSION)
 
@@ -39,13 +39,3 @@ docs:
 
 fmt:
 	go fmt ./...
-
-# Regenerate the vendored OpenAPI spec by booting the Rauthy container locally
-# with the Swagger UI enabled and fetching /auth/v1/docs/openapi.json.
-#
-# LOCAL ONLY, run by hand when bumping RAUTHY_VERSION. CI never runs this and
-# has no Docker; it tests against the spec committed to the repo. If the spec
-# filename no longer matches the Rauthy version running in an environment, the
-# contract tests are stale.
-openapi-refresh:
-	./scripts/openapi-refresh.sh $(RAUTHY_VERSION) $(SPEC)

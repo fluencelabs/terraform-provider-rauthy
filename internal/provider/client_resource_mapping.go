@@ -6,14 +6,14 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 // applyResponse copies a client as Rauthy reports it into the model. It leaves
 // the three secret-management attributes alone: `secret` is fetched from a
 // different endpoint, and the rotation trigger and cache window exist only in
 // Terraform, so a refresh must not clobber them.
-func applyResponse(ctx context.Context, m *clientResourceModel, resp *client.ClientResponse, diags *diag.Diagnostics) {
+func applyResponse(ctx context.Context, m *clientResourceModel, resp *rauthy.ClientResponse, diags *diag.Diagnostics) {
 	_ = ctx
 
 	m.ID = types.StringValue(resp.ID)
@@ -61,7 +61,7 @@ func applyResponse(ctx context.Context, m *clientResourceModel, resp *client.Cli
 func fillUnknownFromResponse(
 	ctx context.Context,
 	m *clientResourceModel,
-	resp *client.ClientResponse,
+	resp *rauthy.ClientResponse,
 	diags *diag.Diagnostics,
 ) {
 	_ = ctx
@@ -102,6 +102,18 @@ func fillUnknownFromResponse(
 	}
 }
 
+// keepUnmodelled copies into req the settings rauthy_client has no attributes
+// for: the RFC 8707 resources, the default audiences and the custom claims.
+// PUT /clients/{id} replaces the client wholesale, so a body without them would
+// reset whatever the Admin UI or another tool set there.
+func keepUnmodelled(req *rauthy.UpdateClientRequest, current *rauthy.ClientResponse) {
+	kept := current.UpdateRequest()
+	req.AllowedResources = kept.AllowedResources
+	req.DefaultAud = kept.DefaultAud
+	req.Claims = kept.Claims
+	req.ClaimsAtRoot = kept.ClaimsAtRoot
+}
+
 // buildUpdateRequest renders the model as the body of PUT /clients/{id}.
 //
 // The non-pointer fields are required by Rauthy even when the practitioner did
@@ -111,8 +123,8 @@ func buildUpdateRequest(
 	ctx context.Context,
 	m *clientResourceModel,
 	diags *diag.Diagnostics,
-) client.UpdateClientRequest {
-	req := client.UpdateClientRequest{
+) rauthy.UpdateClientRequest {
+	req := rauthy.UpdateClientRequest{
 		ID:                     m.ID.ValueString(),
 		Name:                   stringPtr(m.Name),
 		Confidential:           m.Confidential.ValueBool(),
@@ -136,7 +148,7 @@ func buildUpdateRequest(
 	}
 
 	if m.Scim != nil {
-		req.Scim = &client.ScimClientRequestResponse{
+		req.Scim = &rauthy.ScimClientRequestResponse{
 			BearerToken:     m.Scim.BearerToken.ValueString(),
 			BaseURI:         m.Scim.BaseURI.ValueString(),
 			SyncGroups:      m.Scim.SyncGroups.ValueBool(),

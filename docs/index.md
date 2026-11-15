@@ -19,6 +19,21 @@ bootstrap file.
 `rauthy_auth_provider.client_secret_wo` — are write-only, a feature Terraform gained in 1.11.
 Against an older version they are not merely ignored: the configuration fails to parse.
 
+## Upgrading
+
+From 0.3.x, the provider talks to Rauthy through the
+[rauthy-go](https://github.com/fluencelabs/rauthy-go) client, which changes three things an
+existing setup can run into:
+
+* **Redirects are not followed.** A `3xx` answer is an error that names where it pointed, so the
+  API key is never sent anywhere else. Set `url` to the address Rauthy answers on directly — an
+  `http://` URL that redirects to `https://` now fails instead of being followed.
+* **`url` must not carry a query or a fragment.** One is refused when the provider is configured;
+  before, it ended up in front of every request path.
+* **A secret rotation is sent once and never retried.** This covers `rauthy_client` and
+  `rauthy_api_key`. If the request fails after it went out (a `5xx`, a dropped connection), the
+  error says Rauthy may have rotated the secret anyway; the next apply rotates again.
+
 ## Example usage
 
 ```terraform
@@ -96,3 +111,5 @@ The key needs the access rights of the resources it manages: `Clients` read, cre
 
 Granting `ApiKeys` makes the configured key able to mint further keys with any rights at all, including rights it does not itself hold. Grant it only to the key that actually manages `rauthy_api_key` resources.
 - `url` (String) Base URL of the Rauthy instance, for example `https://auth.example.com`. The `/auth/v1` API path is appended by the provider. Falls back to the `RAUTHY_URL` environment variable.
+
+Give the address Rauthy answers on directly, without a query or fragment: the provider does not follow redirects, so that the API key is never sent anywhere else, and a URL that redirects (from `http://` to `https://`, say) fails with an error naming the target.

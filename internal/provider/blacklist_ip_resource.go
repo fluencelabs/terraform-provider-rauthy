@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
 )
 
@@ -27,7 +27,7 @@ var (
 func NewBlacklistIPResource() resource.Resource { return &blacklistIPResource{} }
 
 type blacklistIPResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type blacklistIPResourceModel struct {
@@ -96,11 +96,11 @@ func (r *blacklistIPResource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -141,7 +141,7 @@ func (r *blacklistIPResource) Read(ctx context.Context, req resource.ReadRequest
 
 	ip := state.IP.ValueString()
 	got, err := r.api.GetBlacklistedIP(ctx, ip)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		// The entry either expired or was lifted in the Admin UI. Both are
 		// removals as far as Terraform is concerned; erroring here would leave
 		// every configuration holding an expired block permanently broken.
@@ -183,7 +183,7 @@ func (r *blacklistIPResource) Delete(ctx context.Context, req resource.DeleteReq
 	// endpoint answers 200 to anything, so a spelling Rauthy does not recognise
 	// would look like a successful delete and leave the block in place.
 	id := state.ID.ValueString()
-	if err := r.api.DeleteBlacklistedIP(ctx, id); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeleteBlacklistedIP(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not remove Rauthy blacklist entry for "+id, err.Error())
 	}
 }
@@ -196,7 +196,7 @@ func (r *blacklistIPResource) Delete(ctx context.Context, req resource.DeleteReq
 // apply that silently achieved nothing.
 func (r *blacklistIPResource) write(ctx context.Context, plan *blacklistIPResourceModel, diags *diag.Diagnostics) {
 	ip := plan.IP.ValueString()
-	err := r.api.BlacklistIP(ctx, client.IPBlacklistRequest{
+	err := r.api.BlacklistIP(ctx, rauthy.IPBlacklistRequest{
 		IP:  ip,
 		Exp: plan.Exp.ValueInt64(),
 	})
@@ -206,7 +206,7 @@ func (r *blacklistIPResource) write(ctx context.Context, plan *blacklistIPResour
 	}
 
 	got, err := r.api.GetBlacklistedIP(ctx, ip)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		diags.AddError(
 			"Rauthy discarded the blacklist entry for "+ip,
 			"Rauthy accepted the request and then dropped the entry, which it does when `exp` is already "+

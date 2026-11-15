@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Shared helpers for the scripts that boot a Rauthy container:
-# openapi-refresh.sh (scrapes the OpenAPI document) and rauthy-up.sh (stands up
-# an instance for the acceptance tests).
+# Helpers for rauthy-up.sh, which boots a Rauthy container for the acceptance
+# tests.
 
 # rauthy_require_docker fails with an actionable message when there is no
 # reachable container runtime.

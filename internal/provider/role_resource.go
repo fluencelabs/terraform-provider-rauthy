@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
 )
 
@@ -26,7 +26,7 @@ var (
 func NewRoleResource() resource.Resource { return &roleResource{} }
 
 type roleResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type roleResourceModel struct {
@@ -67,11 +67,11 @@ func (r *roleResource) Configure(_ context.Context, req resource.ConfigureReques
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -96,7 +96,7 @@ func (r *roleResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	created, err := r.api.CreateRole(ctx, client.RoleRequest{Role: plan.Name.ValueString()})
+	created, err := r.api.CreateRole(ctx, rauthy.RoleRequest{Role: plan.Name.ValueString()})
 	if err != nil {
 		resp.Diagnostics.AddError("Could not create Rauthy role "+plan.Name.ValueString(), err.Error())
 		return
@@ -116,7 +116,7 @@ func (r *roleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	id := state.ID.ValueString()
 	got, err := r.api.GetRole(ctx, id)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -138,7 +138,7 @@ func (r *roleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 
 	id := plan.ID.ValueString()
-	updated, err := r.api.UpdateRole(ctx, id, client.RoleRequest{Role: plan.Name.ValueString()})
+	updated, err := r.api.UpdateRole(ctx, id, rauthy.RoleRequest{Role: plan.Name.ValueString()})
 	if err != nil {
 		resp.Diagnostics.AddError("Could not update Rauthy role "+id, err.Error())
 		return
@@ -157,7 +157,7 @@ func (r *roleResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	}
 
 	id := state.ID.ValueString()
-	if err := r.api.DeleteRole(ctx, id); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeleteRole(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy role "+id, err.Error())
 	}
 }

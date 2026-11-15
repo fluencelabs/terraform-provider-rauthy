@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 func groupSet(t *testing.T, rows ...pamUserGroupModel) types.Set {
@@ -42,7 +42,7 @@ func TestPamUserGroupsFromSet_StampsUidAndSorts(t *testing.T) {
 	if diags.HasError() {
 		t.Fatalf("diags: %v", diags)
 	}
-	want := []client.PamGroupUserLink{
+	want := []rauthy.PamGroupUserLink{
 		{UID: 100000, GID: 100002, Wheel: false},
 		{UID: 100000, GID: 100007, Wheel: true},
 	}
@@ -76,10 +76,10 @@ func TestPamUserGroupsFromSet_EmptyStaysEmptyNotNil(t *testing.T) {
 func TestPamUserUpdateBody_UnsetPlanResendsCurrent(t *testing.T) {
 	t.Parallel()
 
-	current := &client.PamUserDetailsResponse{
+	current := &rauthy.PamUserDetailsResponse{
 		ID: 100000, Name: "alice", GID: 100003, Email: "alice@example.com",
 		Shell: "/bin/bash", HomeDir: "/home/alice",
-		Groups: []client.PamGroupUserLink{
+		Groups: []rauthy.PamGroupUserLink{
 			{UID: 100000, GID: 100007, Wheel: true},
 			{UID: 100000, GID: 100003, Wheel: false},
 		},
@@ -110,9 +110,9 @@ func TestPamUserUpdateBody_UnsetPlanResendsCurrent(t *testing.T) {
 func TestPamUserUpdateBody_ExplicitEmptySetClearsMemberships(t *testing.T) {
 	t.Parallel()
 
-	current := &client.PamUserDetailsResponse{
+	current := &rauthy.PamUserDetailsResponse{
 		ID: 100000, Shell: "/bin/bash", HomeDir: "/home/alice",
-		Groups: []client.PamGroupUserLink{{UID: 100000, GID: 100003}},
+		Groups: []rauthy.PamGroupUserLink{{UID: 100000, GID: 100003}},
 	}
 	plan := &pamUserResourceModel{
 		Shell:   types.StringValue("/bin/zsh"),
@@ -187,7 +187,7 @@ func TestPamUserNeedsUpdate(t *testing.T) {
 func TestPamHostUpdateBody_FallsBackToCurrentAndSorts(t *testing.T) {
 	t.Parallel()
 
-	current := &client.PamHostDetailsResponse{
+	current := &rauthy.PamHostDetailsResponse{
 		ID: "h1", Hostname: "build01", GID: 100001,
 		IPs: []string{"10.0.0.10"}, Aliases: []string{"ci"},
 	}

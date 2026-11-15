@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 var (
@@ -20,7 +20,7 @@ var (
 func NewScopeDataSource() datasource.DataSource { return &scopeDataSource{} }
 
 type scopeDataSource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type scopeDataSourceModel struct {
@@ -28,6 +28,7 @@ type scopeDataSourceModel struct {
 	Name              types.String `tfsdk:"name"`
 	AttrIncludeAccess types.Set    `tfsdk:"attr_include_access"`
 	AttrIncludeID     types.Set    `tfsdk:"attr_include_id"`
+	ClaimsAtRoot      types.Bool   `tfsdk:"claims_at_root"`
 }
 
 func (d *scopeDataSource) Metadata(
@@ -61,6 +62,10 @@ func (d *scopeDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, 
 				ElementType:         types.StringType,
 				MarkdownDescription: "User attributes this scope adds to the ID token.",
 			},
+			"claims_at_root": schema.BoolAttribute{
+				Computed:            true,
+				MarkdownDescription: "Whether the mapped attributes go at the root of the token instead of under `custom`.",
+			},
 		},
 	}
 }
@@ -73,11 +78,11 @@ func (d *scopeDataSource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -93,7 +98,7 @@ func (d *scopeDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 
 	name := config.Name.ValueString()
 	got, err := d.api.GetScopeByName(ctx, name)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError(
 			"Rauthy scope "+name+" not found",
 			"No scope with that name exists on the configured Rauthy instance.",
@@ -109,5 +114,6 @@ func (d *scopeDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	config.Name = types.StringValue(got.Name)
 	config.AttrIncludeAccess = stringsToSet(got.AttrIncludeAccess)
 	config.AttrIncludeID = stringsToSet(got.AttrIncludeID)
+	config.ClaimsAtRoot = types.BoolValue(got.ClaimsAtRoot)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
 }
