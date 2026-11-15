@@ -2,10 +2,12 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -142,9 +144,18 @@ func (d *authProviderDataSource) Read(
 
 	name := config.Name.ValueString()
 	got, err := d.api.GetAuthProviderByName(ctx, name)
+	if errors.Is(err, rauthy.ErrAmbiguousName) {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("name"),
+			"Ambiguous Rauthy auth provider name "+name,
+			"Rauthy does not require auth provider names to be unique, and more than one provider is "+
+				"named "+name+", so the lookup cannot tell which one is meant. Give the providers distinct "+
+				"names in Rauthy, or refer to the one you mean by its id, for example through the "+
+				"rauthy_auth_provider resource that manages it.",
+		)
+		return
+	}
 	if rauthy.IsNotFound(err) {
-		// GetAuthProviderByName reports an ambiguous name as a 404 too, so the
-		// underlying message is what distinguishes the two cases.
 		resp.Diagnostics.AddError("Could not resolve Rauthy auth provider "+name, err.Error())
 		return
 	}
