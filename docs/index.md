@@ -96,3 +96,5 @@ The key needs the access rights of the resources it manages: `Clients` read, cre
 
 Granting `ApiKeys` makes the configured key able to mint further keys with any rights at all, including rights it does not itself hold. Grant it only to the key that actually manages `rauthy_api_key` resources.
 - `url` (String) Base URL of the Rauthy instance, for example `https://auth.example.com`. The `/auth/v1` API path is appended by the provider. Falls back to the `RAUTHY_URL` environment variable.
+
+Give the address Rauthy answers on directly, without a query or fragment: the provider does not follow redirects, so that the API key is never sent anywhere else, and a URL that redirects (from `http://` to `https://`, say) fails with an error naming the target.

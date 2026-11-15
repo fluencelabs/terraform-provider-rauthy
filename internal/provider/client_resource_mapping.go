@@ -102,6 +102,18 @@ func fillUnknownFromResponse(
 	}
 }
 
+// keepUnmodelled copies into req the settings rauthy_client has no attributes
+// for: the RFC 8707 resources, the default audiences and the custom claims.
+// PUT /clients/{id} replaces the client wholesale, so a body without them would
+// reset whatever the Admin UI or another tool set there.
+func keepUnmodelled(req *rauthy.UpdateClientRequest, current *rauthy.ClientResponse) {
+	kept := current.UpdateRequest()
+	req.AllowedResources = kept.AllowedResources
+	req.DefaultAud = kept.DefaultAud
+	req.Claims = kept.Claims
+	req.ClaimsAtRoot = kept.ClaimsAtRoot
+}
+
 // buildUpdateRequest renders the model as the body of PUT /clients/{id}.
 //
 // The non-pointer fields are required by Rauthy even when the practitioner did

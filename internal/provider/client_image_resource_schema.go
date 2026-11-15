@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 
 	"github.com/fluencelabs/rauthy-go"
+	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
 )
 
 func (r *clientImageResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -24,6 +25,7 @@ func (r *clientImageResource) Schema(_ context.Context, _ resource.SchemaRequest
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
+				Validators: []validator.String{validators.PathSegment()},
 			},
 			"content_base64": schema.StringAttribute{
 				Required: true,

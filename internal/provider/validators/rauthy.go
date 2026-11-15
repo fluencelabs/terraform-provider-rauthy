@@ -143,6 +143,14 @@ func ClientID() validator.String {
 		`must match ^[a-zA-Z0-9._\-]{2,256}$`)
 }
 
+// PathSegment refuses an identifier the API client cannot put into a request
+// path: an empty one, "." or "..". RE_CLIENT_ID accepts "..", and Rauthy would
+// create such a client, but no request addressed to it can be sent, since a
+// normalising hop would turn the path into another endpoint's.
+func PathSegment() validator.String {
+	return stringvalidator.NoneOf("", ".", "..")
+}
+
 // ClientName validates a client name against RE_CLIENT_NAME.
 func ClientName() validator.String {
 	return stringvalidator.RegexMatches(clientName,

@@ -73,6 +73,17 @@ func TestClientID(t *testing.T) {
 	)
 }
 
+// An identifier that ends up as a URL path segment cannot be ".", ".." or
+// empty: the API client refuses to send such a request, since a normalising
+// hop would address a different endpoint.
+func TestPathSegment(t *testing.T) {
+	t.Parallel()
+	checkString(t, "PathSegment", validators.PathSegment(),
+		[]string{"app", "...", ".app", "app..", "a/b"},
+		[]string{"", ".", ".."},
+	)
+}
+
 func TestClientName(t *testing.T) {
 	t.Parallel()
 	checkString(t, "ClientName", validators.ClientName(),
