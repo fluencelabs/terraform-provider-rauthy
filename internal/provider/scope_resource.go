@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -35,6 +36,7 @@ type scopeResourceModel struct {
 	Name              types.String `tfsdk:"name"`
 	AttrIncludeAccess types.Set    `tfsdk:"attr_include_access"`
 	AttrIncludeID     types.Set    `tfsdk:"attr_include_id"`
+	ClaimsAtRoot      types.Bool   `tfsdk:"claims_at_root"`
 }
 
 func (r *scopeResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -78,6 +80,18 @@ func (r *scopeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				ElementType:         types.StringType,
 				MarkdownDescription: "User attributes to include in the **ID token** when this scope is granted.",
 				Validators:          []validator.Set{validators.UserAttrNameSet()},
+			},
+			"claims_at_root": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				MarkdownDescription: "Put the mapped attributes at the root of the token instead of under " +
+					"`custom`." + optionalComputedNote,
+				// Rauthy's PUT replaces the scope wholesale, so the provider has to send a value on
+				// every update; with the prior one planned, an update that is about something else
+				// keeps what Rauthy has.
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -231,6 +245,8 @@ func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.D
 		Scope:             m.Name.ValueString(),
 		AttrIncludeAccess: setToStrings(ctx, m.AttrIncludeAccess, diags),
 		AttrIncludeID:     setToStrings(ctx, m.AttrIncludeID, diags),
+		// Unknown only at a create that leaves it unset, where false is Rauthy's default.
+		ClaimsAtRoot: m.ClaimsAtRoot.ValueBool(),
 	}
 }
 
@@ -246,6 +262,7 @@ func applyScope(m *scopeResourceModel, s *rauthy.ScopeResponse) {
 	m.Name = types.StringValue(s.Name)
 	m.AttrIncludeAccess = attrSet(s.AttrIncludeAccess, m.AttrIncludeAccess)
 	m.AttrIncludeID = attrSet(s.AttrIncludeID, m.AttrIncludeID)
+	m.ClaimsAtRoot = types.BoolValue(s.ClaimsAtRoot)
 }
 
 // attrSet renders an attribute mapping, keeping `[]` distinct from unset.

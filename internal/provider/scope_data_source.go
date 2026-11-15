@@ -28,6 +28,7 @@ type scopeDataSourceModel struct {
 	Name              types.String `tfsdk:"name"`
 	AttrIncludeAccess types.Set    `tfsdk:"attr_include_access"`
 	AttrIncludeID     types.Set    `tfsdk:"attr_include_id"`
+	ClaimsAtRoot      types.Bool   `tfsdk:"claims_at_root"`
 }
 
 func (d *scopeDataSource) Metadata(
@@ -60,6 +61,10 @@ func (d *scopeDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, 
 				Computed:            true,
 				ElementType:         types.StringType,
 				MarkdownDescription: "User attributes this scope adds to the ID token.",
+			},
+			"claims_at_root": schema.BoolAttribute{
+				Computed:            true,
+				MarkdownDescription: "Whether the mapped attributes go at the root of the token instead of under `custom`.",
 			},
 		},
 	}
@@ -109,5 +114,6 @@ func (d *scopeDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	config.Name = types.StringValue(got.Name)
 	config.AttrIncludeAccess = stringsToSet(got.AttrIncludeAccess)
 	config.AttrIncludeID = stringsToSet(got.AttrIncludeID)
+	config.ClaimsAtRoot = types.BoolValue(got.ClaimsAtRoot)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
 }
