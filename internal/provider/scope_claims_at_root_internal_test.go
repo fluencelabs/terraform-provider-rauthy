@@ -188,7 +188,7 @@ func TestScopeSchema_ClaimsAtRootStaysUnknownWithoutAPriorValue(t *testing.T) {
 	r.Schema(ctx, resource.SchemaRequest{}, &sresp)
 	a, _ := sresp.Schema.Attributes["claims_at_root"].(schema.BoolAttribute)
 
-	state := resourceState(t, r, ptr(scopeModel(types.BoolNull())))
+	state := resourceState(t, r, new(scopeModel(types.BoolNull())))
 	req := planmodifier.BoolRequest{
 		Path:        path.Root("claims_at_root"),
 		State:       state,
@@ -204,5 +204,3 @@ func TestScopeSchema_ClaimsAtRootStaysUnknownWithoutAPriorValue(t *testing.T) {
 		t.Errorf("planned claims_at_root = %v, want unknown", resp.PlanValue)
 	}
 }
-
-func ptr[T any](v T) *T { return &v }
