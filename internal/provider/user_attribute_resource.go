@@ -15,7 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
 )
 
@@ -30,7 +30,7 @@ var (
 func NewUserAttributeResource() resource.Resource { return &userAttributeResource{} }
 
 type userAttributeResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type userAttributeResourceModel struct {
@@ -117,11 +117,11 @@ func (r *userAttributeResource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -197,7 +197,7 @@ func (r *userAttributeResource) Read(ctx context.Context, req resource.ReadReque
 
 	name := state.Name.ValueString()
 	got, err := r.api.GetUserAttr(ctx, name)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -253,14 +253,14 @@ func (r *userAttributeResource) Delete(
 	}
 
 	name := state.Name.ValueString()
-	if err := r.api.DeleteUserAttr(ctx, name); err != nil && !client.IsNotFound(err) {
+	if err := r.api.DeleteUserAttr(ctx, name); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy user attribute "+name, err.Error())
 	}
 }
 
-func buildUserAttrRequest(m *userAttributeResourceModel) client.UserAttrRequest {
+func buildUserAttrRequest(m *userAttributeResourceModel) rauthy.UserAttrRequest {
 	editable := m.UserEditable.ValueBool()
-	return client.UserAttrRequest{
+	return rauthy.UserAttrRequest{
 		Name:         m.Name.ValueString(),
 		Desc:         stringPtr(m.Desc),
 		DefaultValue: rawJSON(m.DefaultValue),
@@ -269,7 +269,7 @@ func buildUserAttrRequest(m *userAttributeResourceModel) client.UserAttrRequest 
 }
 
 // applyUserAttr folds a response into the model.
-func applyUserAttr(m *userAttributeResourceModel, a *client.UserAttrResponse) {
+func applyUserAttr(m *userAttributeResourceModel, a *rauthy.UserAttrResponse) {
 	m.ID = types.StringValue(a.Name)
 	m.Name = types.StringValue(a.Name)
 	m.Desc = optionalString(a.Desc)

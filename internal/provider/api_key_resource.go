@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 var (
@@ -22,7 +22,7 @@ var (
 func NewAPIKeyResource() resource.Resource { return &apiKeyResource{} }
 
 type apiKeyResource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 // apiKeyAccessModel is one `{group, access_rights}` grant. It lives inside a
@@ -52,11 +52,11 @@ func (r *apiKeyResource) Configure(_ context.Context, req resource.ConfigureRequ
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -127,7 +127,7 @@ func (r *apiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 
 	name := state.Name.ValueString()
 	got, err := r.api.GetAPIKey(ctx, name)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -197,7 +197,7 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	name := state.Name.ValueString()
 	err := r.api.DeleteAPIKey(ctx, name)
-	if err != nil && !client.IsNotFound(err) {
+	if err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy API key "+name, err.Error())
 	}
 }

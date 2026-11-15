@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 var (
@@ -20,7 +20,7 @@ var (
 func NewScopeDataSource() datasource.DataSource { return &scopeDataSource{} }
 
 type scopeDataSource struct {
-	api *client.Client
+	api *rauthy.Client
 }
 
 type scopeDataSourceModel struct {
@@ -73,11 +73,11 @@ func (d *scopeDataSource) Configure(
 	if req.ProviderData == nil {
 		return
 	}
-	api, ok := req.ProviderData.(*client.Client)
+	api, ok := req.ProviderData.(*rauthy.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data",
-			fmt.Sprintf("Expected *client.Client, got %T. This is a bug in the provider.", req.ProviderData),
+			fmt.Sprintf("Expected *rauthy.Client, got %T. This is a bug in the provider.", req.ProviderData),
 		)
 		return
 	}
@@ -93,7 +93,7 @@ func (d *scopeDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 
 	name := config.Name.ValueString()
 	got, err := d.api.GetScopeByName(ctx, name)
-	if client.IsNotFound(err) {
+	if rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError(
 			"Rauthy scope "+name+" not found",
 			"No scope with that name exists on the configured Rauthy instance.",

@@ -1,7 +1,7 @@
 # This file is licensed under the terms of the MIT license https://opensource.org/license/mit
 # Copyright (c) 2021-2025 Marat Reymers
 
-## Strict golangci-lint config for golangci-lint v2.7.1
+## Strict golangci-lint config for golangci-lint v2.15.0
 #
 # Very strict, but not extremely strict. Adapt it to suit your needs.
 
@@ -171,8 +171,10 @@ linters:
     goconst:
       # Terraform attribute names are the wire format of a schema, and every
       # resource repeats the common ones. Hiding them behind a constant would
-      # obscure the mapping to the API rather than clarify it.
-      ignore-string-values: [ '^(id|name)$' ]
+      # obscure the mapping to the API rather than clarify it. Every
+      # snake_case literal is treated as such a name: goconst counts schema
+      # map keys, so listing the names one by one would not keep up.
+      ignore-string-values: [ '^[a-z][a-z0-9_]*$' ]
 
     depguard:
       # Rules to apply.
@@ -238,7 +240,7 @@ linters:
       # Default: [ switch ]
       check:
         - switch
-        - map
+        - mapliteral
 
     exhaustruct:
       # List of regular expressions to match type names that should be excluded from processing.
@@ -461,11 +463,9 @@ linters:
         source: '// ?(nolint|TODO)'
         linters: [ revive, staticcheck ]
       # Roles and groups are separate Rauthy endpoint families that happen to
-      # have the same shape, all the way up through the resources and data
-      # sources built on them. Folding them together behind generics would hide
-      # which endpoints actually exist, so the repetition is deliberate.
-      - path: 'internal/client/(roles|groups)\.go'
-        linters: [ dupl ]
+      # have the same shape, and so do the resources and data sources built on
+      # them. Folding them together behind generics would hide which endpoints
+      # actually exist, so the repetition is deliberate.
       - path: 'internal/provider/(role|group)_(resource|data_source)\.go'
         linters: [ dupl ]
 

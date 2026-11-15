@@ -25,4 +25,3 @@ terraform.rc
 # hold generated config carrying throwaway secrets; a hard-killed run leaves one
 # behind, and it must not be committable.
 scripts/.rauthy-acc/
-**/.openapi-refresh.*

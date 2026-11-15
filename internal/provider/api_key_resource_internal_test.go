@@ -8,10 +8,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
-func accessSetOf(t *testing.T, entries ...client.APIKeyAccess) types.Set {
+func accessSetOf(t *testing.T, entries ...rauthy.APIKeyAccess) types.Set {
 	t.Helper()
 
 	elems := make([]attr.Value, 0, len(entries))
@@ -30,7 +30,7 @@ func accessSetOf(t *testing.T, entries ...client.APIKeyAccess) types.Set {
 func TestAPIKeyAccess_RoundTrips(t *testing.T) {
 	t.Parallel()
 
-	want := []client.APIKeyAccess{
+	want := []rauthy.APIKeyAccess{
 		{Group: "Users", AccessRights: []string{"read", "create"}},
 		{Group: "ApiKeys", AccessRights: []string{"read", "create", "update", "delete"}},
 		// A group with no rights at all: Rauthy stores it and hands it back.
@@ -110,11 +110,11 @@ func TestApplyAPIKeyResponse_LeavesTheSecretAlone(t *testing.T) {
 		SecretRotationTrigger: types.StringValue("v1"),
 	}
 	expires := int64(1900000000)
-	applyAPIKeyResponse(m, &client.APIKeyResponse{
+	applyAPIKeyResponse(m, &rauthy.APIKeyResponse{
 		Name:    "deploy",
 		Created: 1788076923,
 		Expires: &expires,
-		Access:  []client.APIKeyAccess{{Group: "Users", AccessRights: []string{"read"}}},
+		Access:  []rauthy.APIKeyAccess{{Group: "Users", AccessRights: []string{"read"}}},
 	})
 
 	if m.Secret.ValueString() != "deploy$s3cr3t" || m.SecretRotationTrigger.ValueString() != "v1" {
@@ -129,7 +129,7 @@ func TestApplyAPIKeyResponse_LeavesTheSecretAlone(t *testing.T) {
 
 	// An absent expiry has to become null, not zero: zero is a valid Unix
 	// timestamp and would read as "expired in 1970".
-	applyAPIKeyResponse(m, &client.APIKeyResponse{Name: "deploy", Created: 1, Access: nil})
+	applyAPIKeyResponse(m, &rauthy.APIKeyResponse{Name: "deploy", Created: 1, Access: nil})
 	if !m.ExpiresAt.IsNull() {
 		t.Errorf("expires_at = %v, want null", m.ExpiresAt)
 	}
@@ -173,7 +173,7 @@ func TestBuildAPIKeyRequest(t *testing.T) {
 	m := &apiKeyResourceModel{
 		Name:      types.StringValue("deploy"),
 		ExpiresAt: types.Int64Null(),
-		Access:    accessSetOf(t, client.APIKeyAccess{Group: "Users", AccessRights: []string{"read"}}),
+		Access:    accessSetOf(t, rauthy.APIKeyAccess{Group: "Users", AccessRights: []string{"read"}}),
 	}
 	req := buildAPIKeyRequest(context.Background(), m, &diags)
 	if diags.HasError() {

@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 // pamUserGroupModel is one row of the `groups` set.
@@ -20,7 +20,7 @@ type pamUserGroupModel struct {
 // pamUserGroupsToSet turns the membership rows Rauthy returned into the set the
 // schema declares, dropping the uid each row carries — it is always the user's
 // own id, so the configuration has no use for it.
-func pamUserGroupsToSet(ctx context.Context, links []client.PamGroupUserLink) (types.Set, diag.Diagnostics) {
+func pamUserGroupsToSet(ctx context.Context, links []rauthy.PamGroupUserLink) (types.Set, diag.Diagnostics) {
 	elemType := types.ObjectType{AttrTypes: pamUserGroupAttrTypes}
 
 	rows := make([]pamUserGroupModel, 0, len(links))
@@ -44,7 +44,7 @@ func pamUserGroupsFromSet(
 	ctx context.Context,
 	uid int64,
 	set types.Set,
-) ([]client.PamGroupUserLink, diag.Diagnostics) {
+) ([]rauthy.PamGroupUserLink, diag.Diagnostics) {
 	var rows []pamUserGroupModel
 	diags := set.ElementsAs(ctx, &rows, false)
 	if diags.HasError() {
@@ -54,9 +54,9 @@ func pamUserGroupsFromSet(
 	// A non-nil empty slice, not nil: `groups` is a required field of the PUT
 	// body, and a nil slice would marshal to `null` and be rejected. An empty
 	// list is a legitimate request — it clears every membership.
-	links := make([]client.PamGroupUserLink, 0, len(rows))
+	links := make([]rauthy.PamGroupUserLink, 0, len(rows))
 	for _, row := range rows {
-		links = append(links, client.PamGroupUserLink{
+		links = append(links, rauthy.PamGroupUserLink{
 			UID:   uid,
 			GID:   row.GID.ValueInt64(),
 			Wheel: row.Wheel.ValueBool(),
@@ -71,7 +71,7 @@ func pamUserGroupsFromSet(
 func applyPamUserDetails(
 	ctx context.Context,
 	model *pamUserResourceModel,
-	got *client.PamUserDetailsResponse,
+	got *rauthy.PamUserDetailsResponse,
 ) diag.Diagnostics {
 	groups, diags := pamUserGroupsToSet(ctx, got.Groups)
 	if diags.HasError() {
@@ -96,11 +96,11 @@ func applyPamUserDetails(
 func pamUserUpdateBody(
 	ctx context.Context,
 	plan *pamUserResourceModel,
-	current *client.PamUserDetailsResponse,
-) (client.PamUserUpdateRequest, diag.Diagnostics) {
+	current *rauthy.PamUserDetailsResponse,
+) (rauthy.PamUserUpdateRequest, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
-	req := client.PamUserUpdateRequest{Shell: current.Shell}
+	req := rauthy.PamUserUpdateRequest{Shell: current.Shell}
 	if !plan.Shell.IsNull() && !plan.Shell.IsUnknown() {
 		req.Shell = plan.Shell.ValueString()
 	}
@@ -112,7 +112,7 @@ func pamUserUpdateBody(
 	req.HomeDir = &homeDir
 
 	if plan.Groups.IsNull() || plan.Groups.IsUnknown() {
-		links := make([]client.PamGroupUserLink, 0, len(current.Groups))
+		links := make([]rauthy.PamGroupUserLink, 0, len(current.Groups))
 		links = append(links, current.Groups...)
 		sort.Slice(links, func(i, j int) bool { return links[i].GID < links[j].GID })
 		req.Groups = links

@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/acctest"
 )
 
@@ -34,7 +34,7 @@ resource "rauthy_group" "test" {
 // testAccCheckRolesGroupsDestroyed asserts that every role and group this test
 // created is gone from Rauthy, not merely from state.
 func testAccCheckRolesGroupsDestroyed(s *terraform.State) error {
-	c, err := client.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+	c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func testAccCheckRolesGroupsDestroyed(s *terraform.State) error {
 		if lookupErr == nil {
 			return fmt.Errorf("%s %s still exists after destroy", rs.Type, rs.Primary.ID)
 		}
-		if !client.IsNotFound(lookupErr) {
+		if !rauthy.IsNotFound(lookupErr) {
 			return lookupErr
 		}
 	}

@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
 
 // Every form a live 0.36.2 has been seen to return the scope list in has to
@@ -69,7 +69,7 @@ func TestAuthProviderScope_ReadThenWriteIsAcceptable(t *testing.T) {
 	t.Parallel()
 
 	m := &authProviderResourceModel{}
-	applyAuthProviderResponse(m, &client.AuthProviderResponse{Scope: "openid+profile+email"})
+	applyAuthProviderResponse(m, &rauthy.AuthProviderResponse{Scope: "openid+profile+email"})
 
 	var diags diag.Diagnostics
 	got := buildAuthProviderRequest(context.Background(), m, types.StringNull(), &diags)

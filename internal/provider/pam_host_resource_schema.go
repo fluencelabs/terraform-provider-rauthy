@@ -20,7 +20,7 @@ func (r *pamHostResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"authenticates, identified to Rauthy by its id and the shared secret below.\n\n" +
 			"Rauthy's published OpenAPI document has no create operation for a host, which reads as though " +
 			"hosts could only register themselves. A live 0.36.2 does accept `POST /pam/hosts`, so this is " +
-			"an ordinary managed resource; see the note in `internal/client/pam.go` for the evidence.\n\n" +
+			"an ordinary managed resource; see the note in `pam.go` of [rauthy-go](https://github.com/fluencelabs/rauthy-go) for the evidence.\n\n" +
 			"Requires these API key rights: `Pam` read, create, update, delete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{

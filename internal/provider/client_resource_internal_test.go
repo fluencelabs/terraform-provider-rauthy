@@ -8,10 +8,8 @@ import (
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/fluencelabs/terraform-provider-rauthy/internal/client"
+	"github.com/fluencelabs/rauthy-go"
 )
-
-func strPtr(s string) *string { return &s }
 
 func setOf(t *testing.T, values ...string) types.Set {
 	t.Helper()
@@ -19,10 +17,10 @@ func setOf(t *testing.T, values ...string) types.Set {
 }
 
 // fullResponse is a client as Rauthy reports it, with every optional field set.
-func fullResponse() *client.ClientResponse {
-	return &client.ClientResponse{
+func fullResponse() *rauthy.ClientResponse {
+	return &rauthy.ClientResponse{
 		ID:                     "example-app",
-		Name:                   strPtr("Example App"),
+		Name:                   new("Example App"),
 		Enabled:                true,
 		Confidential:           true,
 		RedirectURIs:           []string{"https://app.example.com/callback"},
@@ -37,15 +35,15 @@ func fullResponse() *client.ClientResponse {
 		DefaultScopes:          []string{"openid"},
 		Challenges:             []string{"S256"},
 		ForceMFA:               true,
-		ClientURI:              strPtr("https://app.example.com"),
+		ClientURI:              new("https://app.example.com"),
 		Contacts:               []string{"ops@example.com"},
-		BackchannelLogoutURI:   strPtr("https://app.example.com/logout"),
-		RestrictGroupPrefix:    strPtr("staff"),
-		Scim: &client.ScimClientRequestResponse{
+		BackchannelLogoutURI:   new("https://app.example.com/logout"),
+		RestrictGroupPrefix:    new("staff"),
+		Scim: &rauthy.ScimClientRequestResponse{
 			BearerToken:     "scim-token",
 			BaseURI:         "https://app.example.com/scim/v2",
 			SyncGroups:      true,
-			GroupSyncPrefix: strPtr("staff"),
+			GroupSyncPrefix: new("staff"),
 		},
 	}
 }
