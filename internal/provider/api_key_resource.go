@@ -172,7 +172,11 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 	if apiKeyRotationRequested(&state, &plan) {
 		rotated, err := r.api.RotateAPIKeySecret(ctx, name)
 		if err != nil {
-			resp.Diagnostics.AddError("Could not rotate the secret of Rauthy API key "+name, err.Error())
+			resp.Diagnostics.AddError(
+				"Could not rotate the secret of Rauthy API key "+name,
+				rotationFailureDetail(err, "Rauthy discloses an API key's secret only in the answer to a "+
+					"rotation, so if this one took effect, the secret in state no longer works."),
+			)
 			return
 		}
 		plan.Secret = types.StringValue(rotated)

@@ -2,9 +2,7 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -234,7 +232,8 @@ func (r *clientResource) Update(ctx context.Context, req resource.UpdateRequest,
 		if rotateErr != nil {
 			resp.Diagnostics.AddError(
 				"Could not rotate the secret of Rauthy client "+id,
-				rotationFailureDetail(rotateErr),
+				rotationFailureDetail(rotateErr,
+					"The next refresh reads whichever secret Rauthy holds now."),
 			)
 			return
 		}
@@ -293,20 +292,6 @@ func (r *clientResource) ModifyPlan(
 // state and plan. A trigger that is newly set, or newly removed, counts.
 func rotationRequested(state, plan *clientResourceModel) bool {
 	return !plan.SecretRotationTrigger.Equal(state.SecretRotationTrigger)
-}
-
-// rotationFailureDetail explains a failed rotation. A 3xx or 4xx answer is a
-// refusal; any other failure, a 5xx or a connection lost mid-request, may have
-// come after the rotation took effect, and the API client does not retry a
-// rotation it has sent, since a retry would rotate a second time.
-func rotationFailureDetail(err error) string {
-	if apiErr, ok := errors.AsType[*rauthy.APIError](err); ok && apiErr.StatusCode < http.StatusInternalServerError {
-		return err.Error()
-	}
-	return err.Error() + "\n\nRauthy may have rotated the secret even though the request failed, and the " +
-		"provider does not retry a rotation, since a retry would rotate it a second time. The next refresh " +
-		"reads whichever secret Rauthy holds now. The trigger change was not recorded, so the next apply " +
-		"rotates again; if the first rotation did take effect, that is a second one."
 }
 
 // readSecretInto fills m.Secret from Rauthy, or sets it null for a public
