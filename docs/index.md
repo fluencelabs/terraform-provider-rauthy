@@ -19,6 +19,21 @@ bootstrap file.
 `rauthy_auth_provider.client_secret_wo` — are write-only, a feature Terraform gained in 1.11.
 Against an older version they are not merely ignored: the configuration fails to parse.
 
+## Upgrading
+
+From 0.3.x, the provider talks to Rauthy through the
+[rauthy-go](https://github.com/fluencelabs/rauthy-go) client, which changes three things an
+existing setup can run into:
+
+* **Redirects are not followed.** A `3xx` answer is an error that names where it pointed, so the
+  API key is never sent anywhere else. Set `url` to the address Rauthy answers on directly — an
+  `http://` URL that redirects to `https://` now fails instead of being followed.
+* **`url` must not carry a query or a fragment.** One is refused when the provider is configured;
+  before, it ended up in front of every request path.
+* **A secret rotation is sent once and never retried.** This covers `rauthy_client` and
+  `rauthy_api_key`. If the request fails after it went out (a `5xx`, a dropped connection), the
+  error says Rauthy may have rotated the secret anyway; the next apply rotates again.
+
 ## Example usage
 
 ```terraform
