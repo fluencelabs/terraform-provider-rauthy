@@ -62,9 +62,6 @@ func TestAPIKeyAccess_RoundTrips(t *testing.T) {
 		if !slices.Equal(rights, w.AccessRights) {
 			t.Errorf("group %s: rights = %v, want %v", w.Group, rights, w.AccessRights)
 		}
-		if len(rights) != len(w.AccessRights) {
-			t.Errorf("group %s: rights = %v, want %v", w.Group, rights, w.AccessRights)
-		}
 	}
 }
 
