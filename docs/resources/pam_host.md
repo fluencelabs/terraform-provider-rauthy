@@ -26,7 +26,8 @@ resource "rauthy_pam_host" "build01" {
   hostname = "build01.example.com"
   gid      = rauthy_pam_group.servers.id
 
-  force_mfa           = true
+  force_mfa = true
+  # true would let WebAuthn users log in locally with their normal Rauthy password.
   local_password_only = false
 
   ips     = ["10.0.0.10", "2001:db8::10"]
@@ -55,7 +56,7 @@ output "build01_host_secret" {
 - `aliases` (Set of String) Additional names the host answers to. Each follows the hostname rules.
 - `force_mfa` (Boolean) Require a second factor for every login on this host.
 - `ips` (Set of String) IP addresses of the host, v4 or v6. Rauthy calls the same list `addresses` in its host listing.
-- `local_password_only` (Boolean) Accept only the PAM remote password a user generates in their account dashboard, never their normal Rauthy password.
+- `local_password_only` (Boolean) Allow users with MFA (WebAuthn) enabled to authenticate with their normal Rauthy password at the PAM login endpoint. When false, that endpoint rejects normal passwords for WebAuthn users. This does not disable `force_mfa`: PAM clients must call preflight and honor its MFA requirement before login.
 - `notes` (String) Free-text note stored with the host.
 
 ### Read-Only
