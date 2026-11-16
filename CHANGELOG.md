@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.0](https://github.com/fluencelabs/terraform-provider-rauthy/compare/v0.3.0...v0.4.0) (2026-11-15)
+
+
+### Features
+
+* **scope:** manage claims_at_root ([f3fb709](https://github.com/fluencelabs/terraform-provider-rauthy/commit/f3fb70999f9576f6e9be8c781088aa2b19f840e2))
+
+
+### Bug Fixes
+
+* **api-key:** say a failed rotation may have reached Rauthy ([7618d19](https://github.com/fluencelabs/terraform-provider-rauthy/commit/7618d19d3b5c3f10a78c882466a27a5d8536e6d1))
+* **auth-provider:** report an ambiguous name as such ([8a235a3](https://github.com/fluencelabs/terraform-provider-rauthy/commit/8a235a335e64a7381434f416d630fea2093b8132))
+* **client:** keep the settings rauthy_client does not model ([cb5e7d9](https://github.com/fluencelabs/terraform-provider-rauthy/commit/cb5e7d912332ef25cbaa3d5661512e148f83fcb6))
+* **provider:** refuse redirects and query URLs, never re-send a rotation ([e743559](https://github.com/fluencelabs/terraform-provider-rauthy/commit/e743559978b9461854cd0331bd43dcc4e75bb034))
+* **scope:** never send a claims_at_root the plan does not know ([7158e66](https://github.com/fluencelabs/terraform-provider-rauthy/commit/7158e6631f694e1c25f5d5b7664f6acb8e87918f))
+* **scope:** plan claims_at_root unknown when state has none ([cf0726e](https://github.com/fluencelabs/terraform-provider-rauthy/commit/cf0726eda293897ce0cce7936cdbc06fa5b2db2f))
+
 ## [0.3.0](https://github.com/fluencelabs/terraform-provider-rauthy/compare/v0.2.0...v0.3.0) (2026-08-30)
 
 This release roughly triples the provider's coverage of Rauthy and tracks Rauthy 0.36.2. It contains two changes that can break an existing configuration; both are listed first.
