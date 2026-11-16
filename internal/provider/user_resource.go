@@ -161,15 +161,34 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	// The write-only password comes out of the configuration, not the plan:
-	// the plan reports it as null because Terraform refuses to carry it.
-	password := writeOnlyString(ctx, req.Config, path.Root("password_wo"), &resp.Diagnostics)
+	var state userResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	password := types.StringNull()
+	if !plan.PasswordRotationTrigger.Equal(state.PasswordRotationTrigger) {
+		password = writeOnlyString(ctx, req.Config, path.Root("password_wo"), &resp.Diagnostics)
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	id := plan.ID.ValueString()
-	updated, err := r.api.UpdateUser(ctx, id, buildUpdateUserRequest(ctx, &plan, password, &resp.Diagnostics))
+	update := buildUpdateUserRequest(ctx, &plan, password, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if plan.UserValues == nil {
+		current, err := r.api.GetUser(ctx, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Could not read Rauthy user "+id, err.Error())
+			return
+		}
+		update.UserValues = &current.UserValues.UserValues
+	}
+	updated, err := r.api.UpdateUser(ctx, id, update)
 	if resp.Diagnostics.HasError() {
 		return
 	}
