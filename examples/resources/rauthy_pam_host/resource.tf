@@ -7,7 +7,8 @@ resource "rauthy_pam_host" "build01" {
   hostname = "build01.example.com"
   gid      = rauthy_pam_group.servers.id
 
-  force_mfa           = true
+  force_mfa = true
+  # true would let WebAuthn users log in locally with their normal Rauthy password.
   local_password_only = false
 
   ips     = ["10.0.0.10", "2001:db8::10"]

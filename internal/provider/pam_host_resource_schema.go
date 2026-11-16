@@ -53,8 +53,10 @@ func (r *pamHostResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
-				MarkdownDescription: "Accept only the PAM remote password a user generates in their account " +
-					"dashboard, never their normal Rauthy password.",
+				MarkdownDescription: "Allow users with MFA (WebAuthn) enabled to authenticate with their normal Rauthy " +
+					"password at the PAM login endpoint. When false, that endpoint rejects normal passwords " +
+					"for WebAuthn users. This does not disable `force_mfa`: PAM clients must call preflight " +
+					"and honor its MFA requirement before login.",
 			},
 			"ips": schema.SetAttribute{
 				Optional:    true,
