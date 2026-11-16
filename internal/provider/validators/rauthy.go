@@ -1,23 +1,14 @@
-// Package validators holds the value constraints Rauthy enforces server-side,
-// restated as Terraform schema validators.
-//
-// They are restated rather than left to the server for two reasons: a plan-time
-// error names the offending attribute, and Rauthy's own OpenAPI document does
-// not carry them. Rauthy generates that document with utoipa, which does not
-// emit the `validator` crate's ranges and regexes into the schema — they survive
-// only as prose in the field descriptions. So the contract tests can police
-// field sets and types but not values, and these validators are the only
-// mechanical guard we have.
-//
-// Every pattern and bound below is transcribed from Rauthy v0.36.2:
-// src/common/src/regex.rs, src/api_types/src/cust_validation.rs and the
-// #[validate] attributes in src/api_types/src/clients.rs.
+// Package validators adapts Rauthy constraints to Terraform schema validators.
 package validators
 
 import (
 	"context"
-	"net/netip"
 	"regexp"
+	"strings"
+	"unicode"
+
+	rauthy "github.com/fluencelabs/rauthy-go"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -25,78 +16,20 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 )
 
-// Patterns from src/common/src/regex.rs.
 var (
-	// RE_CLIENT_ID. Rauthy 0.36 narrowed this: `POST /clients` now rejects
-	// everything outside letters, digits, dot, underscore and hyphen, so ids
-	// that used to be legal (anything with `/`, `,`, `:` and friends) are
-	// refused by a live server. Validating the narrow form here turns that
-	// into a plan-time error naming the attribute.
-	clientID = regexp.MustCompile(`^[a-zA-Z0-9._\-]{2,256}$`)
-
-	// RE_CLIENT_NAME. The CJK ranges are part of the upstream pattern.
-	clientName = regexp.MustCompile(`^[a-zA-Z0-9À-ɏ\-\s` +
-		`\x{3041}-\x{3096}\x{30A0}-\x{30FF}\x{3400}-\x{4DB5}\x{4E00}-\x{9FCB}` +
-		`\x{F900}-\x{FA6A}\x{2E80}-\x{2FD5}\x{FF66}-\x{FF9F}\x{FFA1}-\x{FFDC}\x{31F0}-\x{31FF}]{2,128}$`)
-
-	// RE_URI.
-	uri = regexp.MustCompile(`^[a-zA-Z0-9,.:/_\-&?=~#!$'()*+%@]+$`)
-
-	// RE_ROLES_SCOPES, used for both scopes and default_scopes.
-	scope = regexp.MustCompile(`^[a-zA-Z0-9-_/,:*.]{2,64}$`)
-
-	// RE_GROUPS.
-	groups = regexp.MustCompile(`^[a-zA-Z0-9-_/,:*\s]{2,64}$`)
-
-	// validate_vec_origin.
-	origin = regexp.MustCompile(`^(http|https)://[a-z0-9.:-]+$`)
-
-	// validate_vec_contact.
-	contact = regexp.MustCompile(`^[a-zA-Z0-9+.@/-]{0,48}$`)
-
-	// Attribute names in a scope's attr_include_* mapping.
-	userAttrName = regexp.MustCompile(`^[a-zA-Z0-9-_/]{2,128}$`)
-
-	// The name of a user attribute *definition*. Same character class as the
-	// mapping above but a tighter length bound: Rauthy accepts a 128-character
-	// name in a scope's mapping while refusing to define one longer than 32,
-	// so an over-long name is rejected at the point where it is created.
-	userAttrConfigName = regexp.MustCompile(`^[a-zA-Z0-9-_/]{2,32}$`)
-
-	// The description of a user attribute definition. Note the character
-	// class: Rauthy does not allow spaces in it, so this is not free text.
-	userAttrDesc = regexp.MustCompile(`^[a-zA-Z0-9-_/]{0,128}$`)
-
-	// A user's given_name and family_name.
-	personName = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-'\s]{1,32}$`)
-
-	// The user_values fields, from validate_* in cust_validation.rs.
-	birthdate   = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
-	phone       = regexp.MustCompile(`^\+[0-9]{0,32}$`)
-	zip         = regexp.MustCompile(`^[a-zA-Z0-9]{0,24}$`)
-	street      = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-.\s]{0,48}$`)
-	addressPart = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-\s]{0,48}$`)
-	timezone    = regexp.MustCompile(`^[A-Za-z]+(?:/[A-Za-z0-9_+-]+)*$`)
-
+	// RE_ATTR: the name of a user attribute, both where it is defined and in a
+	// scope's attr_include_* mapping. The mapping's error text names {2,128},
+	// but the pattern it checks is this one.
+	userAttrName = regexp.MustCompile(`^[a-zA-Z0-9-_/]{2,32}$`)
+	birthdate    = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
+	phone        = regexp.MustCompile(`^\+[0-9]{0,32}$`)
+	zip          = regexp.MustCompile(`^[a-zA-Z0-9]{1,24}$`)
 	// A PAM host's hostname and each of its aliases. This one Rauthy does
 	// publish, in the field descriptions of PamHostCreateRequest and
 	// PamHostUpdateRequest.
 	pamHostname = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-.]*[a-zA-Z0-9]$`)
 )
 
-// Bounds from the #[validate(range(...))] attributes in
-// src/api_types/src/clients.rs.
-const (
-	authCodeLifetimeMin    = 10
-	authCodeLifetimeMax    = 300
-	accessTokenLifetimeMin = 10
-	accessTokenLifetimeMax = 86400
-	cacheCurrentHoursMin   = 1
-	cacheCurrentHoursMax   = 24
-)
-
-// Bounds from the #[validate(range(...))] attributes in
-// src/api_types/src/generic.rs (PasswordPolicyRequest).
 const (
 	passwordLengthMin    = 8
 	passwordLengthMax    = 128
@@ -108,39 +41,14 @@ const (
 	notRecentlyUsedMax   = 10
 )
 
-// Enumerations from src/api_types/src/cust_validation.rs.
-//
-//nolint:gochecknoglobals // transcribed upstream enumerations, read-only
+//nolint:gochecknoglobals // Constraints not exported by rauthy-go.
 var (
-	// JwkKeyPairAlg.
-	signingAlgs = []string{"RS256", "RS384", "RS512", "EdDSA"}
-
-	// validate_vec_grant_types.
-	grantTypes = []string{
-		"authorization_code",
-		"client_credentials",
-		"urn:ietf:params:oauth:grant-type:device_code",
-		"password",
-		"refresh_token",
-	}
-
-	// RE_CODE_CHALLENGE_METHOD.
-	challengeMethods = []string{"plain", "S256"}
-
-	// Language.
-	languages = []string{"de", "en", "fr", "ko", "nb", "ru", "uk", "zhhans"}
-
-	// PamGroupType. A live 0.36.2 accepts every one of these on create,
-	// `immutable` and `user` included, even though those two are meant for
-	// Rauthy's own built-ins and for the personal group it creates alongside
-	// each PAM user.
 	pamGroupTypes = []string{"immutable", "host", "user", "generic", "local"}
 )
 
 // ClientID validates a client id against RE_CLIENT_ID.
 func ClientID() validator.String {
-	return stringvalidator.RegexMatches(clientID,
-		`must match ^[a-zA-Z0-9._\-]{2,256}$`)
+	return stringvalidator.RegexMatches(rauthy.ClientIDPattern(), "must match "+rauthy.ClientIDPattern().String())
 }
 
 // PathSegment refuses an identifier the API client cannot put into a request
@@ -153,14 +61,12 @@ func PathSegment() validator.String {
 
 // ClientName validates a client name against RE_CLIENT_NAME.
 func ClientName() validator.String {
-	return stringvalidator.RegexMatches(clientName,
-		"must be 2-128 characters of letters, digits, spaces or '-'")
+	return stringvalidator.RegexMatches(rauthy.ClientNamePattern(), "must match "+rauthy.ClientNamePattern().String())
 }
 
 // URI validates a single URI-ish string against RE_URI.
 func URI() validator.String {
-	return stringvalidator.RegexMatches(uri,
-		`must match ^[a-zA-Z0-9,.:/_\-&?=~#!$'()*+%@]+$`)
+	return stringvalidator.RegexMatches(rauthy.URIPattern(), "must match "+rauthy.URIPattern().String())
 }
 
 // URISet validates every element of a set against RE_URI.
@@ -170,31 +76,33 @@ func URISet() validator.Set {
 
 // OriginSet validates every element of a set as an allowed origin.
 func OriginSet() validator.Set {
-	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(origin,
-		"must match ^(http|https)://[a-z0-9.:-]+$ (scheme and host only, no path)"))
+	return setvalidator.ValueStringsAre(
+		stringvalidator.RegexMatches(rauthy.OriginPattern(), "must match "+rauthy.OriginPattern().String()),
+	)
 }
 
 // ContactSet validates every element of a set as a contact.
 func ContactSet() validator.Set {
-	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(contact,
-		"must be at most 48 characters of letters, digits or '+.@/-'"))
+	return setvalidator.ValueStringsAre(
+		stringvalidator.RegexMatches(rauthy.ContactPattern(), "must match "+rauthy.ContactPattern().String()),
+	)
 }
 
 // ScopeSet validates every element of a set as a scope name.
 func ScopeSet() validator.Set {
-	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(scope,
-		`must match ^[a-zA-Z0-9-_/,:*.]{2,64}$`))
+	return setvalidator.ValueStringsAre(
+		stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String()),
+	)
 }
 
 // GroupPrefix validates a group prefix against RE_GROUPS.
 func GroupPrefix() validator.String {
-	return stringvalidator.RegexMatches(groups,
-		`must match ^[a-zA-Z0-9-_/,:*\s]{2,64}$`)
+	return stringvalidator.RegexMatches(rauthy.GroupPattern(), "must match "+rauthy.GroupPattern().String())
 }
 
 // SigningAlg validates a JWK signing algorithm.
 func SigningAlg() validator.String {
-	return stringvalidator.OneOf(signingAlgs...)
+	return stringvalidator.OneOf(rauthy.SigningAlgs()...)
 }
 
 // FlowsEnabledSet validates the OAuth flows. Rauthy rejects an empty list, so
@@ -202,7 +110,7 @@ func SigningAlg() validator.String {
 func FlowsEnabledSet() []validator.Set {
 	return []validator.Set{
 		setvalidator.SizeAtLeast(1),
-		setvalidator.ValueStringsAre(stringvalidator.OneOf(grantTypes...)),
+		setvalidator.ValueStringsAre(stringvalidator.OneOf(rauthy.GrantTypes()...)),
 	}
 }
 
@@ -211,36 +119,34 @@ func FlowsEnabledSet() []validator.Set {
 func ChallengeSet() []validator.Set {
 	return []validator.Set{
 		setvalidator.SizeAtLeast(1),
-		setvalidator.ValueStringsAre(stringvalidator.OneOf(challengeMethods...)),
+		setvalidator.ValueStringsAre(stringvalidator.OneOf(rauthy.ChallengeMethods()...)),
 	}
 }
 
 // AuthCodeLifetime bounds auth_code_lifetime (seconds).
 func AuthCodeLifetime() validator.Int64 {
-	return int64validator.Between(authCodeLifetimeMin, authCodeLifetimeMax)
+	return int64validator.Between(rauthy.AuthCodeLifetimeMin, rauthy.AuthCodeLifetimeMax)
 }
 
 // AccessTokenLifetime bounds access_token_lifetime (seconds).
 func AccessTokenLifetime() validator.Int64 {
-	return int64validator.Between(accessTokenLifetimeMin, accessTokenLifetimeMax)
+	return int64validator.Between(rauthy.AccessTokenLifetimeMin, rauthy.AccessTokenLifetimeMax)
 }
 
 // CacheCurrentHours bounds cache_current_hours on a secret rotation.
 func CacheCurrentHours() validator.Int64 {
-	return int64validator.Between(cacheCurrentHoursMin, cacheCurrentHoursMax)
+	return int64validator.Between(rauthy.CacheCurrentHoursMin, rauthy.CacheCurrentHoursMax)
 }
 
 // RoleName validates a role name against RE_ROLES_SCOPES, the same pattern
 // Rauthy applies to scopes.
 func RoleName() validator.String {
-	return stringvalidator.RegexMatches(scope,
-		`must match ^[a-zA-Z0-9-_/,:*.]{2,64}$`)
+	return stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String())
 }
 
 // GroupName validates a group name against RE_GROUPS.
 func GroupName() validator.String {
-	return stringvalidator.RegexMatches(groups,
-		`must match ^[a-zA-Z0-9-_/,:*\s]{2,64}$`)
+	return stringvalidator.RegexMatches(rauthy.GroupPattern(), "must match "+rauthy.GroupPattern().String())
 }
 
 // PasswordLength validates length_min and length_max.
@@ -265,38 +171,38 @@ func PasswordNotRecentlyUsed() validator.Int64 {
 
 // ScopeName validates a scope name against RE_ROLES_SCOPES.
 func ScopeName() validator.String {
-	return stringvalidator.RegexMatches(scope,
-		`must match ^[a-zA-Z0-9-_/,:*.]{2,64}$`)
+	return stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String())
 }
 
 // UserAttrNameSet validates every element of a set as a user-attribute name,
 // the form accepted in a scope's attr_include_access and attr_include_id.
 func UserAttrNameSet() validator.Set {
 	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(userAttrName,
-		`must match ^[a-zA-Z0-9-_/]{2,128}$`))
+		`must match ^[a-zA-Z0-9-_/]{2,32}$`))
 }
 
 // UserAttrConfigName validates the name of a user attribute definition.
 func UserAttrConfigName() validator.String {
-	return stringvalidator.RegexMatches(userAttrConfigName,
+	return stringvalidator.RegexMatches(userAttrName,
 		`must match ^[a-zA-Z0-9-_/]{2,32}$`)
 }
 
 // UserAttrDesc validates the description of a user attribute definition.
 func UserAttrDesc() validator.String {
-	return stringvalidator.RegexMatches(userAttrDesc,
-		`must match ^[a-zA-Z0-9-_/]{0,128}$ (no spaces)`)
+	return stringvalidator.RegexMatches(
+		rauthy.AttributeDescriptionPattern(),
+		"must match "+rauthy.AttributeDescriptionPattern().String(),
+	)
 }
 
 // Language validates a UI/email language against Rauthy's Language enum.
 func Language() validator.String {
-	return stringvalidator.OneOf(languages...)
+	return stringvalidator.OneOf(rauthy.Languages()...)
 }
 
 // PersonName validates a given or family name.
 func PersonName() validator.String {
-	return stringvalidator.RegexMatches(personName,
-		"must be 1-32 characters of letters, digits, spaces, '-' or '\\''")
+	return stringvalidator.RegexMatches(rauthy.UserNamePattern(), "must match "+rauthy.UserNamePattern().String())
 }
 
 // RoleNameSet validates every element of a set as a role name.
@@ -321,58 +227,34 @@ func Phone() validator.String {
 
 // Zip validates a user's postal code.
 func Zip() validator.String {
-	return stringvalidator.RegexMatches(zip, "must be at most 24 letters or digits")
+	return stringvalidator.RegexMatches(zip, "must be 1 to 24 letters or digits; omit it to clear the zip")
 }
 
 // Street validates a user's street.
 func Street() validator.String {
-	return stringvalidator.RegexMatches(street,
-		"must be at most 48 characters of letters, digits, spaces, '-' or '.'")
+	return stringvalidator.RegexMatches(rauthy.StreetPattern(), "must match "+rauthy.StreetPattern().String())
 }
 
 // AddressPart validates a user's city or country.
 func AddressPart() validator.String {
-	return stringvalidator.RegexMatches(addressPart,
-		"must be at most 48 characters of letters, digits, spaces or '-'")
+	return stringvalidator.RegexMatches(rauthy.CityPattern(), "must match "+rauthy.CityPattern().String())
 }
 
 // Timezone validates a user's timezone. Rauthy only checks that the value
 // parses as an IANA name, so this is a shape check rather than a lookup.
 func Timezone() validator.String {
-	return stringvalidator.RegexMatches(timezone,
-		"must be an IANA timezone such as Europe/Berlin")
+	return stringvalidator.RegexMatches(rauthy.TimezonePattern(), "must match "+rauthy.TimezonePattern().String())
 }
-
-// Constraints on an upstream auth provider, from the #[validate] attributes in
-// src/api_types/src/providers.rs.
-var (
-	// RE_PROVIDER_NAME. Narrower than RE_CLIENT_NAME: no CJK ranges.
-	authProviderName = regexp.MustCompile(`^[a-zA-Z0-9À-ÿ\-\s]{2,128}$`)
-
-	// RE_URI as applied to a provider's endpoints and claim paths. It is not
-	// the same pattern the client resource uses: this one has no `@` but does
-	// allow `+`, so a JSONPath such as `$.roles` passes and an email-shaped
-	// value does not.
-	authProviderURI = regexp.MustCompile(`^[a-zA-Z0-9,.:/_\-&?=~#!$'()*+%]+$`)
-
-	// One element of the scope list. Rauthy validates the joined string
-	// against ^[a-zA-Z0-9-_/:\s*]{0,512}$; with the separator taken out, an
-	// element is that pattern minus the whitespace.
-	authProviderScope = regexp.MustCompile(`^[a-zA-Z0-9\-_/:*]+$`)
-)
 
 // Bound from #[validate(length(max = 256))] on ProviderRequest::client_secret.
 const authProviderSecretMax = 256
 
-// Enumeration of AuthProviderType.
-//
-//nolint:gochecknoglobals // transcribed upstream enumeration, read-only
+//nolint:gochecknoglobals // Auth provider types are not exported by rauthy-go.
 var authProviderTypes = []string{"custom", "github", "google", "oidc"}
 
 // AuthProviderName validates an upstream provider's display name.
 func AuthProviderName() validator.String {
-	return stringvalidator.RegexMatches(authProviderName,
-		"must be 2-128 characters of letters, digits, spaces or '-'")
+	return stringvalidator.RegexMatches(rauthy.ClientNamePattern(), "must match "+rauthy.ClientNamePattern().String())
 }
 
 // AuthProviderType validates an upstream provider's type.
@@ -383,8 +265,7 @@ func AuthProviderType() validator.String {
 // AuthProviderURI validates one of an upstream provider's endpoints or claim
 // paths.
 func AuthProviderURI() validator.String {
-	return stringvalidator.RegexMatches(authProviderURI,
-		`must match ^[a-zA-Z0-9,.:/_\-&?=~#!$'()*+%]+$`)
+	return stringvalidator.RegexMatches(rauthy.URIPattern(), "must match "+rauthy.URIPattern().String())
 }
 
 // AuthProviderSecret bounds an upstream client secret's length.
@@ -392,12 +273,50 @@ func AuthProviderSecret() validator.String {
 	return stringvalidator.LengthAtMost(authProviderSecretMax)
 }
 
-// AuthProviderScopeSet validates every element of an upstream provider's scope
-// list. The elements are joined with spaces on the wire, so an element may not
-// contain whitespace itself.
+// AuthProviderScopeSet validates the joined upstream scopes and their set representation.
 func AuthProviderScopeSet() validator.Set {
-	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(authProviderScope,
-		`must match ^[a-zA-Z0-9\-_/:*]+$ (a single scope, with no spaces)`))
+	return authProviderScopesValidator{}
+}
+
+type authProviderScopesValidator struct{}
+
+func (authProviderScopesValidator) Description(context.Context) string {
+	return "must contain individual nonempty scopes whose space-joined value matches " + rauthy.AuthProviderScopePattern().
+		String()
+}
+
+func (v authProviderScopesValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v authProviderScopesValidator) ValidateSet(
+	ctx context.Context,
+	req validator.SetRequest,
+	resp *validator.SetResponse,
+) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	values := make([]string, 0, len(req.ConfigValue.Elements()))
+	for _, element := range req.ConfigValue.Elements() {
+		value, ok := element.(types.String)
+		if !ok || value.IsUnknown() {
+			return
+		}
+		text := value.ValueString()
+		if text == "" || strings.ContainsFunc(text, unicode.IsSpace) {
+			resp.Diagnostics.AddAttributeError(
+				req.Path,
+				"Invalid scope",
+				"Each set element must be one nonempty scope without whitespace.",
+			)
+			return
+		}
+		values = append(values, text)
+	}
+	if !rauthy.AuthProviderScopePattern().MatchString(strings.Join(values, " ")) {
+		resp.Diagnostics.AddAttributeError(req.Path, "Invalid scopes", v.Description(ctx))
+	}
 }
 
 // PamGroupType validates a PAM group's `typ` against Rauthy's PamGroupType
@@ -437,14 +356,7 @@ func PamHostIPSet() validator.Set {
 // crate reads as a literal range end rather than as an escape.
 var apiKeyName = regexp.MustCompile(`^[a-zA-Z0-9_\-/]{2,24}$`)
 
-// Enumerations of AccessGroup and AccessRights.
-//
-// `ApiKeys` exists only from Rauthy 0.36 onwards; the rest go further back.
-// Rauthy rejects an unknown group in serde, before its own validation runs, so
-// the server-side error is a bare deserialize message naming no attribute —
-// exactly the case these validators exist to improve on.
-//
-//nolint:gochecknoglobals // transcribed upstream enumerations, read-only
+//nolint:gochecknoglobals // Constraints not exported by rauthy-go.
 var (
 	accessGroups = []string{
 		"Blacklist", "Clients", "Events", "Generic", "Groups", "Roles", "Secrets",
@@ -507,7 +419,7 @@ func (v ipAddressValidator) ValidateString(
 	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
 		return
 	}
-	if _, err := netip.ParseAddr(req.ConfigValue.ValueString()); err != nil {
+	if !rauthy.ValidIPAddress(req.ConfigValue.ValueString()) {
 		resp.Diagnostics.AddAttributeError(
 			req.Path,
 			"Invalid IP address",

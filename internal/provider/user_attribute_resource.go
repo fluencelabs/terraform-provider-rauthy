@@ -86,7 +86,7 @@ func (r *userAttributeResource) Schema(
 			"desc": schema.StringAttribute{
 				Optional: true,
 				MarkdownDescription: "Description of the attribute, shown in the Admin UI. Rauthy validates " +
-					"it against `^[a-zA-Z0-9-_/]{0,128}$`, which notably excludes spaces.",
+					"it against `" + rauthy.AttributeDescriptionPattern().String() + "`.",
 				Validators: []validator.String{validators.UserAttrDesc()},
 			},
 			"default_value": schema.StringAttribute{

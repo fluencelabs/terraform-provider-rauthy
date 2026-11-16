@@ -38,7 +38,7 @@ data "rauthy_client" "billing" {
 
 ### Read-Only
 
-- `access_token_alg` (String) Signing algorithm for access tokens: `RS256`, `RS384`, `RS512` or `EdDSA`.
+- `access_token_alg` (String) Signing algorithm for access tokens: `RS256`, `RS384`, `RS512`, `EdDSA`, `Ed25519`.
 - `access_token_lifetime` (Number) Lifetime of an access token in seconds.
 - `allowed_origins` (Set of String) Additional CORS origins, as `scheme://host[:port]` with no path.
 - `auth_code_lifetime` (Number) Lifetime of an authorization code in seconds.
@@ -49,9 +49,9 @@ data "rauthy_client" "billing" {
 - `contacts` (Set of String) Contact addresses for the application's maintainers.
 - `default_scopes` (Set of String) Scopes granted even when the client does not ask for them.
 - `enabled` (Boolean) Whether the client may be used to log in.
-- `flows_enabled` (Set of String) Enabled OAuth 2.0 flows: `authorization_code`, `client_credentials`, `urn:ietf:params:oauth:grant-type:device_code`, `password`, `refresh_token`.
+- `flows_enabled` (Set of String) Enabled OAuth 2.0 flows: `authorization_code`, `client_credentials`, `urn:ietf:params:oauth:grant-type:device_code`, `urn:ietf:params:oauth:grant-type:token-exchange`, `password`, `refresh_token`.
 - `force_mfa` (Boolean) Whether MFA is required for users logging in through this client.
-- `id_token_alg` (String) Signing algorithm for id tokens: `RS256`, `RS384`, `RS512` or `EdDSA`.
+- `id_token_alg` (String) Signing algorithm for id tokens: `RS256`, `RS384`, `RS512`, `EdDSA`, `Ed25519`.
 - `name` (String) Human-readable name, shown on the login page.
 - `post_logout_redirect_uris` (Set of String) Allowed redirect URIs after a logout.
 - `redirect_uris` (Set of String) Allowed redirect URIs.

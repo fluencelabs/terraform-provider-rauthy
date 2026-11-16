@@ -3,6 +3,9 @@ package provider
 import (
 	"context"
 	"maps"
+	"strings"
+
+	rauthy "github.com/fluencelabs/rauthy-go"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -139,8 +142,7 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			MarkdownDescription: "Enabled OAuth 2.0 flows: `authorization_code`, `client_credentials`, " +
-				"`urn:ietf:params:oauth:grant-type:device_code`, `password`, `refresh_token`." +
+			MarkdownDescription: "Enabled OAuth 2.0 flows: `" + strings.Join(rauthy.GrantTypes(), "`, `") + "`." +
 				optionalComputedNote,
 			Validators: validators.FlowsEnabledSet(),
 			PlanModifiers: []planmodifier.Set{
@@ -148,19 +150,25 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 			},
 		},
 		"access_token_alg": schema.StringAttribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Signing algorithm for access tokens: `RS256`, `RS384`, `RS512` or `EdDSA`." + optionalComputedNote,
-			Validators:          []validator.String{validators.SigningAlg()},
+			Optional: true,
+			Computed: true,
+			MarkdownDescription: "Signing algorithm for access tokens: `" + strings.Join(
+				rauthy.SigningAlgs(),
+				"`, `",
+			) + "`." + optionalComputedNote,
+			Validators: []validator.String{validators.SigningAlg()},
 			PlanModifiers: []planmodifier.String{
 				stringplanmodifier.UseStateForUnknown(),
 			},
 		},
 		"id_token_alg": schema.StringAttribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Signing algorithm for id tokens: `RS256`, `RS384`, `RS512` or `EdDSA`." + optionalComputedNote,
-			Validators:          []validator.String{validators.SigningAlg()},
+			Optional: true,
+			Computed: true,
+			MarkdownDescription: "Signing algorithm for id tokens: `" + strings.Join(
+				rauthy.SigningAlgs(),
+				"`, `",
+			) + "`." + optionalComputedNote,
+			Validators: []validator.String{validators.SigningAlg()},
 			PlanModifiers: []planmodifier.String{
 				stringplanmodifier.UseStateForUnknown(),
 			},
@@ -207,7 +215,10 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			MarkdownDescription: "Accepted PKCE challenge methods: `plain`, `S256`. Rauthy requires " +
+			MarkdownDescription: "Accepted PKCE challenge methods: `" + strings.Join(
+				rauthy.ChallengeMethods(),
+				"`, `",
+			) + "`. Rauthy requires " +
 				"`S256` from public clients regardless of this setting." + optionalComputedNote,
 			Validators: validators.ChallengeSet(),
 			PlanModifiers: []planmodifier.Set{
