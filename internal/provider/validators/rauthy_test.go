@@ -89,6 +89,7 @@ func TestClientName(t *testing.T) {
 	checkString(t, "ClientName", validators.ClientName(),
 		[]string{
 			"Example App",
+			"Приложение",     // Accepted by Rauthy 0.37.2.
 			"Anwendung Über", // Latin-1 supplement, inside À-ɏ
 			"アプリ",            // katakana, explicitly allowed upstream
 			"App-2",
@@ -97,9 +98,6 @@ func TestClientName(t *testing.T) {
 			"a",             // shorter than 2
 			"app@example",   // '@' is not in the class
 			"app/dashboard", // '/' is not in the class
-			// Rauthy's RE_CLIENT_NAME covers Latin (À-ɏ) and CJK but not
-			// Cyrillic or Greek, so those names are rejected upstream too.
-			"Приложение",
 		},
 	)
 }

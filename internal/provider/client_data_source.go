@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -130,18 +131,23 @@ func clientDataSourceCoreAttributes() map[string]schema.Attribute {
 			MarkdownDescription: "Additional CORS origins, as `scheme://host[:port]` with no path.",
 		},
 		"flows_enabled": schema.SetAttribute{
-			Computed:    true,
-			ElementType: types.StringType,
-			MarkdownDescription: "Enabled OAuth 2.0 flows: `authorization_code`, `client_credentials`, " +
-				"`urn:ietf:params:oauth:grant-type:device_code`, `password`, `refresh_token`.",
+			Computed:            true,
+			ElementType:         types.StringType,
+			MarkdownDescription: "Enabled OAuth 2.0 flows: `" + strings.Join(rauthy.GrantTypes(), "`, `") + "`.",
 		},
 		"access_token_alg": schema.StringAttribute{
-			Computed:            true,
-			MarkdownDescription: "Signing algorithm for access tokens: `RS256`, `RS384`, `RS512` or `EdDSA`.",
+			Computed: true,
+			MarkdownDescription: "Signing algorithm for access tokens: `" + strings.Join(
+				rauthy.SigningAlgs(),
+				"`, `",
+			) + "`.",
 		},
 		"id_token_alg": schema.StringAttribute{
-			Computed:            true,
-			MarkdownDescription: "Signing algorithm for id tokens: `RS256`, `RS384`, `RS512` or `EdDSA`.",
+			Computed: true,
+			MarkdownDescription: "Signing algorithm for id tokens: `" + strings.Join(
+				rauthy.SigningAlgs(),
+				"`, `",
+			) + "`.",
 		},
 		"auth_code_lifetime": schema.Int64Attribute{
 			Computed:            true,
@@ -164,7 +170,10 @@ func clientDataSourceCoreAttributes() map[string]schema.Attribute {
 		"challenges": schema.SetAttribute{
 			Computed:    true,
 			ElementType: types.StringType,
-			MarkdownDescription: "Accepted PKCE challenge methods: `plain`, `S256`. Rauthy requires " +
+			MarkdownDescription: "Accepted PKCE challenge methods: `" + strings.Join(
+				rauthy.ChallengeMethods(),
+				"`, `",
+			) + "`. Rauthy requires " +
 				"`S256` from public clients regardless of this setting.",
 		},
 		"force_mfa": schema.BoolAttribute{

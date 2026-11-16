@@ -1,0 +1,578 @@
+[
+  {
+    "id": "L1-G1#0",
+    "resource": "client",
+    "field": "name",
+    "value": "My App (prod)",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "L1-G1#1",
+    "resource": "client",
+    "field": "contacts",
+    "value": "mailto:ops@example.com",
+    "validator": "Contact",
+    "expected": true
+  },
+  {
+    "id": "L1-G1#2",
+    "resource": "client",
+    "field": "flows_enabled",
+    "value": "urn:ietf:params:oauth:grant-type:token-exchange",
+    "validator": "GrantTypes",
+    "expected": true
+  },
+  {
+    "id": "L1-G1#3",
+    "resource": "client",
+    "field": "access_token_alg",
+    "value": "Ed25519",
+    "validator": "SigningAlgs",
+    "expected": true
+  },
+  {
+    "id": "L1-G1#6",
+    "resource": "client",
+    "field": "allowed_origins",
+    "value": "tauri://localhost",
+    "validator": "Origin",
+    "expected": true
+  },
+  {
+    "id": "L1-G2#0",
+    "resource": "client",
+    "field": "flows_enabled",
+    "value": "urn:ietf:params:oauth:grant-type:token-exchange",
+    "validator": "GrantTypes",
+    "expected": true
+  },
+  {
+    "id": "L1-G2#1",
+    "resource": "client",
+    "field": "name",
+    "value": "Панель",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "L1-G2#2",
+    "resource": "client",
+    "field": "contacts",
+    "value": "mailto:ops@example.com",
+    "validator": "Contact",
+    "expected": true
+  },
+  {
+    "id": "L1-G3#2",
+    "resource": "user",
+    "field": "given_name",
+    "value": "太郎",
+    "validator": "UserName",
+    "expected": true
+  },
+  {
+    "id": "L1-G3#3",
+    "resource": "provider",
+    "field": "name",
+    "value": "Company (SSO)",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "L1-G3#4",
+    "resource": "attribute",
+    "field": "desc",
+    "value": "Department name",
+    "validator": "AttributeDescription",
+    "expected": true
+  },
+  {
+    "id": "L1-G3#5",
+    "resource": "provider",
+    "field": "client_id",
+    "value": "service@example.com",
+    "validator": "URI",
+    "expected": true
+  },
+  {
+    "id": "L1-G3#6",
+    "resource": "provider",
+    "field": "scope",
+    "value": "openid read.profile",
+    "validator": "AuthProviderScope",
+    "expected": true
+  },
+  {
+    "id": "L1-G3#9",
+    "resource": "user",
+    "field": "language",
+    "value": "ja",
+    "validator": "Languages",
+    "expected": true
+  },
+  {
+    "id": "L1-G4#1",
+    "resource": "blacklist",
+    "field": "ip",
+    "value": "fe80::1%eth0",
+    "validator": "IPAddress",
+    "expected": false
+  },
+  {
+    "id": "L1-G5#1",
+    "resource": "provider",
+    "field": "name",
+    "value": "ログイン",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "L1-G5#2",
+    "resource": "user",
+    "field": "given_name",
+    "value": "山田",
+    "validator": "UserName",
+    "expected": true
+  },
+  {
+    "id": "L1-G5#3",
+    "resource": "user",
+    "field": "language",
+    "value": "nl",
+    "validator": "Languages",
+    "expected": true
+  },
+  {
+    "id": "L1-G5#4",
+    "resource": "attribute",
+    "field": "desc",
+    "value": "Employee number",
+    "validator": "AttributeDescription",
+    "expected": true
+  },
+  {
+    "id": "L1-G5#5",
+    "resource": "provider",
+    "field": "scope",
+    "value": "https://www.googleapis.com/auth/userinfo.email",
+    "validator": "AuthProviderScope",
+    "expected": true
+  },
+  {
+    "id": "L1-G5#6",
+    "resource": "provider",
+    "field": "client_id",
+    "value": "service@example.com",
+    "validator": "URI",
+    "expected": true
+  },
+  {
+    "id": "L1-G5#7",
+    "resource": "client",
+    "field": "contacts",
+    "value": "mailto:ops@example.com",
+    "validator": "Contact",
+    "expected": true
+  },
+  {
+    "id": "L1-G5#8",
+    "resource": "client",
+    "field": "allowed_origins",
+    "value": "tauri://localhost",
+    "validator": "Origin",
+    "expected": true
+  },
+  {
+    "id": "L1-G5#9",
+    "resource": "client",
+    "field": "flows_enabled",
+    "value": "urn:ietf:params:oauth:grant-type:token-exchange",
+    "validator": "GrantTypes",
+    "expected": true
+  },
+  {
+    "id": "L1-G7#0",
+    "resource": "client",
+    "field": "name",
+    "value": "Console (stage)",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "L1-G7#1",
+    "resource": "client",
+    "field": "contacts",
+    "value": "https://example.com",
+    "validator": "Contact",
+    "expected": true
+  },
+  {
+    "id": "L1-G7#2",
+    "resource": "client",
+    "field": "flows_enabled",
+    "value": "urn:ietf:params:oauth:grant-type:token-exchange",
+    "validator": "GrantTypes",
+    "expected": true
+  },
+  {
+    "id": "L1-G7#3",
+    "resource": "client",
+    "field": "redirect_uris",
+    "value": "https://example.com/#/callback",
+    "validator": "URI",
+    "expected": true
+  },
+  {
+    "id": "2:L1-G3#0",
+    "resource": "profile",
+    "field": "tz",
+    "value": "GMT0",
+    "validator": "Timezone",
+    "expected": true
+  },
+  {
+    "id": "2:L1-G3#1",
+    "resource": "group",
+    "field": "group",
+    "value": "Engineering Team",
+    "validator": "Group",
+    "expected": true
+  },
+  {
+    "id": "2:L1-G5#0",
+    "resource": "profile",
+    "field": "tz",
+    "value": "EST5EDT",
+    "validator": "Timezone",
+    "expected": true
+  },
+  {
+    "id": "name-'Приложение'",
+    "resource": "client",
+    "field": "name",
+    "value": "Приложение",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "name-'app.prod'",
+    "resource": "client",
+    "field": "name",
+    "value": "app.prod",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "name-'App v1.2_beta'",
+    "resource": "client",
+    "field": "name",
+    "value": "App v1.2_beta",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "name-'App\\xa0Name'",
+    "resource": "client",
+    "field": "name",
+    "value": "App Name",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "name-'App\\nName'",
+    "resource": "client",
+    "field": "name",
+    "value": "App\nName",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "name-'App\\x85Name'",
+    "resource": "client",
+    "field": "name",
+    "value": "AppName",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "name-'App\\u2028Name'",
+    "resource": "client",
+    "field": "name",
+    "value": "App Name",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "name-'App × Name'",
+    "resource": "client",
+    "field": "name",
+    "value": "App × Name",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "name-'école'",
+    "resource": "client",
+    "field": "name",
+    "value": "école",
+    "validator": "ClientName",
+    "expected": true
+  },
+  {
+    "id": "language-es",
+    "resource": "user",
+    "field": "language",
+    "value": "es",
+    "validator": "Languages",
+    "expected": true
+  },
+  {
+    "id": "language-pt",
+    "resource": "user",
+    "field": "language",
+    "value": "pt",
+    "validator": "Languages",
+    "expected": true
+  },
+  {
+    "id": "redirect-https://example.com/a,b",
+    "resource": "client",
+    "field": "redirect_uris",
+    "value": "https://example.com/a,b",
+    "validator": "URI",
+    "expected": true
+  },
+  {
+    "id": "redirect-/cb",
+    "resource": "client",
+    "field": "redirect_uris",
+    "value": "/cb",
+    "validator": "URI",
+    "expected": true
+  },
+  {
+    "id": "redirect-https://",
+    "resource": "client",
+    "field": "redirect_uris",
+    "value": "https://",
+    "validator": "URI",
+    "expected": true
+  },
+  {
+    "id": "redirect-https://example.com/cb?x=1",
+    "resource": "client",
+    "field": "redirect_uris",
+    "value": "https://example.com/cb?x=1",
+    "validator": "URI",
+    "expected": true
+  },
+  {
+    "id": "redirect-tauri://localhost/callback",
+    "resource": "client",
+    "field": "redirect_uris",
+    "value": "tauri://localhost/callback",
+    "validator": "URI",
+    "expected": true
+  },
+  {
+    "id": "profile-city-'New\\xa0York'",
+    "resource": "profile",
+    "field": "city",
+    "value": "New York",
+    "validator": "City",
+    "expected": true
+  },
+  {
+    "id": "profile-street-'Main\\xa0Street'",
+    "resource": "profile",
+    "field": "street",
+    "value": "Main Street",
+    "validator": "Street",
+    "expected": true
+  },
+  {
+    "id": "profile-city-'New\\nYork'",
+    "resource": "profile",
+    "field": "city",
+    "value": "New\nYork",
+    "validator": "City",
+    "expected": true
+  },
+  {
+    "id": "profile-tz-'GB-Eire'",
+    "resource": "profile",
+    "field": "tz",
+    "value": "GB-Eire",
+    "validator": "Timezone",
+    "expected": true
+  },
+  {
+    "id": "profile-tz-'W-SU'",
+    "resource": "profile",
+    "field": "tz",
+    "value": "W-SU",
+    "validator": "Timezone",
+    "expected": true
+  },
+  {
+    "id": "negative-ClientName",
+    "resource": "client",
+    "field": "name",
+    "value": "😉",
+    "validator": "ClientName",
+    "expected": false
+  },
+  {
+    "id": "negative-ClientName-x",
+    "resource": "client",
+    "field": "name",
+    "value": "x",
+    "validator": "ClientName",
+    "expected": false
+  },
+  {
+    "id": "negative-GrantTypes",
+    "resource": "client",
+    "field": "flows_enabled",
+    "value": "invalid",
+    "validator": "GrantTypes",
+    "expected": false
+  },
+  {
+    "id": "negative-SigningAlgs",
+    "resource": "client",
+    "field": "access_token_alg",
+    "value": "HS256",
+    "validator": "SigningAlgs",
+    "expected": false
+  },
+  {
+    "id": "negative-Contact",
+    "resource": "client",
+    "field": "contacts",
+    "value": "ops@example.com<script>",
+    "validator": "Contact",
+    "expected": false
+  },
+  {
+    "id": "negative-Languages",
+    "resource": "user",
+    "field": "language",
+    "value": "xx",
+    "validator": "Languages",
+    "expected": false
+  },
+  {
+    "id": "negative-UserName",
+    "resource": "user",
+    "field": "given_name",
+    "value": "😉",
+    "validator": "UserName",
+    "expected": false
+  },
+  {
+    "id": "negative-AuthProviderScope",
+    "resource": "provider",
+    "field": "scope",
+    "value": "openid #bad",
+    "validator": "AuthProviderScope",
+    "expected": false
+  },
+  {
+    "id": "negative-URI",
+    "resource": "provider",
+    "field": "client_id",
+    "value": "bad value",
+    "validator": "URI",
+    "expected": false
+  },
+  {
+    "id": "negative-AttributeDescription",
+    "resource": "attribute",
+    "field": "desc",
+    "value": "<script>",
+    "validator": "AttributeDescription",
+    "expected": false
+  },
+  {
+    "id": "negative-Group",
+    "resource": "group",
+    "field": "group",
+    "value": "<bad>",
+    "validator": "Group",
+    "expected": false
+  },
+  {
+    "id": "negative-City",
+    "resource": "profile",
+    "field": "city",
+    "value": "<bad>",
+    "validator": "City",
+    "expected": false
+  },
+  {
+    "id": "negative-Street",
+    "resource": "profile",
+    "field": "street",
+    "value": "<bad>",
+    "validator": "Street",
+    "expected": false
+  },
+  {
+    "id": "negative-IPAddress",
+    "resource": "blacklist",
+    "field": "ip",
+    "value": "999.0.0.1",
+    "validator": "IPAddress",
+    "expected": false
+  },
+  {
+    "id": "negative-Origin",
+    "resource": "client",
+    "field": "allowed_origins",
+    "value": "https://example.com/path",
+    "validator": "Origin",
+    "expected": false
+  },
+  {
+    "id": "positive-ip",
+    "resource": "blacklist",
+    "field": "ip",
+    "value": "2001:db8::2",
+    "validator": "IPAddress",
+    "expected": true
+  },
+  {
+    "id": "positive-scope",
+    "resource": "scope",
+    "field": "scope",
+    "value": "read.profile",
+    "validator": "Scope",
+    "expected": true
+  },
+  {
+    "id": "negative-scope",
+    "resource": "scope",
+    "field": "scope",
+    "value": "bad#scope",
+    "validator": "Scope",
+    "expected": false
+  },
+  {
+    "id": "negative-timezone",
+    "resource": "profile",
+    "field": "tz",
+    "value": "bad zone",
+    "validator": "Timezone",
+    "expected": false
+  },
+  {
+    "id": "negative-mixed-version-name",
+    "resource": "client",
+    "field": "name",
+    "value": "Панель\nName",
+    "validator": "ClientName",
+    "expected": false
+  }
+]
