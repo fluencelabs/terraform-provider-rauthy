@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -55,6 +56,11 @@ func TestAPIKeyAccess_RoundTrips(t *testing.T) {
 		if !ok {
 			t.Errorf("group %s lost in the round trip", w.Group)
 			continue
+		}
+		slices.Sort(rights)
+		slices.Sort(w.AccessRights)
+		if !slices.Equal(rights, w.AccessRights) {
+			t.Errorf("group %s: rights = %v, want %v", w.Group, rights, w.AccessRights)
 		}
 		if len(rights) != len(w.AccessRights) {
 			t.Errorf("group %s: rights = %v, want %v", w.Group, rights, w.AccessRights)
