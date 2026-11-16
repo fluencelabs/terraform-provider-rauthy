@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -84,6 +85,9 @@ func TestApplyResponse_RoundTripsEveryField(t *testing.T) {
 	if m.AuthCodeLifetime.ValueInt64() != 60 || m.AccessTokenLifetime.ValueInt64() != 600 {
 		t.Errorf("lifetimes swapped: auth_code=%v access_token=%v", m.AuthCodeLifetime, m.AccessTokenLifetime)
 	}
+	if !m.RedirectURIs.Equal(stringsToSet(fullResponse().RedirectURIs)) {
+		t.Errorf("redirect URIs = %v", m.RedirectURIs)
+	}
 	if m.Scim == nil || m.Scim.BaseURI.ValueString() != "https://app.example.com/scim/v2" {
 		t.Errorf("scim lost: %+v", m.Scim)
 	}
@@ -103,6 +107,18 @@ func TestBuildUpdateRequest_RoundTripsEveryField(t *testing.T) {
 		t.Fatalf("buildUpdateRequest: %v", diags)
 	}
 	orig := fullResponse()
+	for name, pair := range map[string][2][]string{
+		"redirect URIs":  {req.RedirectURIs, orig.RedirectURIs},
+		"flows":          {req.FlowsEnabled, orig.FlowsEnabled},
+		"scopes":         {req.Scopes, orig.Scopes},
+		"default scopes": {req.DefaultScopes, orig.DefaultScopes},
+	} {
+		slices.Sort(pair[0])
+		slices.Sort(pair[1])
+		if !slices.Equal(pair[0], pair[1]) {
+			t.Errorf("%s = %v, want %v", name, pair[0], pair[1])
+		}
+	}
 	if req.ID != orig.ID || *req.Name != *orig.Name || req.Confidential != orig.Confidential {
 		t.Errorf("identity lost on round trip: %+v", req)
 	}
@@ -199,6 +215,10 @@ func TestFillUnknownFromResponse_AdoptsServerDefaults(t *testing.T) {
 		t.Fatalf("buildUpdateRequest: %v", diags)
 	}
 
+	if req.AuthCodeLifetime != fullResponse().AuthCodeLifetime ||
+		req.AccessTokenLifetime != fullResponse().AccessTokenLifetime {
+		t.Errorf("lifetimes = %d/%d, want server defaults", req.AuthCodeLifetime, req.AccessTokenLifetime)
+	}
 	// Rauthy rejects a PUT that omits these, so none of them may still be zero.
 	if req.AccessTokenAlg == "" || req.IDTokenAlg == "" {
 		t.Errorf("algorithms unresolved: %+v", req)
@@ -303,6 +323,12 @@ func TestSetConversionsRoundTrip(t *testing.T) {
 	}
 	if len(got) != len(in) {
 		t.Fatalf("round trip lost elements: %v -> %v", in, got)
+	}
+
+	slices.Sort(got)
+	slices.Sort(in)
+	if !slices.Equal(got, in) {
+		t.Errorf("round trip = %v, want %v", got, in)
 	}
 
 	if v := setToStrings(context.Background(), types.SetNull(types.StringType), &diags); v != nil {

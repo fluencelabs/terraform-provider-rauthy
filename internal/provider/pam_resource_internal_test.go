@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -100,6 +101,10 @@ func TestPamUserUpdateBody_UnsetPlanResendsCurrent(t *testing.T) {
 	if body.HomeDir == nil || *body.HomeDir != "/home/alice" {
 		t.Errorf("home_dir = %v", body.HomeDir)
 	}
+	want := []rauthy.PamGroupUserLink{current.Groups[1], current.Groups[0]}
+	if !slices.Equal(body.Groups, want) {
+		t.Errorf("groups = %+v, want %+v", body.Groups, want)
+	}
 	if len(body.Groups) != 2 || body.Groups[0].GID != 100003 {
 		t.Errorf("groups = %+v, want the current set sorted by gid", body.Groups)
 	}
@@ -164,6 +169,14 @@ func TestPamUserNeedsUpdate(t *testing.T) {
 			},
 			want: true,
 		},
+		"home directory only": {
+			model: pamUserResourceModel{
+				Shell:   types.StringUnknown(),
+				HomeDir: types.StringValue("/srv/alice"),
+				Groups:  unknownSet,
+			},
+			want: true,
+		},
 		"groups set": {
 			model: pamUserResourceModel{
 				Shell: types.StringNull(), HomeDir: types.StringNull(), Groups: groupSet(t),
@@ -210,6 +223,9 @@ func TestPamHostUpdateBody_FallsBackToCurrentAndSorts(t *testing.T) {
 	}
 	if len(body.Aliases) != 2 || body.Aliases[0] != "alpha" {
 		t.Errorf("aliases = %v, want the planned set sorted", body.Aliases)
+	}
+	if !body.ForceMfa || body.LocalPasswordOnly {
+		t.Errorf("host flags = %+v", body)
 	}
 	if body.Notes != nil {
 		t.Errorf("notes = %v, want nil so the server clears it", body.Notes)
