@@ -9,6 +9,10 @@
 # Pass --github-env to print `KEY=value` instead of `export KEY='value'`, the
 # form GitHub Actions expects when appending to $GITHUB_ENV.
 #
+# Only Rauthy 0.36 and later boot with this script. The seeded key below grants
+# the `AuthProviders` and `ApiKeys` access groups, which 0.35 does not have, and
+# 0.35 panics while bootstrapping the key instead of starting.
+#
 # The API key is seeded at first start through Rauthy's bootstrap: the secret is
 # pinned here rather than generated, so the caller knows the credential before
 # the container exists and never has to scrape it out of the logs.

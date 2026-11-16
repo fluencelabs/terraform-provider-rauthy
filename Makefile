@@ -2,7 +2,9 @@
 
 # Rauthy version the provider tracks and the acceptance tests boot. Bump it
 # together with the github.com/fluencelabs/rauthy-go release that tracks the
-# same version.
+# same version. Overriding it with anything older than 0.36 does not work: the
+# minimum supported Rauthy is stated in templates/index.md.tmpl and README.md,
+# and scripts/rauthy-up.sh cannot boot 0.35.
 RAUTHY_VERSION ?= 0.36.2
 
 build:
