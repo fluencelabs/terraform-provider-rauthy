@@ -17,16 +17,13 @@ import (
 )
 
 var (
-	// Attribute names in a scope's attr_include_* mapping.
-	userAttrName = regexp.MustCompile(`^[a-zA-Z0-9-_/]{2,128}$`)
-	// The name of a user attribute *definition*. Same character class as the
-	// mapping above but a tighter length bound: Rauthy accepts a 128-character
-	// name in a scope's mapping while refusing to define one longer than 32,
-	// so an over-long name is rejected at the point where it is created.
-	userAttrConfigName = regexp.MustCompile(`^[a-zA-Z0-9-_/]{2,32}$`)
-	birthdate          = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
-	phone              = regexp.MustCompile(`^\+[0-9]{0,32}$`)
-	zip                = regexp.MustCompile(`^[a-zA-Z0-9]{0,24}$`)
+	// RE_ATTR: the name of a user attribute, both where it is defined and in a
+	// scope's attr_include_* mapping. The mapping's error text names {2,128},
+	// but the pattern it checks is this one.
+	userAttrName = regexp.MustCompile(`^[a-zA-Z0-9-_/]{2,32}$`)
+	birthdate    = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
+	phone        = regexp.MustCompile(`^\+[0-9]{0,32}$`)
+	zip          = regexp.MustCompile(`^[a-zA-Z0-9]{1,24}$`)
 	// A PAM host's hostname and each of its aliases. This one Rauthy does
 	// publish, in the field descriptions of PamHostCreateRequest and
 	// PamHostUpdateRequest.
@@ -181,12 +178,12 @@ func ScopeName() validator.String {
 // the form accepted in a scope's attr_include_access and attr_include_id.
 func UserAttrNameSet() validator.Set {
 	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(userAttrName,
-		`must match ^[a-zA-Z0-9-_/]{2,128}$`))
+		`must match ^[a-zA-Z0-9-_/]{2,32}$`))
 }
 
 // UserAttrConfigName validates the name of a user attribute definition.
 func UserAttrConfigName() validator.String {
-	return stringvalidator.RegexMatches(userAttrConfigName,
+	return stringvalidator.RegexMatches(userAttrName,
 		`must match ^[a-zA-Z0-9-_/]{2,32}$`)
 }
 
@@ -230,7 +227,7 @@ func Phone() validator.String {
 
 // Zip validates a user's postal code.
 func Zip() validator.String {
-	return stringvalidator.RegexMatches(zip, "must be at most 24 letters or digits")
+	return stringvalidator.RegexMatches(zip, "must be 1 to 24 letters or digits; omit it to clear the zip")
 }
 
 // Street validates a user's street.

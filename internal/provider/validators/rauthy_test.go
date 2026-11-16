@@ -2,6 +2,7 @@ package validators_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -317,4 +318,25 @@ func TestBlacklistExp(t *testing.T) {
 	if !req(4102444800) {
 		t.Error("BlacklistExp rejected a far-future timestamp")
 	}
+}
+
+// RE_ATTR bounds a user attribute name to 32 characters wherever it appears,
+// and RE_ALNUM refuses an empty zip (src/common/src/regex.rs, both versions).
+func TestUserAttrNameAndZip(t *testing.T) {
+	t.Parallel()
+	name32, name33 := strings.Repeat("a", 32), strings.Repeat("a", 33)
+	if !acceptsSet([]validator.Set{validators.UserAttrNameSet()}, name32) {
+		t.Errorf("UserAttrNameSet rejected a 32-character name")
+	}
+	if acceptsSet([]validator.Set{validators.UserAttrNameSet()}, name33) {
+		t.Errorf("UserAttrNameSet accepted a 33-character name")
+	}
+	checkString(t, "UserAttrConfigName", validators.UserAttrConfigName(), []string{"ab", name32}, []string{"a", name33})
+	checkString(
+		t,
+		"Zip",
+		validators.Zip(),
+		[]string{"1", "SW1A1AA", strings.Repeat("9", 24)},
+		[]string{"", strings.Repeat("9", 25), "12 34"},
+	)
 }
