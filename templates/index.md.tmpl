@@ -19,6 +19,40 @@ bootstrap file.
 `rauthy_auth_provider.client_secret_wo` — are write-only, a feature Terraform gained in 1.11.
 Against an older version they are not merely ignored: the configuration fails to parse.
 
+**Rauthy 0.36.2 or later.** The provider is built against Rauthy 0.36.2, and its acceptance suite
+must pass against that release. CI also runs the suite against Rauthy's newest image, as an early
+warning that is allowed to fail.
+
+### Rauthy 0.35
+
+Rauthy 0.35 is not supported. The acceptance suite was run once against 0.35.2. Part of the provider
+works there and part does not. No other 0.35 release was tried, and 0.34 and earlier are untested.
+
+Rauthy 0.35 answers `200` to a setting it does not know and then drops it. The provider gets no
+error, so most of these failures do not show up during the apply. They show up as a diff on the
+next plan, or as a value that never reached the server.
+
+What does not work on 0.35.2:
+
+| What                                         | What happens                                                                                     |
+|----------------------------------------------|--------------------------------------------------------------------------------------------------|
+| `rauthy_api_key`                             | `HTTP 401: No valid session` — 0.35 has no `ApiKeys` access group, so no API key can manage API keys |
+| `rauthy_auth_provider` and its data source   | `HTTP 401: No valid session` on `/providers` — 0.35 has no `AuthProviders` access group            |
+| `rauthy_client_favicon`                      | `PUT /clients/{id}/favicon` answers `404`                                                        |
+| `rauthy_scope.claims_at_root`                | not stored; it reads back as `false` and the next plan sets it again                             |
+| `rauthy_pam_user.home_dir`                   | reads back empty                                                                                 |
+| client settings `rauthy_client` leaves alone | `allowed_resources`, `default_aud`, `claims` and `claims_at_root` are not stored at all          |
+
+Because the PAM test stopped at `home_dir`, updates and import of `rauthy_pam_user` and
+`rauthy_pam_host` were never reached on 0.35.2.
+
+What passed on 0.35.2: `rauthy_client` (create, update, secret rotation, public clients) and its
+data source, `rauthy_client_logo`, `rauthy_scope` without `claims_at_root` and its data source,
+`rauthy_role`, `rauthy_group` and their data sources, `rauthy_user` (with roles, groups and
+`password_wo`) and its data source, `rauthy_user_attribute` and its data source,
+`rauthy_blacklist_ip`, `rauthy_password_policy` and `rauthy_pam_group`.
+`rauthy_auth_provider_lookup` is not covered by the acceptance suite on any Rauthy version.
+
 ## Upgrading
 
 From 0.3.x, the provider talks to Rauthy through the
@@ -75,7 +109,8 @@ It needs exactly these access rights:
 A key missing `Secrets:read` fails on every read of a confidential client; the provider names the
 missing right rather than reporting a bare 403.
 
-The provider cannot issue API keys itself. Rauthy's `/api_keys` endpoints require an admin session
-rather than an API key, so the first key is always created by hand.
+The first key is always created by hand. Keys after that can be managed with `rauthy_api_key`, by a
+key that holds the `ApiKeys` access group. That group exists from Rauthy 0.36 on; on 0.35,
+`/api_keys` accepts only an admin session.
 
 {{ .SchemaMarkdown | trimspace }}

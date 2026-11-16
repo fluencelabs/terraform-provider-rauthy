@@ -8,8 +8,16 @@ It exists because a confidential client's secret cannot be set from outside: Rau
 attribute read back from Rauthy, which rules out managing clients with `random_password` and a
 hand-written bootstrap file.
 
-Tracks Rauthy **0.36.2**. Requires **Terraform 1.11 or later** — see [Secrets and
-state](#secrets-and-state) for why.
+Requires **Rauthy 0.36.2 or later** and **Terraform 1.11 or later** — see [Secrets and
+state](#secrets-and-state) for why Terraform 1.11.
+
+The provider is built and acceptance-tested against Rauthy 0.36.2. Rauthy 0.35 is not supported.
+A single run against 0.35.2 showed that `rauthy_api_key`, `rauthy_auth_provider`,
+`rauthy_client_favicon`, `rauthy_scope.claims_at_root` and `rauthy_pam_user.home_dir` do not work
+there. Clients, logos, scopes, roles, groups, users, user attributes, the IP blacklist, the password
+policy and PAM groups did work. 0.35 accepts settings it does not know and drops them without an
+error, so these failures show up as drift rather than as an error. Releases before 0.35.2 are
+untested. The provider documentation lists the details.
 
 ## Installation
 
@@ -108,9 +116,9 @@ gone. Keeping a working upstream credential out of every state file was judged w
 
 - It never writes a secret anywhere. `rauthy_client.secret` is a computed, sensitive attribute;
   wiring it into a secret store is the caller's job in HCL.
-- It does not manage API keys. Rauthy's `/api_keys` endpoints require an **admin session**, not an
-  API key (`principal.validate_admin_session()` in `src/api/src/api_keys.rs`), so a provider
-  authenticated with an API key cannot create them. The bootstrap key is created by hand.
+- It does not create the first API key. The bootstrap key is created by hand. Keys after that can
+  be managed with `rauthy_api_key` by a key that holds the `ApiKeys` access group, which Rauthy
+  added in 0.36; on 0.35 the `/api_keys` endpoints accept only an admin session.
 
 ## Development
 
