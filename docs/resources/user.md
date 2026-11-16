@@ -95,7 +95,7 @@ resource "rauthy_user" "svc" {
 
 It exists because a write-only attribute is invisible to the plan: with no companion value that *is* tracked, Terraform cannot tell an apply carrying a new password from one carrying the old, and skips the update entirely. This is the same mechanism `rauthy_api_key.secret_rotation_trigger` uses.
 
-Any other change to the user re-sends the password too, since Rauthy's user update is a full replacement.
+The password is sent on creation and only when this trigger changes on update. Unrelated updates leave the password unchanged.
 - `password_wo` (String, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Password to set on the account.
 
 This is a **write-only** attribute: Terraform hands it to the provider on the apply that uses it and stores nothing, so the password reaches neither the state file nor a saved plan. Nothing is lost by that here — Rauthy never returns a password either, so the provider could not detect one changed elsewhere in any case, and removing the attribute leaves the last one set rather than clearing it.
@@ -105,7 +105,7 @@ Because nothing is stored, changing the value on its own produces no plan. Chang
 Requires Terraform 1.11 or later. Prefer leaving it unset and letting the user set their own password through Rauthy's reset flow.
 - `roles` (Set of String) Roles granted to the user. Each must already exist.
 - `user_expires` (Number) Unix timestamp in seconds at which the account expires. Omit for an account that does not expire.
-- `user_values` (Attributes) Optional profile values. Omit the block entirely to leave whatever the user set themselves alone; once present, a field left out is cleared. (see [below for nested schema](#nestedatt--user_values))
+- `user_values` (Attributes) Optional profile values. Omit the block entirely to leave whatever the user set themselves alone; once present, a field left out is cleared. When omitted, updates read the current profile and send it back unchanged. A profile saved through the account page between that read and write can still be overwritten. (see [below for nested schema](#nestedatt--user_values))
 
 ### Read-Only
 

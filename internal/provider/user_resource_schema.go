@@ -139,8 +139,8 @@ func userAccessAttributes() map[string]schema.Attribute {
 				"value that *is* tracked, Terraform cannot tell an apply carrying a new password from " +
 				"one carrying the old, and skips the update entirely. This is the same mechanism " +
 				"`rauthy_api_key.secret_rotation_trigger` uses.\n\n" +
-				"Any other change to the user re-sends the password too, since Rauthy's user update " +
-				"is a full replacement.",
+				"The password is sent on creation and only when this trigger changes on update. " +
+				"Unrelated updates leave the password unchanged.",
 		},
 	}
 }
@@ -152,7 +152,9 @@ func userProfileAttributes() map[string]schema.Attribute {
 		"user_values": schema.SingleNestedAttribute{
 			Optional: true,
 			MarkdownDescription: "Optional profile values. Omit the block entirely to leave whatever " +
-				"the user set themselves alone; once present, a field left out is cleared.",
+				"the user set themselves alone; once present, a field left out is cleared. " +
+				"When omitted, updates read the current profile and send it back unchanged. " +
+				"A profile saved through the account page between that read and write can still be overwritten.",
 			Attributes: map[string]schema.Attribute{
 				"birthdate": schema.StringAttribute{
 					Optional:            true,

@@ -278,3 +278,80 @@ func TestAccUser_writeOnlyPasswordReachesRauthy(t *testing.T) {
 		},
 	})
 }
+
+func TestAccUser_preservesUnmanagedProfile(t *testing.T) {
+	factories := acctest.Setup(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckUsersDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccUserConfig("tf-acc-profile@example.com", ""),
+				Check: func(s *terraform.State) error {
+					c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+					if err != nil {
+						return err
+					}
+					u, err := c.GetUser(context.Background(), s.RootModule().Resources["rauthy_user.test"].Primary.ID)
+					if err != nil {
+						return err
+					}
+					city, tz := "London", "Europe/London"
+					_, err = c.UpdateUser(context.Background(), u.ID, rauthy.UpdateUserRequest{
+						Email: u.Email, GivenName: u.GivenName, Enabled: u.Enabled, EmailVerified: u.EmailVerified,
+						Roles: u.Roles, Groups: []string{}, UserValues: &rauthy.UserValues{City: &city, TZ: &tz},
+					})
+					return err
+				},
+			},
+			{
+				Config: testAccUserConfig("tf-acc-profile@example.com", "enabled = false"),
+				Check: func(s *terraform.State) error {
+					c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+					if err != nil {
+						return err
+					}
+					u, err := c.GetUser(context.Background(), s.RootModule().Resources["rauthy_user.test"].Primary.ID)
+					if err != nil {
+						return err
+					}
+					if u.Enabled || u.UserValues.City == nil || *u.UserValues.City != "London" ||
+						u.UserValues.TZ == nil ||
+						*u.UserValues.TZ != "Europe/London" {
+						return fmt.Errorf("unrelated update lost profile: %+v", u.UserValues)
+					}
+					return nil
+				},
+			},
+		},
+	})
+}
+
+func TestAccUser_preservesPasswordHistory(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(enabled bool) string {
+		return testAccUserConfig("tf-acc-history@example.com", fmt.Sprintf(`
+ enabled = %t
+ password_wo = "Synthetic-History-Passw0rd!"
+ password_rotation_trigger = "1"
+ depends_on = [rauthy_password_policy.test]
+`, enabled)) + `
+resource "rauthy_password_policy" "test" {
+ length_min = 14
+ length_max = 128
+ not_recently_used = 3
+}
+`
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckUsersDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: config(true),
+				Check:  resource.TestCheckResourceAttr("rauthy_user.test", "account_type", "password"),
+			},
+			{Config: config(false), Check: resource.TestCheckResourceAttr("rauthy_user.test", "enabled", "false")},
+		},
+	})
+}

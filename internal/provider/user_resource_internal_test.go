@@ -2,7 +2,12 @@ package provider
 
 import (
 	"context"
+	"net/http"
+	"reflect"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -109,5 +114,164 @@ func TestApplyUser_IgnoresUserValuesWhenBlockAbsent(t *testing.T) {
 	applyUser(present, resp)
 	if present.UserValues == nil || present.UserValues.City.ValueString() != "London" {
 		t.Errorf("user_values = %+v, want the city from the response", present.UserValues)
+	}
+}
+
+func TestUserUpdate_PreservesProfileAndControlsPassword(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		before, after types.String
+		password      types.String
+		wantPassword  bool
+	}{
+		{"unchanged", types.StringValue("1"), types.StringValue("1"), types.StringValue("SyntheticPassword!42"), false},
+		{"unset", types.StringNull(), types.StringNull(), types.StringValue("SyntheticPassword!42"), false},
+		{"set", types.StringNull(), types.StringValue("1"), types.StringValue("SyntheticPassword!42"), true},
+		{"changed", types.StringValue("1"), types.StringValue("2"), types.StringValue("SyntheticPassword!42"), true},
+		{"removed", types.StringValue("1"), types.StringNull(), types.StringValue("SyntheticPassword!42"), true},
+		{"absent password", types.StringValue("1"), types.StringValue("2"), types.StringNull(), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkUserUpdate(t, tc.before, tc.after, tc.password, tc.wantPassword)
+		})
+	}
+}
+
+func TestUserUpdate_ReadFailureDoesNotWrite(t *testing.T) {
+	fake, api := newFakeRauthy(t)
+	fake.handle("GET /users/u-1", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) })
+	r := &userResource{api: api}
+	m := userResourceModel{
+		ID:     types.StringValue("u-1"),
+		Roles:  types.SetNull(types.StringType),
+		Groups: types.SetNull(types.StringType),
+	}
+	resp := resource.UpdateResponse{State: emptyState(t, r)}
+	r.Update(
+		context.Background(),
+		resource.UpdateRequest{Plan: resourcePlan(t, r, &m), State: resourceState(t, r, &m)},
+		&resp,
+	)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected read failure")
+	}
+	if len(fake.bodies("PUT /users/u-1")) != 0 {
+		t.Fatal("wrote after failed read")
+	}
+}
+
+func TestUserCreate_SendsPassword(t *testing.T) {
+	fake, api := newFakeRauthy(t)
+	current := &rauthy.UserResponse{ID: "u-1", Email: "ada@example.com", Language: "en"}
+	fake.answer("POST /users", current)
+	fake.answer("PUT /users/u-1", current)
+	r := &userResource{api: api}
+	var plan userResourceModel
+	applyUser(&plan, current)
+	config := plan
+	config.PasswordWO = types.StringValue("SyntheticPassword!42")
+	cp := resourcePlan(t, r, &config)
+	resp := resource.CreateResponse{State: emptyState(t, r)}
+	r.Create(
+		context.Background(),
+		resource.CreateRequest{Plan: resourcePlan(t, r, &plan), Config: tfsdk.Config(cp)},
+		&resp,
+	)
+	if resp.Diagnostics.HasError() {
+		t.Fatal(resp.Diagnostics)
+	}
+	var sent rauthy.UpdateUserRequest
+	fake.lastBody(t, "PUT /users/u-1", &sent)
+	if sent.Password == nil || *sent.Password != config.PasswordWO.ValueString() {
+		t.Fatal("creation password lost")
+	}
+}
+
+func TestUserUpdate_ManagedProfileClearsOmittedFields(t *testing.T) {
+	fake, api := newFakeRauthy(t)
+	city := "Paris"
+	current := &rauthy.UserResponse{
+		ID:         "u-1",
+		Email:      "ada@example.com",
+		Language:   "en",
+		UserValues: rauthy.UserValuesResponse{UserValues: rauthy.UserValues{City: &city}},
+	}
+	fake.answer("PUT /users/u-1", current)
+	r := &userResource{api: api}
+	var plan userResourceModel
+	applyUser(&plan, current)
+	plan.UserValues = &userValuesModel{City: types.StringValue(city)}
+	resp := resource.UpdateResponse{State: emptyState(t, r)}
+	r.Update(
+		context.Background(),
+		resource.UpdateRequest{Plan: resourcePlan(t, r, &plan), State: resourceState(t, r, &plan)},
+		&resp,
+	)
+	if resp.Diagnostics.HasError() {
+		t.Fatal(resp.Diagnostics)
+	}
+	var sent rauthy.UpdateUserRequest
+	fake.lastBody(t, "PUT /users/u-1", &sent)
+	if !reflect.DeepEqual(sent.UserValues, &rauthy.UserValues{City: &city}) {
+		t.Fatalf("managed profile = %+v", sent.UserValues)
+	}
+}
+
+func checkUserUpdate(t *testing.T, before, after, password types.String, wantPassword bool) {
+	t.Helper()
+	city, empty, birth, country, phone, street, zip, tz, username := "London", "", "2000-01-02", "UK", "+44123456789", "Street", "12345", "Europe/London", "ada"
+	for _, values := range []rauthy.UserValues{
+		{Birthdate: &birth, City: &city, Country: &country, Phone: &phone, Street: &street, Zip: &zip, TZ: &tz},
+		{City: &empty, Country: nil},
+	} {
+		current := &rauthy.UserResponse{
+			ID:         "u-1",
+			Email:      "ada@example.com",
+			Language:   "en",
+			UserValues: rauthy.UserValuesResponse{UserValues: values, PreferredUsername: &username},
+		}
+		fake, api := newFakeRauthy(t)
+		fake.answer("GET /users/u-1", current)
+		fake.answer("PUT /users/u-1", current)
+		r := &userResource{api: api}
+		var state userResourceModel
+		applyUser(&state, current)
+		state.PasswordRotationTrigger = before
+		plan := state
+		plan.Enabled = types.BoolValue(false)
+		plan.PasswordRotationTrigger = after
+		config := plan
+		config.PasswordWO = password
+		configPlan := resourcePlan(t, r, &config)
+		resp := resource.UpdateResponse{State: emptyState(t, r)}
+		r.Update(context.Background(), resource.UpdateRequest{
+			Plan: resourcePlan(t, r, &plan), State: resourceState(t, r, &state),
+			Config: tfsdk.Config(configPlan),
+		}, &resp)
+		if resp.Diagnostics.HasError() {
+			t.Fatal(resp.Diagnostics)
+		}
+		var sent rauthy.UpdateUserRequest
+		fake.lastBody(t, "PUT /users/u-1", &sent)
+		if !reflect.DeepEqual(sent.UserValues, &values) {
+			t.Errorf("profile = %+v, want %+v", sent.UserValues, values)
+		}
+		if wantPassword {
+			if sent.Password == nil || *sent.Password != password.ValueString() {
+				t.Errorf("password = %v", sent.Password)
+			}
+		} else if sent.Password != nil {
+			t.Error("unexpected password")
+		}
+		var got userResourceModel
+		if d := resp.State.Get(context.Background(), &got); d.HasError() {
+			t.Fatal(d)
+		}
+		if got.PreferredUsername.ValueString() != username {
+			t.Error("preferred_username lost")
+		}
+		if got.UserValues != nil {
+			t.Error("unmanaged profile entered state")
+		}
 	}
 }
