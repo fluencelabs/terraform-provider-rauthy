@@ -176,7 +176,7 @@ func TestAccPartialRotation(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := &apiKeyResource{api: api}
-	state := apiKeyResourceModel{Secret: types.StringValue(old), SecretRotationTrigger: types.StringValue("1")}
+	state := apiKeyResourceModel{Secret: types.StringValue(old.Reveal()), SecretRotationTrigger: types.StringValue("1")}
 	applyAPIKeyResponse(&state, current)
 	plan := state
 	plan.Secret = types.StringUnknown()

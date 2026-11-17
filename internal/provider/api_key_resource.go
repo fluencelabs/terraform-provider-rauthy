@@ -94,7 +94,7 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		resp.Diagnostics.AddError("Could not create Rauthy API key", err.Error())
 		return
 	}
-	plan.Secret = types.StringValue(secret)
+	plan.Secret = types.StringValue(secret.Reveal())
 	plan.CreatedAt = types.Int64Null()
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 
@@ -185,7 +185,7 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 			)
 			return
 		}
-		plan.Secret = types.StringValue(rotated)
+		plan.Secret = types.StringValue(rotated.Reveal())
 		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	}
 

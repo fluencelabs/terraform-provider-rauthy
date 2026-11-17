@@ -251,7 +251,7 @@ func (r *clientResource) Update(ctx context.Context, req resource.UpdateRequest,
 			)
 			return
 		}
-		plan.Secret = optionalString(rotated.Secret)
+		plan.Secret = optionalSecret(rotated.Secret)
 	} else {
 		r.readSecretInto(ctx, &plan, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
@@ -321,7 +321,7 @@ func (r *clientResource) readSecretInto(ctx context.Context, m *clientResourceMo
 		diags.AddError("Could not read the secret of Rauthy client "+m.ID.ValueString(), err.Error())
 		return
 	}
-	m.Secret = optionalString(got.Secret)
+	m.Secret = optionalSecret(got.Secret)
 }
 
 func stringPtr(v types.String) *string {
@@ -330,6 +330,20 @@ func stringPtr(v types.String) *string {
 	}
 	s := v.ValueString()
 	return &s
+}
+
+func secretPtr(v types.String) *rauthy.Secret {
+	if v.IsNull() || v.IsUnknown() {
+		return nil
+	}
+	return new(rauthy.NewSecret(v.ValueString()))
+}
+
+func optionalSecret(s *rauthy.Secret) types.String {
+	if s == nil {
+		return types.StringNull()
+	}
+	return types.StringValue(s.Reveal())
 }
 
 func int64Ptr(v types.Int64) *int64 {

@@ -47,7 +47,7 @@ func applyResponse(ctx context.Context, m *clientResourceModel, resp *rauthy.Cli
 			baseURI = m.Scim.BaseURI
 		}
 		m.Scim = &scimModel{
-			BearerToken:     types.StringValue(resp.Scim.BearerToken),
+			BearerToken:     types.StringValue(resp.Scim.BearerToken.Reveal()),
 			BaseURI:         baseURI,
 			SyncGroups:      types.BoolValue(resp.Scim.SyncGroups),
 			GroupSyncPrefix: optionalString(resp.Scim.GroupSyncPrefix),
@@ -155,7 +155,7 @@ func buildUpdateRequest(
 
 	if m.Scim != nil {
 		req.Scim = &rauthy.ScimClientRequestResponse{
-			BearerToken:     m.Scim.BearerToken.ValueString(),
+			BearerToken:     rauthy.NewSecret(m.Scim.BearerToken.ValueString()),
 			BaseURI:         m.Scim.BaseURI.ValueString(),
 			SyncGroups:      m.Scim.SyncGroups.ValueBool(),
 			GroupSyncPrefix: stringPtr(m.Scim.GroupSyncPrefix),

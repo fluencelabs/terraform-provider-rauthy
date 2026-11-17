@@ -78,7 +78,7 @@ func buildAuthProviderRequest(
 		// Always resent, never omitted: a PUT without this field erases the
 		// stored secret rather than leaving it alone. The value arrives from
 		// the configuration rather than the model, because it is write-only.
-		ClientSecret:      stringPtr(clientSecret),
+		ClientSecret:      secretPtr(clientSecret),
 		Scope:             joinAuthProviderScopes(ctx, m.Scopes, diags),
 		AdminClaimPath:    stringPtr(m.AdminClaimPath),
 		AdminClaimValue:   stringPtr(m.AdminClaimValue),

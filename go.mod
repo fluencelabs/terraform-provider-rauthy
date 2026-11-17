@@ -3,7 +3,7 @@ module github.com/fluencelabs/terraform-provider-rauthy
 go 1.27.4
 
 require (
-	github.com/fluencelabs/rauthy-go v0.2.0
+	github.com/fluencelabs/rauthy-go v0.3.0
 	github.com/hashicorp/terraform-plugin-docs v0.25.0
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
 	github.com/hashicorp/terraform-plugin-framework-validators v0.19.0

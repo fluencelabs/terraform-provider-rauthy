@@ -296,7 +296,7 @@ func (d *clientDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		config.Scim = nil
 	} else {
 		config.Scim = &scimDataSourceModel{
-			BearerToken:     types.StringValue(got.Scim.BearerToken),
+			BearerToken:     types.StringValue(got.Scim.BearerToken.Reveal()),
 			BaseURI:         types.StringValue(got.Scim.BaseURI),
 			SyncGroups:      types.BoolValue(got.Scim.SyncGroups),
 			GroupSyncPrefix: optionalString(got.Scim.GroupSyncPrefix),
