@@ -1,15 +1,34 @@
 package provider
 
 import (
+	"context"
 	"strings"
-	"sync"
+
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 )
 
 // substringMutationMu keeps substring checks and their destructive writes atomic
 // relative to provider writes that can introduce names into the affected lists.
 // It spans all configured clients in this process. External Rauthy writers are
 // outside this lock.
-var substringMutationMu sync.Mutex //nolint:gochecknoglobals // All resource instances must share this mutation lock.
+var substringMutationMu = make(chan struct{}, 1) //nolint:gochecknoglobals // All resource instances share this lock.
+
+func lockSubstringMutation(ctx context.Context, diags *diag.Diagnostics) bool {
+	select {
+	case substringMutationMu <- struct{}{}:
+		if ctx.Err() == nil {
+			return true
+		}
+		unlockSubstringMutation()
+	case <-ctx.Done():
+	}
+	diags.AddError("Could not acquire Rauthy mutation lock", ctx.Err().Error())
+	return false
+}
+
+func unlockSubstringMutation() {
+	<-substringMutationMu
+}
 
 // Rauthy edits the comma-joined scope lists of clients and role and group
 // assignments of users, and user attribute names in scope mappings by substring. A rename replaces every occurrence of the

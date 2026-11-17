@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -14,6 +15,7 @@ import (
 type attributeGuardCase struct {
 	name, other, failure string
 	missing, wantError   bool
+	status               int
 }
 
 func TestUserAttributeDeletionGuard(t *testing.T) {
@@ -23,7 +25,8 @@ func TestUserAttributeDeletionGuard(t *testing.T) {
 		{name: "interior", other: "xdevx", wantError: true},
 		{name: "exact mapping", other: "dev"},
 		{name: "unrelated", other: "department"},
-		{name: "missing", other: "developer", missing: true},
+		{name: "missing", other: "developer", missing: true, wantError: true},
+		{name: "attribute list 404", failure: "/users/attr", status: http.StatusNotFound, wantError: true},
 		{name: "attribute read error", failure: "/users/attr", wantError: true},
 		{name: "scope read error", failure: "/scopes", wantError: true},
 	} {
@@ -45,15 +48,21 @@ func testUserAttributeDeletionGuard(t *testing.T, tc attributeGuardCase, mapping
 	f.answer("GET /users/attr", map[string]any{"values": attrs})
 	scope := rauthy.ScopeResponse{ID: "scope", Name: "mapped"}
 	if mapping == "access" {
-		scope.AttrIncludeAccess = []string{tc.other}
+		scope.AttrIncludeAccess = []string{"department", tc.other}
 	} else {
-		scope.AttrIncludeID = []string{tc.other}
+		scope.AttrIncludeID = []string{"department", tc.other}
 	}
 	f.answer("GET /scopes", []rauthy.ScopeResponse{scope})
 	if tc.failure != "" {
 		f.handle(
 			"GET "+tc.failure,
-			func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "unavailable", http.StatusForbidden) },
+			func(w http.ResponseWriter, _ *http.Request) {
+				status := tc.status
+				if status == 0 {
+					status = http.StatusForbidden
+				}
+				http.Error(w, "unavailable", status)
+			},
 		)
 	}
 	f.answer("DELETE /users/attr/dev", nil)
@@ -74,8 +83,14 @@ func testUserAttributeDeletionGuard(t *testing.T, tc attributeGuardCase, mapping
 	if (len(f.bodies("DELETE /users/attr/dev")) == 0) != (tc.wantError || tc.missing) {
 		t.Fatal("unexpected DELETE count")
 	}
-	if tc.missing && !resp.State.Raw.IsNull() {
-		t.Fatal("absent attribute must be removed from state")
+	if tc.wantError && !resp.State.Raw.Equal(state.Raw) {
+		t.Fatal("failed deletion changed state")
+	}
+	if tc.missing && !strings.Contains(resp.Diagnostics[0].Detail(), "refresh") {
+		t.Fatalf("missing attribute diagnostic lacks recovery guidance: %v", resp.Diagnostics)
+	}
+	if tc.status == http.StatusNotFound && !strings.Contains(resp.Diagnostics[0].Detail(), "404") {
+		t.Fatalf("attribute list failure lost API status: %v", resp.Diagnostics)
 	}
 }
 
@@ -105,9 +120,29 @@ func checkAttributeGuardPlans(
 		}
 		var resp resource.ModifyPlanResponse
 		r.ModifyPlan(context.Background(), resource.ModifyPlanRequest{State: prior, Plan: plan}, &resp)
-		wantError := unsafe && op != "unchanged" && op != "create"
+		wantError := unsafe && (op == "destroy" || op == "replace")
+		if (len(resp.RequiresReplace) > 0) != (op == "replace") {
+			t.Errorf("%s plan: unexpected replacement paths %v", op, resp.RequiresReplace)
+		}
 		if resp.Diagnostics.HasError() != wantError {
 			t.Errorf("%s plan: %v, wantError=%v", op, resp.Diagnostics, wantError)
 		}
+	}
+}
+
+func TestUserAttributeUpdateRejectsResolvedRename(t *testing.T) {
+	_, api := newFakeRauthy(t)
+	r := &userAttributeResource{api: api}
+	prior := userAttributeResourceModel{ID: types.StringValue("dev"), Name: types.StringValue("dev")}
+	state := resourceState(t, r, prior)
+	prior.Name = types.StringValue("developer")
+	plan := resourcePlan(t, r, prior)
+	resp := resource.UpdateResponse{State: state}
+	r.Update(t.Context(), resource.UpdateRequest{State: state, Plan: plan}, &resp)
+	if !resp.Diagnostics.HasError() || resp.Diagnostics[0].Summary() != "User attribute name requires replacement" {
+		t.Fatalf("expected a replacement diagnostic before any API call, got %v", resp.Diagnostics)
+	}
+	if !resp.State.Raw.Equal(state.Raw) {
+		t.Fatal("rejected update changed state")
 	}
 }

@@ -92,8 +92,10 @@ func (r *userResource) ImportState(
 // user is disabled until its initial password reset, so skipping it when the
 // configuration looks "empty" would leave state lying about the account.
 func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	substringMutationMu.Lock()
-	defer substringMutationMu.Unlock()
+	if !lockSubstringMutation(ctx, &resp.Diagnostics) {
+		return
+	}
+	defer unlockSubstringMutation()
 
 	var plan userResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -161,8 +163,10 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 }
 
 func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	substringMutationMu.Lock()
-	defer substringMutationMu.Unlock()
+	if !lockSubstringMutation(ctx, &resp.Diagnostics) {
+		return
+	}
+	defer unlockSubstringMutation()
 
 	var plan userResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)

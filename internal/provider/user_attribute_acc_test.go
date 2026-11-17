@@ -250,7 +250,20 @@ func testAccUserAttributeScopeMappingGuard(t *testing.T, other string) {
 			t.Error(err)
 		}
 	}()
-	initial := testAccUserAttributeConfig("tp4-dev", "")
+	config := func(trigger int) string {
+		return fmt.Sprintf(`
+resource "terraform_data" "attribute_name" {
+  input            = "tp4-dev"
+  triggers_replace = %d
+}
+
+resource "rauthy_user_attribute" "test" {
+  name = terraform_data.attribute_name.output
+  desc = "revision-%d"
+}
+`, trigger, trigger)
+	}
+	initial := config(1)
 	replacement := testAccUserAttributeConfig("tp4-new", "")
 	independent := `
 resource "rauthy_role" "independent" { name = "tp4-independent" }
@@ -275,6 +288,10 @@ resource "rauthy_role" "independent" { name = "tp4-independent" }
 		ProtoV6ProviderFactories: factories,
 		Steps: []resource.TestStep{
 			{Config: initial},
+			{
+				Config: config(2),
+				Check:  resource.TestCheckResourceAttr("rauthy_user_attribute.test", "desc", "revision-2"),
+			},
 			{
 				Config:      replacement + independent,
 				PlanOnly:    true,

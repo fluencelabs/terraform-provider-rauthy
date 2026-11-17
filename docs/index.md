@@ -82,6 +82,7 @@ existing setup can run into:
   or rename. Rauthy provides no conditional deletion to close this race.
 * A conflicting name created in the same apply may be absent during planning. If it exists when
   the safety check runs, the operation is refused at apply.
+* Refresh removes a user attribute from state if Rauthy omits it from the list, for example after an external rename. An in-flight DELETE may finish after the provider releases its lock if the request is canceled or the proxy connection drops.
 
 ## Example usage
 
@@ -135,13 +136,15 @@ equivalent to holding the credentials themselves.
 ## API key rights
 
 The provider authenticates with a Rauthy API key, created by hand in the Admin UI under *API Keys*.
-It needs exactly these access rights:
+Grant the rights for the operations the key performs:
 
 | Group     | Rights                       | Used for                                                      |
 |-----------|------------------------------|---------------------------------------------------------------|
 | `Clients` | read, create, update, delete | the whole `rauthy_client` lifecycle                           |
 | `Secrets` | read                         | reading a confidential client's secret on every refresh       |
 | `Secrets` | update                       | rotating a client secret                                      |
+| `UserAttributes` | read, delete           | listing attributes and deleting the old name on deletion or replacement |
+| `Scopes`  | read                         | checking scope mappings before deleting or replacing a user attribute by name |
 
 A key missing `Secrets:read` fails on every read of a confidential client; the provider names the
 missing right rather than reporting a bare 403.
@@ -157,7 +160,7 @@ key that holds the `ApiKeys` access group. That group exists from Rauthy 0.36 on
 
 - `api_key` (String, Sensitive) Rauthy API key in `<name>$<secret>` form. Falls back to the `RAUTHY_API_KEY` environment variable.
 
-The key needs the access rights of the resources it manages: `Clients` read, create, update, delete and `Secrets` read and update for `rauthy_client`; `Clients:update` for `rauthy_client_logo` and `rauthy_client_favicon`; `Scopes` read, create, update, delete for `rauthy_scope`; `Roles` and `Groups` read, create, update, delete for `rauthy_role` and `rauthy_group`; `Users` read, create, update, delete for `rauthy_user`; `UserAttributes` read, create, update, delete for `rauthy_user_attribute`; `AuthProviders` read, create, update, delete for `rauthy_auth_provider` (that access group exists only from Rauthy 0.36 onwards); `ApiKeys` read, create, update, delete for `rauthy_api_key` (also 0.36 and later only — before it, `/api_keys` accepted an admin browser session and nothing else); `Blacklist` read, create, delete for `rauthy_blacklist_ip`; `Pam` read, create, update, delete for `rauthy_pam_group`, `rauthy_pam_user` and `rauthy_pam_host`; `Secrets:update` for `rauthy_password_policy`. `Secrets:read` is used on every refresh of a confidential client, `Secrets:update` only when rotating a secret.
+The key needs the access rights of the resources it manages: `Clients` read, create, update, delete and `Secrets` read and update for `rauthy_client`; `Clients:update` for `rauthy_client_logo` and `rauthy_client_favicon`; `Scopes` read, create, update, delete for `rauthy_scope`; `Roles` and `Groups` read, create, update, delete for `rauthy_role` and `rauthy_group`; `Users` read, create, update, delete for `rauthy_user`; `UserAttributes` read, create, update, delete for `rauthy_user_attribute`, plus `Scopes:read` for deletion and name replacement; `AuthProviders` read, create, update, delete for `rauthy_auth_provider` (that access group exists only from Rauthy 0.36 onwards); `ApiKeys` read, create, update, delete for `rauthy_api_key` (also 0.36 and later only — before it, `/api_keys` accepted an admin browser session and nothing else); `Blacklist` read, create, delete for `rauthy_blacklist_ip`; `Pam` read, create, update, delete for `rauthy_pam_group`, `rauthy_pam_user` and `rauthy_pam_host`; `Secrets:update` for `rauthy_password_policy`. `Secrets:read` is used on every refresh of a confidential client, `Secrets:update` only when rotating a secret.
 
 Granting `ApiKeys` makes the configured key able to mint further keys with any rights at all, including rights it does not itself hold. Grant it only to the key that actually manages `rauthy_api_key` resources.
 - `url` (String) Base URL of the Rauthy instance, for example `https://auth.example.com`. The `/auth/v1` API path is appended by the provider. Falls back to the `RAUTHY_URL` environment variable.

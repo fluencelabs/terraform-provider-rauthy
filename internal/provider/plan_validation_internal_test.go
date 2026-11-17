@@ -236,3 +236,26 @@ func checkUnknownSCIMPlan(t *testing.T, plan tfsdk.Plan, want types.Object, oldS
 		t.Fatal("unchanged secret lost")
 	}
 }
+
+func TestClientPlanPublicToConfidential(t *testing.T) {
+	ctx := context.Background()
+	r := &clientResource{}
+	prior := clientModelOf(t, fullResponse())
+	prior.Confidential = types.BoolValue(false)
+	prior.Secret = types.StringNull()
+	state := resourceState(t, r, &prior)
+	prior.Confidential = types.BoolValue(true)
+	plan := resourcePlan(t, r, &prior)
+	resp := resource.ModifyPlanResponse{Plan: plan}
+	r.ModifyPlan(ctx, resource.ModifyPlanRequest{State: state, Plan: plan, Config: tfsdk.Config(plan)}, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatal(resp.Diagnostics)
+	}
+	var secret types.String
+	if diags := resp.Plan.GetAttribute(ctx, path.Root("secret"), &secret); diags.HasError() {
+		t.Fatal(diags)
+	}
+	if !secret.IsUnknown() {
+		t.Fatalf("new confidential client secret must be unknown, got %v", secret)
+	}
+}

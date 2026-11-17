@@ -96,8 +96,10 @@ func (r *roleResource) ImportState(
 }
 
 func (r *roleResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	substringMutationMu.Lock()
-	defer substringMutationMu.Unlock()
+	if !lockSubstringMutation(ctx, &resp.Diagnostics) {
+		return
+	}
+	defer unlockSubstringMutation()
 
 	var plan roleResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -185,8 +187,10 @@ func (r *roleResource) ModifyPlan(
 }
 
 func (r *roleResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	substringMutationMu.Lock()
-	defer substringMutationMu.Unlock()
+	if !lockSubstringMutation(ctx, &resp.Diagnostics) {
+		return
+	}
+	defer unlockSubstringMutation()
 
 	var state roleResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)

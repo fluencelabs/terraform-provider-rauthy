@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -59,11 +60,11 @@ func TestAccUserAttribute_externalRename(t *testing.T) {
 	)
 	resp := resource.DeleteResponse{State: state}
 	r.Delete(ctx, resource.DeleteRequest{State: state}, &resp)
-	if resp.Diagnostics.HasError() {
+	if !resp.Diagnostics.HasError() || !strings.Contains(resp.Diagnostics[0].Detail(), "refresh") {
 		t.Fatal(resp.Diagnostics)
 	}
-	if !resp.State.Raw.IsNull() {
-		t.Fatal("absent attribute remains in state")
+	if !resp.State.Raw.Equal(state.Raw) {
+		t.Fatal("failed deletion changed state")
 	}
 	got, readErr := api.GetScope(ctx, scope.ID)
 	if readErr != nil {

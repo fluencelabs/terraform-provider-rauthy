@@ -43,7 +43,7 @@ func testMutationParticipant(t *testing.T, r resource.Resource, op string) {
 	t.Helper()
 	null := emptyState(t, r)
 	done := make(chan struct{})
-	substringMutationMu.Lock()
+	substringMutationMu <- struct{}{}
 	go func() {
 		defer close(done)
 		switch op {
@@ -60,14 +60,14 @@ func testMutationParticipant(t *testing.T, r resource.Resource, op string) {
 		}
 	}()
 	blocked := waitForMutation(t, reflect.TypeOf(r).Elem().Name()+")."+op, done, nil)
-	substringMutationMu.Unlock()
+	unlockSubstringMutation()
 	<-done
 	if !blocked {
 		t.Fatal("resource mutation bypassed the shared lock")
 	}
 }
 
-// Observe the contender at the shared mutex or a controlled server write.
+// Observe the contender at the shared lock or a controlled server write.
 // The server signal also drives the corrupting interleaving on the unfixed code.
 func waitForMutation(t *testing.T, frame string, done, reached <-chan struct{}) bool {
 	t.Helper()
@@ -77,7 +77,7 @@ func waitForMutation(t *testing.T, frame string, done, reached <-chan struct{}) 
 		stack = stack[:runtime.Stack(stack, true)]
 		for goroutine := range strings.SplitSeq(string(stack), "\n\n") {
 			if strings.Contains(goroutine, frame) &&
-				strings.Contains(goroutine, "sync.(*Mutex).Lock") {
+				strings.Contains(goroutine, "lockSubstringMutation") {
 				return true
 			}
 		}
@@ -177,5 +177,128 @@ func TestUserAttributeConcurrentScopeMapping(t *testing.T) {
 	defer mu.Unlock()
 	if mapping != "developer" {
 		t.Fatalf("concurrent mapping corrupted: %q", mapping)
+	}
+}
+
+func TestSubstringMutationCancellation(t *testing.T) {
+	f, api := newFakeRauthy(t)
+	r := &scopeResource{api: api}
+	plan := resourcePlan(t, r, scopeResourceModel{
+		Name:              types.StringValue("mapped"),
+		AttrIncludeAccess: types.SetNull(types.StringType),
+		AttrIncludeID:     types.SetNull(types.StringType),
+	})
+	f.answer("POST /scopes", rauthy.ScopeResponse{ID: "s", Name: "mapped"})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	resp := resource.CreateResponse{State: emptyState(t, r)}
+	substringMutationMu <- struct{}{}
+	go func() {
+		defer close(done)
+		r.Create(ctx, resource.CreateRequest{Plan: plan}, &resp)
+	}()
+	waiting := waitForMutation(t, "scopeResource).Create", done, nil)
+	cancel()
+	returned := false
+	select {
+	case <-done:
+		returned = true
+	case <-time.After(time.Second):
+	}
+	unlockSubstringMutation()
+	<-done
+	if !waiting || !returned {
+		t.Fatal("scope creation did not return on cancellation while the lock was held")
+	}
+	if !resp.Diagnostics.HasError() || resp.Diagnostics[0].Detail() != context.Canceled.Error() {
+		t.Fatalf("expected cancellation diagnostic, got %v", resp.Diagnostics)
+	}
+	if len(f.bodies("POST /scopes")) != 0 {
+		t.Fatal("canceled scope creation issued POST")
+	}
+}
+
+func TestUserAttributeConcurrentScopeCreation(t *testing.T) {
+	f, api := newFakeRauthy(t)
+	writerAPI, err := rauthy.New(api.BaseURL().Reveal(), "test$key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.answer("GET /users/attr", map[string]any{"values": []rauthy.UserAttrResponse{{Name: "dev"}}})
+	f.answer("DELETE /users/attr/dev", nil)
+	var scope rauthy.ScopeResponse
+	postStarted := make(chan struct{})
+	releasePost := make(chan struct{})
+	created := make(chan struct{})
+	listed := make(chan struct{})
+	f.handle("POST /scopes", func(w http.ResponseWriter, r *http.Request) {
+		var req rauthy.ScopeRequest
+		if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
+			http.Error(w, decodeErr.Error(), http.StatusBadRequest)
+			return
+		}
+		close(postStarted)
+		<-releasePost
+		scope = rauthy.ScopeResponse{
+			ID:                "s",
+			Name:              req.Scope,
+			AttrIncludeAccess: req.AttrIncludeAccess,
+			AttrIncludeID:     req.AttrIncludeID,
+			ClaimsAtRoot:      req.ClaimsAtRoot,
+		}
+		close(created)
+		_ = json.NewEncoder(w).Encode(scope)
+	})
+	f.handle("GET /scopes", func(w http.ResponseWriter, _ *http.Request) {
+		var scopes []rauthy.ScopeResponse
+		select {
+		case <-created:
+			scopes = []rauthy.ScopeResponse{scope}
+		default:
+		}
+		close(listed)
+		_ = json.NewEncoder(w).Encode(scopes)
+	})
+	writer := &scopeResource{api: writerAPI}
+	plan := resourcePlan(t, writer, scopeResourceModel{
+		Name:              types.StringValue("mapped"),
+		AttrIncludeAccess: setOf(t, "developer"),
+		AttrIncludeID:     types.SetNull(types.StringType),
+	})
+	writeResp := resource.CreateResponse{State: emptyState(t, writer)}
+	writeDone := make(chan struct{})
+	go func() {
+		defer close(writeDone)
+		writer.Create(context.Background(), resource.CreateRequest{Plan: plan}, &writeResp)
+	}()
+	select {
+	case <-postStarted:
+	case <-writeDone:
+		t.Fatalf("scope creation failed before POST: %v", writeResp.Diagnostics)
+	}
+	target := &userAttributeResource{api: api}
+	state := resourceState(t, target, userAttributeResourceModel{
+		ID: types.StringValue("dev"), Name: types.StringValue("dev"),
+	})
+	deleteResp := resource.DeleteResponse{State: state}
+	deleteDone := make(chan struct{})
+	go func() {
+		defer close(deleteDone)
+		target.Delete(context.Background(), resource.DeleteRequest{State: state}, &deleteResp)
+	}()
+	observed := waitForMutation(t, "userAttributeResource).Delete", deleteDone, listed)
+	close(releasePost)
+	<-writeDone
+	<-deleteDone
+	if !observed || writeResp.Diagnostics.HasError() {
+		t.Fatalf("concurrent scope creation failed: %v", writeResp.Diagnostics)
+	}
+	if !deleteResp.Diagnostics.HasError() || len(f.bodies("DELETE /users/attr/dev")) != 0 {
+		t.Fatalf("deletion missed the new scope mapping: %v", deleteResp.Diagnostics)
+	}
+	<-created
+	if len(scope.AttrIncludeAccess) != 1 || scope.AttrIncludeAccess[0] != "developer" {
+		t.Fatalf("scope creation sent unexpected access mappings: %v", scope.AttrIncludeAccess)
 	}
 }
