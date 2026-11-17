@@ -58,9 +58,10 @@ func (r *pamGroupResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"A PAM group is a real group in the host's namespace: its `id` is the numeric gid handed to " +
 			"`rauthy_pam_host.gid` and to a `rauthy_pam_user` membership.\n\n" +
 			"Rauthy offers no update endpoint for a PAM group, so changing either the name or the type " +
-			"destroys and recreates the group — which means a new gid. Anything referring to the old gid " +
-			"has to be updated in the same apply, which Terraform does on its own as long as the reference " +
-			"goes through `rauthy_pam_group.<name>.id` rather than a hardcoded number.\n\n" +
+			"replaces the group, which means a new gid. Rauthy refuses to delete a group that a host or " +
+			"a user still refers to, and Terraform deletes before it creates, so a group in use needs " +
+			"`lifecycle { create_before_destroy = true }`. Then Terraform creates the new group, moves " +
+			"the references that go through `rauthy_pam_group.<name>.id`, and deletes the old one.\n\n" +
 			"Requires these API key rights: `Pam` read, create, delete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.Int64Attribute{
@@ -203,7 +204,9 @@ func (r *pamGroupResource) Delete(ctx context.Context, req resource.DeleteReques
 		var apiErr *rauthy.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest &&
 			strings.Contains(detail, "FOREIGN KEY constraint failed") {
-			detail += "\n\nRauthy refuses to delete a group that a host still points at or that a user is still a member of. Remove those references first."
+			detail += "\n\nRauthy refuses to delete a group that a host still points at or that a user is still a member of. " +
+				"Remove those references first, or, when the group is being replaced, set " +
+				"lifecycle { create_before_destroy = true } on it."
 		}
 		resp.Diagnostics.AddError("Could not delete Rauthy PAM group "+strconv.FormatInt(gid, 10), detail)
 	}

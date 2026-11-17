@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -239,6 +240,46 @@ func TestAccPamUserAndHost_lifecycle(t *testing.T) {
 				ResourceName:      "rauthy_pam_host.test",
 				ImportState:       true,
 				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+// A host group in use can be replaced in one apply when it creates before it
+// destroys: the host moves to the new gid, then the old group goes.
+func TestAccPamGroup_replaceInUse(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(name string) string {
+		return fmt.Sprintf(`
+resource "rauthy_pam_group" "servers" {
+  name = %q
+  typ  = "host"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "rauthy_pam_host" "test" {
+  hostname = "tfaccreplace"
+  gid      = rauthy_pam_group.servers.id
+}
+`, name)
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{Config: config("tfaccsrvold")},
+			{
+				Config: config("tfaccsrvnew"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction(
+						"rauthy_pam_group.servers",
+						plancheck.ResourceActionCreateBeforeDestroy,
+					),
+				}},
+				Check: resource.TestCheckResourceAttrPair(
+					"rauthy_pam_host.test", "gid", "rauthy_pam_group.servers", "id"),
 			},
 		},
 	})
