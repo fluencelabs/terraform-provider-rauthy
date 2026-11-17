@@ -42,7 +42,7 @@ func fullResponse() *rauthy.ClientResponse {
 		BackchannelLogoutURI:   new("https://app.example.com/logout"),
 		RestrictGroupPrefix:    new("staff"),
 		Scim: &rauthy.ScimClientRequestResponse{
-			BearerToken:     "scim-token",
+			BearerToken:     rauthy.NewSecret("scim-token"),
 			BaseURI:         "https://app.example.com/scim/v2",
 			SyncGroups:      true,
 			GroupSyncPrefix: new("staff"),
@@ -135,7 +135,7 @@ func TestBuildUpdateRequest_RoundTripsEveryField(t *testing.T) {
 	if len(req.FlowsEnabled) != 2 || len(req.Scopes) != 2 || len(req.DefaultScopes) != 1 {
 		t.Errorf("lists lost on round trip: %+v", req)
 	}
-	if req.Scim == nil || req.Scim.BearerToken != "scim-token" || !req.Scim.SyncGroups {
+	if req.Scim == nil || req.Scim.BearerToken.Reveal() != "scim-token" || !req.Scim.SyncGroups {
 		t.Errorf("scim lost on round trip: %+v", req.Scim)
 	}
 	if req.RestrictGroupPrefix == nil || *req.RestrictGroupPrefix != "staff" {

@@ -89,7 +89,7 @@ func TestBuildAuthProviderRequest_AlwaysCarriesTheSecret(t *testing.T) {
 	var diags diag.Diagnostics
 	m := &authProviderResourceModel{Scopes: scopeSetOf("openid")}
 	got := buildAuthProviderRequest(context.Background(), m, types.StringValue("upstream-secret"), &diags)
-	if got.ClientSecret == nil || *got.ClientSecret != "upstream-secret" {
+	if got.ClientSecret == nil || got.ClientSecret.Reveal() != "upstream-secret" {
 		t.Errorf("client_secret = %v, want it resent", got.ClientSecret)
 	}
 

@@ -240,7 +240,7 @@ func applyPamHostDetails(
 	ctx context.Context,
 	model *pamHostResourceModel,
 	got *rauthy.PamHostDetailsResponse,
-	secret string,
+	secret rauthy.Secret,
 ) diag.Diagnostics {
 	ips, diags := types.SetValueFrom(ctx, types.StringType, got.IPs)
 	if diags.HasError() {
@@ -276,7 +276,7 @@ func applyPamHostDetails(
 	model.IPs = ips
 	model.Aliases = aliases
 	model.Notes = types.StringPointerValue(got.Notes)
-	model.Secret = types.StringValue(secret)
+	model.Secret = types.StringValue(secret.Reveal())
 	return diags
 }
 

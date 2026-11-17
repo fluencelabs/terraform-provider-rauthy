@@ -49,7 +49,7 @@ func TestAccPasswordPolicy_lifecycle(t *testing.T) {
 		return func(_ *terraform.State) error {
 			_, updateErr := c.UpdateUser(ctx, user.ID, rauthy.UpdateUserRequest{
 				Email: user.Email, GivenName: user.GivenName, Roles: user.Roles, Enabled: true,
-				Password: new("Short1!a"),
+				Password: new(rauthy.NewSecret("Short1!a")),
 			})
 			if !rejected {
 				return updateErr

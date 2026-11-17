@@ -27,6 +27,9 @@ resource "rauthy_client" "normalization" {
   sync_groups = false
  }
 }
+data "rauthy_client" "normalization" {
+ id = rauthy_client.normalization.id
+}
 resource "rauthy_user" "normalization" {
  email = "Mixed@Example.com"
  given_name = "Round"
@@ -60,6 +63,16 @@ func TestAccNormalization(t *testing.T) {
 			{Config: normalizationConfig, Check: resource.ComposeAggregateTestCheckFunc(
 				resource.TestCheckResourceAttr("rauthy_client.normalization", "allowed_origins.#", "0"),
 				resource.TestCheckResourceAttr("rauthy_client.normalization", "challenges.#", "1"),
+				resource.TestCheckResourceAttr(
+					"rauthy_client.normalization",
+					"scim.bearer_token",
+					"synthetic-scim-token",
+				),
+				resource.TestCheckResourceAttr(
+					"data.rauthy_client.normalization",
+					"scim.bearer_token",
+					"synthetic-scim-token",
+				),
 				resource.TestCheckResourceAttr("rauthy_user.normalization", "email", "Mixed@Example.com"),
 				resource.TestCheckResourceAttr("rauthy_user_attribute.jsonnull", "default_value", "null"),
 				resource.TestCheckResourceAttr("rauthy_user_attribute.jsonnull", "user_editable", "true"),

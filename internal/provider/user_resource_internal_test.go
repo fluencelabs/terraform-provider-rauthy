@@ -78,7 +78,7 @@ func TestBuildUpdateUserRequest_CarriesTheWriteOnlyPassword(t *testing.T) {
 	m := &userResourceModel{Email: types.StringValue("ada@example.com")}
 
 	got := buildUpdateUserRequest(context.Background(), m, types.StringValue("hunter2hunter2"), &diags)
-	if got.Password == nil || *got.Password != "hunter2hunter2" {
+	if got.Password == nil || got.Password.Reveal() != "hunter2hunter2" {
 		t.Errorf("password = %v, want the configured value sent to Rauthy", got.Password)
 	}
 
@@ -182,7 +182,7 @@ func TestUserCreate_SendsPassword(t *testing.T) {
 	}
 	var sent rauthy.UpdateUserRequest
 	fake.lastBody(t, "PUT /users/u-1", &sent)
-	if sent.Password == nil || *sent.Password != config.PasswordWO.ValueString() {
+	if sent.Password == nil || sent.Password.Reveal() != config.PasswordWO.ValueString() {
 		t.Fatal("creation password lost")
 	}
 }
@@ -257,7 +257,7 @@ func checkUserUpdate(t *testing.T, before, after, password types.String, wantPas
 			t.Errorf("profile = %+v, want %+v", sent.UserValues, values)
 		}
 		if wantPassword {
-			if sent.Password == nil || *sent.Password != password.ValueString() {
+			if sent.Password == nil || sent.Password.Reveal() != password.ValueString() {
 				t.Errorf("password = %v", sent.Password)
 			}
 		} else if sent.Password != nil {

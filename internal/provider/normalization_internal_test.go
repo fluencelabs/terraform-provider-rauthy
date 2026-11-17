@@ -104,12 +104,12 @@ func TestNormalization_IPv6(t *testing.T) {
 	m := pamHostResourceModel{IPs: stringSet(t, "2001:0DB8:0000:0000:0000:0000:0000:0002")}
 	want := m.IPs
 	got := &rauthy.PamHostDetailsResponse{IPs: []string{"2001:db8::2"}, Aliases: []string{}}
-	d := applyPamHostDetails(ctx, &m, got, "secret")
+	d := applyPamHostDetails(ctx, &m, got, rauthy.NewSecret("secret"))
 	if d.HasError() || !m.IPs.Equal(want) {
 		t.Fatalf("IPv6 changed: %v", m.IPs)
 	}
 	got.IPs = []string{"2001:db8::3"}
-	d = applyPamHostDetails(ctx, &m, got, "secret")
+	d = applyPamHostDetails(ctx, &m, got, rauthy.NewSecret("secret"))
 	if d.HasError() || !m.IPs.Equal(stringSet(t, "2001:db8::3")) {
 		t.Fatal("real IP drift hidden")
 	}

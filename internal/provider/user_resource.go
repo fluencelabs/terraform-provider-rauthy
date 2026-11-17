@@ -232,7 +232,7 @@ func buildUpdateUserRequest(
 		GivenName:     stringPtr(m.GivenName),
 		FamilyName:    stringPtr(m.FamilyName),
 		Language:      stringPtr(m.Language),
-		Password:      stringPtr(password),
+		Password:      secretPtr(password),
 		UserExpires:   int64Ptr(m.UserExpires),
 	}
 	if m.UserValues != nil {
