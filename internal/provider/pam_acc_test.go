@@ -289,26 +289,30 @@ resource "rauthy_pam_host" "test" {
 // on the delete, and the error names the way out.
 func TestAccPamGroup_replaceInUseHint(t *testing.T) {
 	factories := acctest.Setup(t)
-	config := func(name string) string {
+	config := func(name, typ string) string {
 		return fmt.Sprintf(`
 resource "rauthy_pam_group" "servers" {
   name = %q
-  typ  = "host"
+  typ  = %q
 }
 
 resource "rauthy_pam_host" "test" {
   hostname = "tfacchint"
   gid      = rauthy_pam_group.servers.id
 }
-`, name)
+`, name, typ)
 	}
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: factories,
-		Steps: []resource.TestStep{
-			{Config: config("tfacchintold")},
-			{Config: config("tfacchintnew"), ExpectError: regexp.MustCompile("create_before_destroy")},
-		},
-	})
+	// A host group: Rauthy names the assigned hosts. Another type: Rauthy
+	// answers with SQLite's foreign key error code.
+	for _, typ := range []string{"host", "generic"} {
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: factories,
+			Steps: []resource.TestStep{
+				{Config: config("tfacchint"+typ, typ)},
+				{Config: config("tfacchint"+typ+"2", typ), ExpectError: regexp.MustCompile("create_before_destroy")},
+			},
+		})
+	}
 }
 
 // A change of typ alone with create_before_destroy meets the unique name; the

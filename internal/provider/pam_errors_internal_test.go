@@ -34,14 +34,14 @@ func TestPAMErrors(t *testing.T) {
 			f.handle("DELETE /pam/groups/100001", func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(code)
 				_ = json.NewEncoder(w).
-					Encode(map[string]string{"error": "BadRequest", "message": "FOREIGN KEY constraint failed"})
+					Encode(map[string]string{"error": "BadRequest", "message": "Error code 787"})
 			})
 			r := &pamGroupResource{api: api}
 			state := pamGroupResourceModel{ID: types.Int64Value(100001)}
 			var resp resource.DeleteResponse
 			r.Delete(ctx, resource.DeleteRequest{State: resourceState(t, r, &state)}, &resp)
 			if !resp.Diagnostics.HasError() ||
-				strings.Contains(resp.Diagnostics.Errors()[0].Detail(), "Remove those references") != (code == 400) {
+				strings.Contains(resp.Diagnostics.Errors()[0].Detail(), "create_before_destroy") != (code == 400) {
 				t.Fatalf("wrong advice for %d: %v", code, resp.Diagnostics)
 			}
 		}

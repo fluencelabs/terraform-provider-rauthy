@@ -207,13 +207,13 @@ func (r *pamGroupResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	gid := state.ID.ValueInt64()
 	// A group a host still points at comes back as a 400: "Cannot delete group
-	// with assigned hosts" for a host group, the raw SQLite "FOREIGN KEY
-	// constraint failed" for another type. Both deserve the way out.
+	// with assigned hosts" for a host group, SQLite's foreign key error code 787
+	// for another type. Both deserve the way out.
 	if err := r.api.DeletePamGroup(ctx, gid); err != nil && !rauthy.IsNotFound(err) {
 		detail := err.Error()
 		var apiErr *rauthy.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest &&
-			(strings.Contains(detail, "assigned hosts") || strings.Contains(detail, "FOREIGN KEY constraint failed")) {
+			(strings.Contains(detail, "assigned hosts") || strings.Contains(detail, "Error code 787")) {
 			detail += "\n\nRauthy refuses to delete a group a host still points at. Move the host to another " +
 				"group first, or, when the group is being replaced, set lifecycle { create_before_destroy = true } on it."
 		}
