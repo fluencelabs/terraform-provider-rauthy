@@ -273,7 +273,13 @@ func applyUserAttr(m *userAttributeResourceModel, a *rauthy.UserAttrResponse) {
 	m.ID = types.StringValue(a.Name)
 	m.Name = types.StringValue(a.Name)
 	m.Desc = optionalString(a.Desc)
-	m.DefaultValue = defaultValueString(a.DefaultValue)
+	value := defaultValueString(a.DefaultValue)
+	preserveNull := value.IsNull() && !m.DefaultValue.IsNull() && !m.DefaultValue.IsUnknown() &&
+		bytes.Equal(bytes.TrimSpace([]byte(m.DefaultValue.ValueString())), []byte("null"))
+	if !preserveNull {
+		m.DefaultValue = value
+	}
+
 	m.UserEditable = types.BoolValue(a.UserEditable)
 }
 

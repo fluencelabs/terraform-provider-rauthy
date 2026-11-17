@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"sort"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -231,6 +232,22 @@ func applyPamHostDetails(
 	model.GID = types.Int64Value(got.GID)
 	model.ForceMfa = types.BoolValue(got.ForceMfa)
 	model.LocalPasswordOnly = types.BoolValue(got.LocalPasswordOnly)
+	if !model.IPs.IsNull() && !model.IPs.IsUnknown() {
+		var prior []string
+		diags.Append(model.IPs.ElementsAs(ctx, &prior, false)...)
+		canonical := make([]string, 0, len(prior))
+		for _, ip := range prior {
+			addr, err := netip.ParseAddr(ip)
+			if err != nil {
+				canonical = nil
+				break
+			}
+			canonical = append(canonical, addr.String())
+		}
+		if stringsToSet(canonical).Equal(ips) {
+			ips = model.IPs
+		}
+	}
 	model.IPs = ips
 	model.Aliases = aliases
 	model.Notes = types.StringPointerValue(got.Notes)

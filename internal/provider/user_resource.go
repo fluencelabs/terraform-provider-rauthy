@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -258,7 +259,9 @@ func buildUpdateUserRequest(
 // back for it at all.
 func applyUser(m *userResourceModel, u *rauthy.UserResponse) {
 	m.ID = types.StringValue(u.ID)
-	m.Email = types.StringValue(u.Email)
+	if m.Email.IsNull() || m.Email.IsUnknown() || strings.ToLower(m.Email.ValueString()) != u.Email {
+		m.Email = types.StringValue(u.Email)
+	}
 	m.Enabled = types.BoolValue(u.Enabled)
 	m.EmailVerified = types.BoolValue(u.EmailVerified)
 	m.Language = types.StringValue(u.Language)

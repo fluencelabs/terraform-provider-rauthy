@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -20,29 +21,34 @@ func applyResponse(ctx context.Context, m *clientResourceModel, resp *rauthy.Cli
 	m.Name = optionalString(resp.Name)
 	m.Enabled = types.BoolValue(resp.Enabled)
 	m.Confidential = types.BoolValue(resp.Confidential)
-	m.RedirectURIs = stringsToSet(resp.RedirectURIs)
-	m.PostLogoutRedirectURIs = stringsToSet(resp.PostLogoutRedirectURIs)
-	m.AllowedOrigins = stringsToSet(resp.AllowedOrigins)
-	m.FlowsEnabled = stringsToSet(resp.FlowsEnabled)
+	m.RedirectURIs = optionalStringSet(resp.RedirectURIs, m.RedirectURIs)
+	m.PostLogoutRedirectURIs = optionalStringSet(resp.PostLogoutRedirectURIs, m.PostLogoutRedirectURIs)
+	m.AllowedOrigins = optionalStringSet(resp.AllowedOrigins, m.AllowedOrigins)
+	m.FlowsEnabled = optionalStringSet(resp.FlowsEnabled, m.FlowsEnabled)
 	m.AccessTokenAlg = types.StringValue(resp.AccessTokenAlg)
 	m.IDTokenAlg = types.StringValue(resp.IDTokenAlg)
 	m.AuthCodeLifetime = types.Int64Value(resp.AuthCodeLifetime)
 	m.AccessTokenLifetime = types.Int64Value(resp.AccessTokenLifetime)
-	m.Scopes = stringsToSet(resp.Scopes)
-	m.DefaultScopes = stringsToSet(resp.DefaultScopes)
-	m.Challenges = stringsToSet(resp.Challenges)
+	m.Scopes = optionalStringSet(resp.Scopes, m.Scopes)
+	m.DefaultScopes = optionalStringSet(resp.DefaultScopes, m.DefaultScopes)
+	m.Challenges = optionalStringSet(resp.Challenges, m.Challenges)
 	m.ForceMFA = types.BoolValue(resp.ForceMFA)
 	m.ClientURI = optionalString(resp.ClientURI)
-	m.Contacts = stringsToSet(resp.Contacts)
+	m.Contacts = optionalStringSet(resp.Contacts, m.Contacts)
 	m.BackchannelLogoutURI = optionalString(resp.BackchannelLogoutURI)
 	m.RestrictGroupPrefix = optionalString(resp.RestrictGroupPrefix)
 
 	if resp.Scim == nil {
 		m.Scim = nil
 	} else {
+		baseURI := types.StringValue(resp.Scim.BaseURI)
+		if m.Scim != nil && !m.Scim.BaseURI.IsUnknown() &&
+			strings.TrimSuffix(m.Scim.BaseURI.ValueString(), "/") == resp.Scim.BaseURI {
+			baseURI = m.Scim.BaseURI
+		}
 		m.Scim = &scimModel{
 			BearerToken:     types.StringValue(resp.Scim.BearerToken),
-			BaseURI:         types.StringValue(resp.Scim.BaseURI),
+			BaseURI:         baseURI,
 			SyncGroups:      types.BoolValue(resp.Scim.SyncGroups),
 			GroupSyncPrefix: optionalString(resp.Scim.GroupSyncPrefix),
 		}
@@ -71,7 +77,7 @@ func fillUnknownFromResponse(
 		m.Enabled = types.BoolValue(resp.Enabled)
 	}
 	if m.FlowsEnabled.IsUnknown() {
-		m.FlowsEnabled = stringsToSet(resp.FlowsEnabled)
+		m.FlowsEnabled = optionalStringSet(resp.FlowsEnabled, m.FlowsEnabled)
 	}
 	if m.AccessTokenAlg.IsUnknown() {
 		m.AccessTokenAlg = types.StringValue(resp.AccessTokenAlg)
@@ -86,13 +92,13 @@ func fillUnknownFromResponse(
 		m.AccessTokenLifetime = types.Int64Value(resp.AccessTokenLifetime)
 	}
 	if m.Scopes.IsUnknown() {
-		m.Scopes = stringsToSet(resp.Scopes)
+		m.Scopes = optionalStringSet(resp.Scopes, m.Scopes)
 	}
 	if m.DefaultScopes.IsUnknown() {
-		m.DefaultScopes = stringsToSet(resp.DefaultScopes)
+		m.DefaultScopes = optionalStringSet(resp.DefaultScopes, m.DefaultScopes)
 	}
 	if m.Challenges.IsUnknown() {
-		m.Challenges = stringsToSet(resp.Challenges)
+		m.Challenges = optionalStringSet(resp.Challenges, m.Challenges)
 	}
 	if m.ForceMFA.IsUnknown() {
 		m.ForceMFA = types.BoolValue(resp.ForceMFA)

@@ -107,7 +107,7 @@ Optional and computed: leaving this out adopts whatever Rauthy has, and removing
 Optional and computed: leaving this out adopts whatever Rauthy has, and removing it from the configuration later keeps the last applied value rather than reverting it. To change it, set it explicitly.
 - `client_uri` (String) Informational URI of the application.
 - `contacts` (Set of String) Contact addresses for the application's maintainers.
-- `default_scopes` (Set of String) Scopes granted even when the client does not ask for them.
+- `default_scopes` (Set of String) Scopes granted even when the client does not ask for them. Must include `openid`.
 
 Optional and computed: leaving this out adopts whatever Rauthy has, and removing it from the configuration later keeps the last applied value rather than reverting it. To change it, set it explicitly.
 - `enabled` (Boolean) Whether the client may be used to log in.
@@ -126,7 +126,7 @@ Optional and computed: leaving this out adopts whatever Rauthy has, and removing
 - `post_logout_redirect_uris` (Set of String) Allowed redirect URIs after a logout.
 - `restrict_group_prefix` (String) Restrict logins to users in groups starting with this prefix.
 - `scim` (Attributes) SCIM provisioning against the application. (see [below for nested schema](#nestedatt--scim))
-- `scopes` (Set of String) Scopes the client may request.
+- `scopes` (Set of String) Scopes the client may request. Must include `openid`.
 
 Optional and computed: leaving this out adopts whatever Rauthy has, and removing it from the configuration later keeps the last applied value rather than reverting it. To change it, set it explicitly.
 - `secret_cache_current_hours` (Number) How long (1-24 hours) the previous secret keeps working after a rotation, giving consumers time to pick up the new one. Sent only when a rotation actually happens; changing this on its own does not rotate anything.
