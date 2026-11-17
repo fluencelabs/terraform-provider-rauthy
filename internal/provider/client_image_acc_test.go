@@ -3,6 +3,7 @@ package provider_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -232,4 +233,33 @@ func checkImageAbsent(kind rauthy.ImageKind) resource.TestCheckFunc {
 		}
 		return nil
 	}
+}
+
+func TestAccClientImage_changedBeforeRemoval(t *testing.T) {
+	factories := acctest.Setup(t)
+	api := acctest.RealClient(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientImagesDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccClientImageConfig(testAccLogoPNG),
+				Check:  testAccCheckImagePresent(rauthy.ImageLogo, "image/webp"),
+			},
+			{PreConfig: func() {
+				data, err := os.ReadFile("testdata/logo-alt.png")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err = api.PutClientImage(
+					context.Background(),
+					accImageClientID,
+					rauthy.ImageLogo,
+					rauthy.Image{Data: data, ContentType: rauthy.MimePNG},
+				); err != nil {
+					t.Fatal(err)
+				}
+			}, Config: testAccClientImageConfig(""), Check: resource.ComposeAggregateTestCheckFunc(checkImageAbsent(rauthy.ImageLogo), resource.TestCheckResourceAttr("rauthy_client.branding", "id", accImageClientID))},
+		},
+	})
 }

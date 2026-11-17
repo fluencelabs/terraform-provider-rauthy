@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -119,7 +121,7 @@ func (v jsonString) StringSemanticEquals(
 		right.Decode(&rhs) != nil {
 		return v.ValueString() == other.ValueString(), diags
 	}
-	return reflect.DeepEqual(exactJSONNumbers(lhs), exactJSONNumbers(rhs)), diags
+	return reflect.DeepEqual(rauthyJSONNumbers(lhs), rauthyJSONNumbers(rhs)), diags
 }
 
 func newJSONString(s string) jsonString {
@@ -130,21 +132,114 @@ func nullJSONString() jsonString {
 	return jsonString{StringValue: basetypes.NewStringNull()}
 }
 
-// exactJSONNumbers compares numeric spellings without rounding integers through float64.
-func exactJSONNumbers(value any) any {
+// rauthyJSONNumbers preserves serde_json integers and rounds floating-point numbers
+// as serde_json 1.0.151/1.0.154 do without arbitrary_precision or float_roundtrip.
+func rauthyJSONNumbers(value any) any {
 	switch v := value.(type) {
 	case json.Number:
-		if number, ok := new(big.Rat).SetString(v.String()); ok {
-			return number
+		text := v.String()
+		if !strings.ContainsAny(text, ".eE") {
+			if _, err := strconv.ParseUint(text, 10, 64); err == nil {
+				number, _ := new(big.Rat).SetString(text)
+				return number
+			}
+			if _, err := strconv.ParseInt(text, 10, 64); err == nil {
+				number, _ := new(big.Rat).SetString(text)
+				return number
+			}
+		}
+		if number := serdeJSONFloat(text); !math.IsInf(number, 0) {
+			return new(big.Rat).SetFloat64(number)
 		}
 	case []any:
 		for i, element := range v {
-			v[i] = exactJSONNumbers(element)
+			v[i] = rauthyJSONNumbers(element)
 		}
 	case map[string]any:
 		for key, element := range v {
-			v[key] = exactJSONNumbers(element)
+			v[key] = rauthyJSONNumbers(element)
 		}
 	}
 	return value
+}
+
+// serdeJSONFloat follows serde_json's parse_integer, parse_decimal and
+// f64_from_parts: accumulate a u64 significand, discard overflowing digits,
+// then scale the rounded significand by a single power of ten. ParseFloat
+// alone differs because it rounds the complete decimal in one operation.
+// The caller has already checked JSON syntax.
+func serdeJSONFloat(text string) float64 {
+	const maxPower = 308
+	negative := strings.HasPrefix(text, "-")
+	text = strings.TrimPrefix(text, "-")
+	mantissa, exponentText, hasExponent := strings.Cut(strings.ToLower(text), "e")
+	exponent := 0
+	if hasExponent {
+		parsed, err := strconv.ParseInt(exponentText, 10, 32)
+		if err != nil {
+			parsed = math.MaxInt32
+			if strings.HasPrefix(exponentText, "-") {
+				parsed = math.MinInt32
+			}
+		}
+		exponent = int(parsed)
+	}
+	significand, adjustment := serdeJSONSignificand(mantissa)
+	exponent += adjustment
+	number := float64(significand)
+	// serde_json scales subnormal values in stages to avoid an infinite divisor.
+	for exponent < -maxPower && number != 0 {
+		number /= 1e308
+		exponent += maxPower
+	}
+	if number != 0 {
+		switch {
+		case exponent > maxPower:
+			number = math.Inf(1)
+		case exponent >= 0:
+			number *= jsonPowerOfTen(exponent)
+		default:
+			number /= jsonPowerOfTen(-exponent)
+		}
+	}
+	if negative {
+		number = -number
+	}
+	return number
+}
+
+// serde_json's POW10 table contains correctly rounded decimal literals.
+func jsonPowerOfTen(exponent int) float64 {
+	number, _ := strconv.ParseFloat("1e"+strconv.Itoa(exponent), 64)
+	return number
+}
+
+func serdeJSONSignificand(mantissa string) (uint64, int) {
+	const radix = 10
+	exponent := 0
+	var significand uint64
+	fraction, overflow := false, false
+	for i := range mantissa {
+		digit := mantissa[i]
+		if digit == '.' {
+			overflow = false
+			fraction = true
+			continue
+		}
+		value := uint64(digit - '0')
+		if !overflow && significand > (math.MaxUint64-value)/radix {
+			overflow = true
+		}
+		if overflow {
+			if !fraction {
+				exponent++
+			}
+			continue
+		}
+		significand = significand*radix + value
+		if fraction {
+			exponent--
+		}
+	}
+	return significand, exponent
 }
