@@ -28,22 +28,83 @@ func TestPAMErrors(t *testing.T) {
 			t.Fatalf("forbidden read repeated: %v", resp.Diagnostics)
 		}
 	})
-	t.Run("delete cause", func(t *testing.T) {
-		for _, code := range []int{400, 403} {
+}
+
+func TestPamGroupDeleteHints(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		status        int
+		code, message string
+		hint          bool
+	}{
+		{"host", 400, "BadRequest", "Cannot delete group with assigned hosts", true},
+		{"sqlite", 400, "BadRequest", "Error code 787: Foreign key constraint failed", true},
+		{"sqlite database", 500, "Database", "Error code 787: Foreign key constraint failed", false},
+		{"postgres", 500, "Database", "db error", true},
+		{"wrong host status", 500, "BadRequest", "Cannot delete group with assigned hosts", false},
+		{"original forbidden assertion", 403, "BadRequest", "Error code 787", false},
+		{"forbidden postgres", 403, "Database", "db error", false},
+		{"wrong postgres status", 400, "Database", "db error", false},
+		{"forbidden", 403, "Forbidden", "Error code 787", false},
+		{"other database", 500, "Database", "connection closed", false},
+		{"other constraint", 400, "BadRequest", "Error code 1555", false},
+		{"immutable", 400, "BadRequest", "Immutable groups cannot be deleted", false},
+		{"unstructured", 500, "", "Error code 787", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			f, api := newFakeRauthy(t)
 			f.handle("DELETE /pam/groups/100001", func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(code)
-				_ = json.NewEncoder(w).
-					Encode(map[string]string{"error": "BadRequest", "message": "Error code 787"})
+				w.WriteHeader(tc.status)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": tc.code, "message": tc.message})
 			})
 			r := &pamGroupResource{api: api}
 			state := pamGroupResourceModel{ID: types.Int64Value(100001)}
 			var resp resource.DeleteResponse
-			r.Delete(ctx, resource.DeleteRequest{State: resourceState(t, r, &state)}, &resp)
+			r.Delete(context.Background(), resource.DeleteRequest{State: resourceState(t, r, &state)}, &resp)
 			if !resp.Diagnostics.HasError() ||
-				strings.Contains(resp.Diagnostics.Errors()[0].Detail(), "create_before_destroy") != (code == 400) {
-				t.Fatalf("wrong advice for %d: %v", code, resp.Diagnostics)
+				strings.Contains(resp.Diagnostics.Errors()[0].Detail(), "create_before_destroy") != tc.hint {
+				t.Fatalf("wrong advice: %v", resp.Diagnostics)
 			}
-		}
-	})
+			if tc.name == "postgres" && (!strings.Contains(resp.Diagnostics.Errors()[0].Detail(), "If a host") ||
+				!strings.Contains(resp.Diagnostics.Errors()[0].Detail(), "check the Rauthy logs")) {
+				t.Fatalf("opaque Postgres error must not claim a confirmed foreign-key violation: %v", resp.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestPamGroupCreateHints(t *testing.T) {
+	for _, tc := range []struct {
+		name, code, message string
+		status              int
+		plain, hint         bool
+	}{
+		{"sqlite duplicate", "NotFound", "no rows returned", 404, false, true},
+		{"postgres duplicate", "NotFound", "No results found", 404, false, true},
+		{"other structured 404", "NotFound", "Route not found", 404, false, false},
+		{"wrong status", "NotFound", "no rows returned", 500, false, false},
+		{"proxy", "", "404 page not found", 404, true, false},
+		{"missing code", "", "no rows returned", 404, false, false},
+		{"other code", "BadRequest", "no rows returned", 404, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, api := newFakeRauthy(t)
+			f.handle("POST /pam/groups", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				if tc.plain {
+					_, _ = w.Write([]byte(tc.message))
+				} else {
+					_ = json.NewEncoder(w).Encode(map[string]string{"error": tc.code, "message": tc.message})
+				}
+			})
+			r := &pamGroupResource{api: api}
+			plan := pamGroupResourceModel{Name: types.StringValue("test"), Typ: types.StringValue("generic")}
+			var resp resource.CreateResponse
+			r.Create(context.Background(), resource.CreateRequest{Plan: resourcePlan(t, r, &plan)}, &resp)
+			if !resp.Diagnostics.HasError() ||
+				strings.Contains(resp.Diagnostics.Errors()[0].Detail(), "already exists") != tc.hint {
+				t.Fatalf("wrong advice: %v", resp.Diagnostics)
+			}
+		})
+	}
 }

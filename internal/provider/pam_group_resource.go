@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -149,7 +148,9 @@ func (r *pamGroupResource) Create(ctx context.Context, req resource.CreateReques
 		detail := err.Error()
 		// Rauthy inserts with ON CONFLICT (name) DO NOTHING, so a taken name
 		// comes back as a 404 "no rows returned".
-		if rauthy.IsNotFound(err) {
+		if apiErr, ok := errors.AsType[*rauthy.APIError](err); ok &&
+			apiErr.StatusCode == http.StatusNotFound && apiErr.ErrorCode == "NotFound" &&
+			(apiErr.Message == "no rows returned" || apiErr.Message == "No results found") {
 			detail += "\n\nA PAM group with this name already exists. Group names are unique: when replacing a " +
 				"group with create_before_destroy, change its name in the same apply."
 		}
@@ -206,16 +207,22 @@ func (r *pamGroupResource) Delete(ctx context.Context, req resource.DeleteReques
 	}
 
 	gid := state.ID.ValueInt64()
-	// A group a host still points at comes back as a 400: "Cannot delete group
-	// with assigned hosts" for a host group, SQLite's foreign key error code 787
-	// for another type. Both deserve the way out.
 	if err := r.api.DeletePamGroup(ctx, gid); err != nil && !rauthy.IsNotFound(err) {
 		detail := err.Error()
-		var apiErr *rauthy.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest &&
-			(strings.Contains(detail, "assigned hosts") || strings.Contains(detail, "Error code 787")) {
-			detail += "\n\nRauthy refuses to delete a group a host still points at. Move the host to another " +
-				"group first, or, when the group is being replaced, set lifecycle { create_before_destroy = true } on it."
+		if apiErr, ok := errors.AsType[*rauthy.APIError](err); ok {
+			switch {
+			case apiErr.StatusCode == http.StatusBadRequest && apiErr.ErrorCode == "BadRequest" &&
+				(apiErr.Message == "Cannot delete group with assigned hosts" || apiErr.Message == "Error code 787"):
+				detail += "\n\nRauthy refuses to delete a group a host still points at. Move the host to another " +
+					"group first, or, when the group is being replaced, set lifecycle { create_before_destroy = true } on it."
+			case apiErr.StatusCode == http.StatusInternalServerError && apiErr.ErrorCode == "Database" &&
+				apiErr.Message == "db error":
+				// Rauthy's Postgres conversion exposes only tokio-postgres's
+				// Display text, which hides the SQLSTATE and constraint name.
+				detail += "\n\nIf a host still points at this group, move it to another group first, or, when the group is " +
+					"being replaced, set lifecycle { create_before_destroy = true } on it. Rauthy's Postgres response " +
+					"does not identify the database error; check the Rauthy logs to confirm the cause."
+			}
 		}
 		resp.Diagnostics.AddError("Could not delete Rauthy PAM group "+strconv.FormatInt(gid, 10), detail)
 	}
