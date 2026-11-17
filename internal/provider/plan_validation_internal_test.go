@@ -65,7 +65,20 @@ func TestAPIKeyAccessUniqueGroups(t *testing.T) {
 				apiKeyAccessObjectType(),
 				[]attr.Value{grant(clients, read), grant(clients, types.SetUnknown(types.StringType))},
 			),
-			true,
+			false,
+		},
+		{
+			"unknown-right-element",
+			types.SetValueMust(apiKeyAccessObjectType(), []attr.Value{
+				grant(clients, read),
+				grant(clients, types.SetValueMust(types.StringType, []attr.Value{types.StringUnknown()})),
+			}),
+			false,
+		},
+		{
+			"identical",
+			types.SetValueMust(apiKeyAccessObjectType(), []attr.Value{grant(clients, read), grant(clients, read)}),
+			false,
 		},
 		{
 			"unknown-object",

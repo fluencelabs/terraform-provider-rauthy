@@ -21,10 +21,19 @@ func (v apiKeyUniqueGroups) ValidateSet(ctx context.Context, req validator.SetRe
 	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
 		return
 	}
-	groups := make(map[string]bool)
+	groups := make(map[string]types.Object)
 	for _, element := range req.ConfigValue.Elements() {
 		object, ok := element.(types.Object)
 		if !ok || object.IsNull() || object.IsUnknown() {
+			continue
+		}
+		value, err := object.ToTerraformValue(ctx)
+		if err != nil {
+			resp.Diagnostics.AddAttributeError(req.Path, "Could not validate API key access", err.Error())
+			return
+		}
+		if !value.IsFullyKnown() {
+			// Unknown rights can resolve to an identical element, which Terraform collapses.
 			continue
 		}
 		group, ok := object.Attributes()["group"].(types.String)
@@ -32,10 +41,10 @@ func (v apiKeyUniqueGroups) ValidateSet(ctx context.Context, req validator.SetRe
 			continue
 		}
 		name := group.ValueString()
-		if groups[name] {
+		if previous, exists := groups[name]; exists && !previous.Equal(object) {
 			resp.Diagnostics.AddAttributeError(req.Path, "Duplicate API key access group", v.Description(ctx))
 			return
 		}
-		groups[name] = true
+		groups[name] = object
 	}
 }

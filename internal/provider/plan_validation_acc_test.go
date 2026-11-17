@@ -27,6 +27,46 @@ func TestAccAPIKey_duplicateGroups(t *testing.T) {
 	})
 }
 
+func TestAccAPIKey_unknownRights(t *testing.T) {
+	factories := acctest.Setup(t)
+	for _, update := range []bool{false, true} {
+		for _, rights := range []string{"read", "update"} {
+			t.Run(fmt.Sprintf("update=%t/rights=%s", update, rights), func(t *testing.T) {
+				name := fmt.Sprintf("tf-rights-%t-%s", update, rights)
+				steps := []resource.TestStep{}
+				if update {
+					steps = append(steps, resource.TestStep{
+						Config: testAccAPIKeyConfig(
+							name,
+							`[{group = "Clients", access_rights = ["read"]}]`,
+							"",
+						),
+					})
+				}
+				step := resource.TestStep{
+					Config: fmt.Sprintf(`resource "terraform_data" "rights" { input = [%q] }`, rights) +
+						testAccAPIKeyConfig(
+							name,
+							`[{group = "Clients", access_rights = ["read"]}, {group = "Clients", access_rights = terraform_data.rights.output}]`,
+							"",
+						),
+					Check: resource.TestCheckResourceAttr("rauthy_api_key.test", "access.#", "1"),
+				}
+				if rights != "read" {
+					step.ExpectError = regexp.MustCompile("Duplicate API key access group")
+					step.Check = nil
+				}
+				steps = append(steps, step)
+				resource.Test(t, resource.TestCase{
+					ProtoV6ProviderFactories: factories,
+					CheckDestroy:             testAccCheckAPIKeyDestroyed,
+					Steps:                    steps,
+				})
+			})
+		}
+	}
+}
+
 func TestAccAuthProvider_incompleteClaimPairs(t *testing.T) {
 	factories := acctest.Setup(t)
 	for _, prefix := range []string{"admin", "mfa"} {
@@ -81,9 +121,12 @@ resource "rauthy_client" "test" {
 		Steps: []resource.TestStep{
 			{Config: config("https://app.example.com/scim", "")},
 			{
-				Config:             config("https://app.example.com/scim/v2", "scim = terraform_data.scim.output"),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				Config: config("https://app.example.com/scim/v2", "scim = terraform_data.scim.output"),
+				Check: resource.TestCheckResourceAttr(
+					"rauthy_client.test",
+					"scim.base_uri",
+					"https://app.example.com/scim/v2",
+				),
 			},
 		},
 	})
