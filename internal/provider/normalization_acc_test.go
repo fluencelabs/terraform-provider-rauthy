@@ -101,3 +101,22 @@ func TestAccScopesPlan(t *testing.T) {
 }`, PlanOnly: true, ExpectError: regexp.MustCompile("Missing openid scope"),
 	}}})
 }
+
+// A PAM user takes the email of a user written in mixed case. Rauthy returns
+// it lowercased for both; both keep the configured value.
+func TestAccPamUserEmailNormalization(t *testing.T) {
+	factories := acctest.Setup(t)
+	resource.Test(t, resource.TestCase{ProtoV6ProviderFactories: factories, Steps: []resource.TestStep{{
+		Config: `
+resource "rauthy_user" "pam_mixed" {
+ email = "PamMixed@Example.com"
+ given_name = "Pam"
+}
+resource "rauthy_pam_user" "pam_mixed" {
+ username = "pammixed"
+ email = rauthy_user.pam_mixed.email
+}
+`,
+		Check: resource.TestCheckResourceAttr("rauthy_pam_user.pam_mixed", "email", "PamMixed@Example.com"),
+	}}})
+}

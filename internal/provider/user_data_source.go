@@ -184,7 +184,7 @@ func (d *userDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	}
 
 	config.ID = types.StringValue(got.ID)
-	config.Email = types.StringValue(got.Email)
+	config.Email = emailValue(config.Email, got.Email)
 	config.GivenName = types.StringPointerValue(got.GivenName)
 	config.FamilyName = types.StringPointerValue(got.FamilyName)
 	config.Language = types.StringValue(got.Language)

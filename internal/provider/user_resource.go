@@ -261,9 +261,7 @@ func buildUpdateUserRequest(
 // back for it at all.
 func applyUser(m *userResourceModel, u *rauthy.UserResponse) {
 	m.ID = types.StringValue(u.ID)
-	if m.Email.IsNull() || m.Email.IsUnknown() || strings.ToLower(m.Email.ValueString()) != u.Email {
-		m.Email = types.StringValue(u.Email)
-	}
+	m.Email = emailValue(m.Email, u.Email)
 	m.Enabled = types.BoolValue(u.Enabled)
 	m.EmailVerified = types.BoolValue(u.EmailVerified)
 	m.Language = types.StringValue(u.Language)
@@ -308,4 +306,14 @@ func setToStringsNonNil(ctx context.Context, set types.Set, diags *diag.Diagnost
 		return []string{}
 	}
 	return out
+}
+
+// emailValue keeps a known email that Rauthy stores lowercased, so the value
+// the configuration gave survives a read; any other difference is drift. Every
+// email attribute goes through it: users, PAM users and the user lookup.
+func emailValue(known types.String, stored string) types.String {
+	if !known.IsNull() && !known.IsUnknown() && strings.ToLower(known.ValueString()) == stored {
+		return known
+	}
+	return types.StringValue(stored)
 }
