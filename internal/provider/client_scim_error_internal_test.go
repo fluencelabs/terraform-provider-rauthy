@@ -36,18 +36,26 @@ func TestClientScimFailureSavesStoredState(t *testing.T) {
 	for _, create := range []bool{true, false} {
 		for _, readFails := range []bool{false, true} {
 			for _, confidential := range []bool{false, true} {
-				t.Run(
-					fmt.Sprintf("create=%t/readFails=%t/confidential=%t", create, readFails, confidential),
-					func(t *testing.T) {
-						testClientScimFailure(t, create, readFails, confidential)
-					},
-				)
+				for _, storedScim := range []bool{false, true} {
+					t.Run(
+						fmt.Sprintf(
+							"create=%t/readFails=%t/confidential=%t/storedScim=%t",
+							create,
+							readFails,
+							confidential,
+							storedScim,
+						),
+						func(t *testing.T) {
+							testClientScimFailure(t, create, readFails, confidential, storedScim)
+						},
+					)
+				}
 			}
 		}
 	}
 }
 
-func testClientScimFailure(t *testing.T, create, readFails, confidential bool) {
+func testClientScimFailure(t *testing.T, create, readFails, confidential, storedScim bool) {
 	t.Helper()
 	ctx := context.Background()
 	f, api := newFakeRauthy(t)
@@ -57,6 +65,22 @@ func testClientScimFailure(t *testing.T, create, readFails, confidential bool) {
 	stored.Name = new("Saved Name")
 	stored.AccessTokenLifetime = 900
 	stored.Scim = nil
+	var wantScim *scimModel
+	if storedScim {
+		stored.Scim = &rauthy.ScimClientRequestResponse{
+			BearerToken:     rauthy.NewSecret("saved-scim-token"),
+			BaseURI:         "https://saved.example.com/scim/v2",
+			SyncGroups:      false,
+			GroupSyncPrefix: new("saved"),
+		}
+		// Keep the expected state independent of the production response mapper.
+		wantScim = &scimModel{
+			BearerToken:     types.StringValue("saved-scim-token"),
+			BaseURI:         types.StringValue("https://saved.example.com/scim/v2"),
+			SyncGroups:      types.BoolValue(false),
+			GroupSyncPrefix: types.StringValue("saved"),
+		}
+	}
 	var persisted atomic.Bool
 	f.answer("POST /clients", current)
 	secret := rauthy.NewSecret("old-secret")
@@ -109,14 +133,12 @@ func testClientScimFailure(t *testing.T, create, readFails, confidential bool) {
 		t.Fatal(d)
 	}
 	if readFails {
-		if len(diags.Errors()) != 2 {
-			t.Errorf("missing read failure: %v", diags)
-		}
-		if !got.Name.Equal(old.Name) {
-			t.Error("failed read replaced known state")
-		}
+		checkScimReadFailureState(t, diags, got, old)
 
 		return
+	}
+	if !reflect.DeepEqual(got.Scim, wantScim) {
+		t.Errorf("SCIM state does not match persisted configuration: got %+v, want %+v", got.Scim, wantScim)
 	}
 	want := clientModelOf(t, &stored)
 	if create {
@@ -132,5 +154,18 @@ func checkScimDiagnostic(t *testing.T, diags diag.Diagnostics) {
 	if !diags.HasError() ||
 		!strings.Contains(diags.Errors()[len(diags.Errors())-1].Detail(), "Rauthy stored the client's configuration") {
 		t.Fatalf("missing saved-client diagnostic: %v", diags)
+	}
+}
+
+func checkScimReadFailureState(t *testing.T, diags diag.Diagnostics, got, old clientResourceModel) {
+	t.Helper()
+	if len(diags.Errors()) != 2 {
+		t.Errorf("missing read failure: %v", diags)
+	}
+	if !got.Name.Equal(old.Name) {
+		t.Error("failed read replaced known state")
+	}
+	if !reflect.DeepEqual(got.Scim, old.Scim) {
+		t.Errorf("failed read replaced known SCIM state: got %+v, want %+v", got.Scim, old.Scim)
 	}
 }
