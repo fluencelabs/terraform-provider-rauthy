@@ -284,3 +284,29 @@ resource "rauthy_pam_host" "test" {
 		},
 	})
 }
+
+// Without create_before_destroy the replacement of a host group in use fails
+// on the delete, and the error names the way out.
+func TestAccPamGroup_replaceInUseHint(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(name string) string {
+		return fmt.Sprintf(`
+resource "rauthy_pam_group" "servers" {
+  name = %q
+  typ  = "host"
+}
+
+resource "rauthy_pam_host" "test" {
+  hostname = "tfacchint"
+  gid      = rauthy_pam_group.servers.id
+}
+`, name)
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{Config: config("tfacchintold")},
+			{Config: config("tfacchintnew"), ExpectError: regexp.MustCompile("create_before_destroy")},
+		},
+	})
+}

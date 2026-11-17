@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -58,10 +57,13 @@ func (r *pamGroupResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"A PAM group is a real group in the host's namespace: its `id` is the numeric gid handed to " +
 			"`rauthy_pam_host.gid` and to a `rauthy_pam_user` membership.\n\n" +
 			"Rauthy offers no update endpoint for a PAM group, so changing either the name or the type " +
-			"replaces the group, which means a new gid. Rauthy refuses to delete a group that a host or " +
-			"a user still refers to, and Terraform deletes before it creates, so a group in use needs " +
-			"`lifecycle { create_before_destroy = true }`. Then Terraform creates the new group, moves " +
-			"the references that go through `rauthy_pam_group.<name>.id`, and deletes the old one.\n\n" +
+			"replaces the group, which means a new gid. Rauthy refuses to delete a group a host still " +
+			"points at, and Terraform deletes before it creates, so a host group in use needs " +
+			"`lifecycle { create_before_destroy = true }`: Terraform then creates the new group, moves the " +
+			"hosts that refer to `rauthy_pam_group.<name>.id`, and deletes the old one. Group names are " +
+			"unique, so with create_before_destroy a change of `typ` alone fails on the name: change the " +
+			"name in the same apply. User memberships do not block a deletion: Rauthy removes them with " +
+			"the group, and Terraform adds the new gid back to users that refer to it.\n\n" +
 			"Requires these API key rights: `Pam` read, create, delete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.Int64Attribute{
@@ -196,17 +198,15 @@ func (r *pamGroupResource) Delete(ctx context.Context, req resource.DeleteReques
 	}
 
 	gid := state.ID.ValueInt64()
-	// A group still referenced by a host's gid or by a user's membership comes
-	// back as a 400 carrying the raw SQLite message ("FOREIGN KEY constraint
-	// failed"). That is unhelpful enough to be worth translating.
+	// A group a host still points at comes back as a 400: "Cannot delete group
+	// with assigned hosts" for a host group, the raw SQLite "FOREIGN KEY
+	// constraint failed" for another type. Both deserve the way out.
 	if err := r.api.DeletePamGroup(ctx, gid); err != nil && !rauthy.IsNotFound(err) {
 		detail := err.Error()
 		var apiErr *rauthy.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest &&
-			strings.Contains(detail, "FOREIGN KEY constraint failed") {
-			detail += "\n\nRauthy refuses to delete a group that a host still points at or that a user is still a member of. " +
-				"Remove those references first, or, when the group is being replaced, set " +
-				"lifecycle { create_before_destroy = true } on it."
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest {
+			detail += "\n\nRauthy refuses to delete a group a host still points at. Move the host to another " +
+				"group first, or, when the group is being replaced, set lifecycle { create_before_destroy = true } on it."
 		}
 		resp.Diagnostics.AddError("Could not delete Rauthy PAM group "+strconv.FormatInt(gid, 10), detail)
 	}
