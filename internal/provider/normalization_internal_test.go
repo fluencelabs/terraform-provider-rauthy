@@ -115,29 +115,14 @@ func TestNormalization_IPv6(t *testing.T) {
 	}
 }
 
-// Rauthy lowercases emails with Rust's to_lowercase; the expectations are
-// the output of rustc 1.98.1.
-func TestRustLowercase(t *testing.T) {
+// An email Rauthy lowercased keeps its configured spelling; another is drift.
+func TestEmailValue(t *testing.T) {
 	t.Parallel()
-	for in, want := range map[string]string{
-		"Cold@Example.COM":  "cold@example.com",
-		"cold@İ.example":    "cold@i̇.example",
-		"ΟΔΟΣ@example.com":  "οδος@example.com",
-		"ΣΑ@example.com":    "σα@example.com",
-		"Σ@example.com":     "σ@example.com",
-		"cold@ⅠΣ.example":   "cold@ⅰσ.example",
-		"cold@ΑΣ·Α.example": "cold@ασ·α.example",
-		"cold@ªΣ.example":   "cold@ªσ.example",
-		"cold@ΑΣ’Α.example": "cold@ασ’α.example",
-		"cold@ⅠΣ-x.example": "cold@ⅰς-x.example",
-		"cold@ªΣ-x.example": "cold@ªς-x.example",
-	} {
-		if got := rustLowercase(in); got != want {
-			t.Errorf("rustLowercase(%q) = %q, want %q", in, got, want)
-		}
-	}
-	known := types.StringValue("cold@İ.example")
-	if got := emailValue(known, "cold@i̇.example"); !got.Equal(known) {
+	known := types.StringValue("Cold@Example.COM")
+	if got := emailValue(known, "cold@example.com"); !got.Equal(known) {
 		t.Errorf("emailValue dropped the configured value: %v", got)
+	}
+	if got := emailValue(known, "other@example.com"); got.ValueString() != "other@example.com" {
+		t.Errorf("emailValue hid a real change: %v", got)
 	}
 }

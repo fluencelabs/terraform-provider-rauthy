@@ -368,3 +368,23 @@ func TestCommaRefused(t *testing.T) {
 		}
 	}
 }
+
+// Only emails whose non-ASCII part is already lowercase pass: for them Go's
+// and Rust's lowercasing agree.
+func TestEmail(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]bool{
+		"Cold@Example.COM":  true,
+		"cold@ασ.example":   true,
+		"cold@ʰσ-x.example": true,
+		"cold@İ.example":    false,
+		"cold@ΑΣ.example":   false,
+		"cold@ⅠΣ-x.example": false,
+		"cold@ªΣ-x.example": false,
+		"cold@ǅ.example":    false,
+	} {
+		if got := acceptsString(validators.Email(), in); got != want {
+			t.Errorf("Email accepts %q = %v, want %v", in, got, want)
+		}
+	}
+}

@@ -56,6 +56,7 @@ func userIdentityAttributes() map[string]schema.Attribute {
 			Required: true,
 			MarkdownDescription: "Email address, which is also the login identifier. Changing it " +
 				"updates the account in place rather than replacing it.",
+			Validators: []validator.String{validators.Email()},
 		},
 		// Required, though Rauthy's own OpenAPI document calls it nullable:
 		// PUT /users/{id} answers a null given_name with "'given_name' is

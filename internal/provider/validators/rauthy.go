@@ -458,3 +458,32 @@ func (v ipAddressValidator) ValidateString(
 func IPAddress() validator.String {
 	return ipAddressValidator{}
 }
+
+// Email refuses an email with a non-ASCII character that lowercasing changes.
+// Rauthy stores emails through Rust's to_lowercase, which differs from Go's
+// lowercasing only for such characters (final sigma, U+0130 and the context
+// rules around them). Without them both agree exactly, so the provider can
+// tell Rauthy's spelling of the configured email from a real change.
+func Email() validator.String { return emailValidator{} }
+
+type emailValidator struct{}
+
+func (emailValidator) Description(context.Context) string {
+	return "non-ASCII characters must already be lowercase"
+}
+
+func (v emailValidator) MarkdownDescription(ctx context.Context) string { return v.Description(ctx) }
+
+func (emailValidator) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	for _, r := range req.ConfigValue.ValueString() {
+		if r > unicode.MaxASCII && unicode.ToLower(r) != r {
+			resp.Diagnostics.AddAttributeError(req.Path, "Email with uppercase non-ASCII characters",
+				"Rauthy lowercases emails with rules that differ from Go's for non-ASCII characters. "+
+					"Write the non-ASCII part of the email in lowercase.")
+			return
+		}
+	}
+}

@@ -3,13 +3,12 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 
 	"github.com/fluencelabs/rauthy-go"
 )
@@ -310,18 +309,12 @@ func setToStringsNonNil(ctx context.Context, set types.Set, diags *diag.Diagnost
 }
 
 // emailValue keeps a known email that Rauthy stores lowercased, so the value
-// the configuration gave survives a read; any other difference is drift. Every
+// the configuration gave survives a read; any other difference is drift.
+// validators.Email keeps strings.ToLower equal to Rauthy's lowercasing. Every
 // email attribute goes through it: users, PAM users and the user lookup.
 func emailValue(known types.String, stored string) types.String {
-	if !known.IsNull() && !known.IsUnknown() && rustLowercase(known.ValueString()) == stored {
+	if !known.IsNull() && !known.IsUnknown() && strings.ToLower(known.ValueString()) == stored {
 		return known
 	}
 	return types.StringValue(stored)
-}
-
-// rustLowercase is Rust's str::to_lowercase, which Rauthy applies to emails:
-// full Unicode lowercasing, with the final-sigma rule and U+0130 expanding to
-// two runes, where strings.ToLower maps rune by rune.
-func rustLowercase(s string) string {
-	return cases.Lower(language.Und).String(s)
 }

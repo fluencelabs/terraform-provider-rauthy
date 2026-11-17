@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -64,6 +67,7 @@ func (d *userDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Email address of the user. Set this or `id`.",
+				Validators:          []validator.String{validators.Email()},
 			},
 			"given_name": schema.StringAttribute{
 				Computed:            true,

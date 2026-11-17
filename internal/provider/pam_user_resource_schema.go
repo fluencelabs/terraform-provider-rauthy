@@ -3,6 +3,9 @@ package provider
 import (
 	"context"
 
+	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -55,6 +58,7 @@ func (r *pamUserResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Required: true,
 				MarkdownDescription: "Email of the existing Rauthy user this account belongs to. As with the " +
 					"username, it cannot be changed in place.",
+				Validators: []validator.String{validators.Email()},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
