@@ -105,16 +105,16 @@ func (d *userAttributeDataSource) Read(
 	}
 
 	name := config.Name.ValueString()
-	got, err := d.api.GetUserAttr(ctx, name)
-	if rauthy.IsNotFound(err) {
+	got, found, err := findUserAttr(ctx, d.api, name)
+	if err != nil {
+		resp.Diagnostics.AddError("Could not look up Rauthy user attribute "+name, err.Error())
+		return
+	}
+	if !found {
 		resp.Diagnostics.AddError(
 			"Rauthy user attribute "+name+" not found",
 			"No user attribute with that name is defined on the configured Rauthy instance.",
 		)
-		return
-	}
-	if err != nil {
-		resp.Diagnostics.AddError("Could not look up Rauthy user attribute "+name, err.Error())
 		return
 	}
 

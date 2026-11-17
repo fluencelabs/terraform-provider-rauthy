@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"slices"
+	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -217,18 +216,17 @@ func (r *userAttributeResource) Read(ctx context.Context, req resource.ReadReque
 	}
 
 	name := state.Name.ValueString()
-	attrs, err := r.listUserAttrs(ctx)
+	attr, found, err := findUserAttr(ctx, r.api, name)
 	if err != nil {
 		resp.Diagnostics.AddError("Could not read Rauthy user attribute "+name, err.Error())
 		return
 	}
-	index := slices.IndexFunc(attrs, func(a rauthy.UserAttrResponse) bool { return a.Name == name })
-	if index < 0 {
+	if !found {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	applyUserAttr(&state, &attrs[index])
+	applyUserAttr(&state, &attr)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -270,13 +268,18 @@ func (r *userAttributeResource) Update(
 
 	// The PUT response is not to be trusted (the spec declares none at all), so
 	// the stored attribute is read back to learn what Rauthy actually kept.
-	updated, err := r.api.GetUserAttr(ctx, name)
+	updated, found, err := findUserAttr(ctx, r.api, name)
 	if err != nil {
 		resp.Diagnostics.AddError("Could not read back Rauthy user attribute "+name, err.Error())
 		return
 	}
+	if !found {
+		resp.Diagnostics.AddError("Could not read back Rauthy user attribute "+name,
+			"Rauthy did not list the attribute after the update.")
+		return
+	}
 
-	applyUserAttr(&plan, updated)
+	applyUserAttr(&plan, &updated)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -309,40 +312,60 @@ func (r *userAttributeResource) ModifyPlan(
 	r.checkDeletion(ctx, state.ID.ValueString(), &resp.Diagnostics)
 }
 
-func (r *userAttributeResource) listUserAttrs(ctx context.Context) ([]rauthy.UserAttrResponse, error) {
-	var body bytes.Buffer
-	attrs, err := r.api.ListUserAttrs(context.WithValue(ctx, userAttrListBodyKey{}, &body))
+func findUserAttr(ctx context.Context, api *rauthy.Client, name string) (rauthy.UserAttrResponse, bool, error) {
+	var capture userAttrListResponseCapture
+	attrs, err := api.ListUserAttrs(context.WithValue(ctx, userAttrListResponseKey{}, &capture))
+	const invalidList = "GET /users/attr returned HTTP %d: "
 	if err != nil {
-		return nil, err
+		if capture.status >= http.StatusOK && capture.status < http.StatusMultipleChoices {
+			return rauthy.UserAttrResponse{}, false, fmt.Errorf(invalidList+"%w", capture.status, err)
+		}
+		return rauthy.UserAttrResponse{}, false, err
 	}
 	// The SDK decodes null entries and entries with an empty name into the
 	// same Go value. Check the original array before filtering empty names.
 	var response struct {
 		Values []*json.RawMessage `json:"values"`
 	}
-	if body.Len() != 0 {
-		if decodeErr := json.Unmarshal(body.Bytes(), &response); decodeErr != nil {
-			return nil, fmt.Errorf("decode response values: %w", decodeErr)
+	if capture.body.Len() != 0 {
+		if decodeErr := json.Unmarshal(capture.body.Bytes(), &response); decodeErr != nil {
+			return rauthy.UserAttrResponse{}, false, fmt.Errorf(
+				invalidList+"decode response values: %w",
+				capture.status,
+				decodeErr,
+			)
 		}
 	}
 	if response.Values == nil {
-		return nil, errors.New("response is missing the values array")
+		return rauthy.UserAttrResponse{}, false, fmt.Errorf(
+			invalidList+"response is missing the values array",
+			capture.status,
+		)
 	}
 	for i, entry := range response.Values {
 		if entry == nil {
-			return nil, fmt.Errorf("response has a null entry at values[%d]", i)
+			return rauthy.UserAttrResponse{}, false, fmt.Errorf(
+				invalidList+"response has a null entry at values[%d]",
+				capture.status,
+				i,
+			)
 		}
 	}
-	return slices.DeleteFunc(attrs, func(attr rauthy.UserAttrResponse) bool { return attr.Name == "" }), nil
+	for _, attr := range attrs {
+		if attr.Name != "" && attr.Name == name {
+			return attr, true, nil
+		}
+	}
+	return rauthy.UserAttrResponse{}, false, nil
 }
 
 func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) {
-	attrs, err := r.listUserAttrs(ctx)
+	_, found, err := findUserAttr(ctx, r.api, key)
 	if err != nil {
 		diags.AddError("Could not list Rauthy user attributes before checking deletion", err.Error())
 		return
 	}
-	if !slices.ContainsFunc(attrs, func(a rauthy.UserAttrResponse) bool { return a.Name == key }) {
+	if !found {
 		diags.AddError(
 			"User attribute not found in Rauthy's list",
 			fmt.Sprintf("Rauthy did not list attribute %q. Retry if the list is stale. "+

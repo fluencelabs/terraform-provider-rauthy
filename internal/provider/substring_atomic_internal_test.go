@@ -101,18 +101,24 @@ func TestRoleDeleteHoldsSubstringLock(t *testing.T) {
 	f, api := newFakeRauthy(t)
 	listStarted := make(chan struct{})
 	completeList := make(chan struct{})
-	f.handle("GET /roles", func(w http.ResponseWriter, _ *http.Request) {
+	f.handle("GET /roles", func(w http.ResponseWriter, req *http.Request) {
 		snapshot := []rauthy.RoleResponse{{ID: "r", Name: "dev"}}
 		close(listStarted)
-		<-completeList
-		_ = json.NewEncoder(w).Encode(snapshot)
+		select {
+		case <-completeList:
+			_ = json.NewEncoder(w).Encode(snapshot)
+		case <-req.Context().Done():
+		}
 	})
 	deleteStarted := make(chan struct{})
 	completeDelete := make(chan struct{})
-	f.handle("DELETE /roles/r", func(w http.ResponseWriter, _ *http.Request) {
+	f.handle("DELETE /roles/r", func(w http.ResponseWriter, req *http.Request) {
 		close(deleteStarted)
-		<-completeDelete
-		w.WriteHeader(http.StatusOK)
+		select {
+		case <-completeDelete:
+			w.WriteHeader(http.StatusOK)
+		case <-req.Context().Done():
+		}
 	})
 	postStarted := make(chan struct{})
 	f.handle("POST /roles", func(w http.ResponseWriter, _ *http.Request) {
@@ -121,19 +127,28 @@ func TestRoleDeleteHoldsSubstringLock(t *testing.T) {
 	})
 
 	r := &roleResource{api: api}
-	ctx := t.Context()
 	state := resourceState(t, r, roleResourceModel{ID: types.StringValue("r"), Name: types.StringValue("dev")})
 	plan := resourcePlan(t, r, roleResourceModel{Name: types.StringValue("developer")})
 	deletion := resource.DeleteResponse{State: state}
 	deleteDone := make(chan struct{})
+	const timeout = 15 * time.Second
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	go func() {
 		defer close(deleteDone)
 		r.Delete(ctx, resource.DeleteRequest{State: state}, &deletion)
 	}()
+	defer func() {
+		cancel()
+		<-deleteDone
+	}()
 	select {
 	case <-listStarted:
+	case <-deleteStarted:
+		t.Fatal("role DELETE started before the guard listed roles")
 	case <-deleteDone:
 		t.Fatalf("role deletion failed before listing roles: %v", deletion.Diagnostics)
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for the role deletion guard's GET")
 	}
 
 	creation := resource.CreateResponse{State: emptyState(t, r)}
@@ -152,6 +167,9 @@ func TestRoleDeleteHoldsSubstringLock(t *testing.T) {
 	case <-deleteDone:
 		<-createDone
 		t.Fatalf("role deletion failed before DELETE: %v", deletion.Diagnostics)
+	case <-ctx.Done():
+		<-createDone
+		t.Fatal("timed out waiting for role DELETE")
 	}
 
 	observed := waitForMutation(t, "roleResource).Create", createDone, postStarted)

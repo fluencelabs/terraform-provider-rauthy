@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fluencelabs/rauthy-go"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
@@ -26,6 +27,7 @@ func TestUserAttributeReadList(t *testing.T) {
 		{name: "route missing", status: http.StatusNotFound},
 		{name: "forbidden", status: http.StatusForbidden},
 		{name: "attribute missing", attrs: []rauthy.UserAttrResponse{{Name: "developer"}}},
+		{name: "different case", attrs: []rauthy.UserAttrResponse{{Name: "Dev"}}},
 		{name: "empty list", attrs: []rauthy.UserAttrResponse{}},
 		{
 			name:    "attribute present",
@@ -79,6 +81,109 @@ func TestUserAttributeReadList(t *testing.T) {
 	}
 }
 
+func TestUserAttributeReadUsesSuccessfulRetry(t *testing.T) {
+	f, api := newFakeRauthy(t)
+	const route = "GET /users/attr"
+	f.handle(route, func(w http.ResponseWriter, _ *http.Request) {
+		if len(f.bodies(route)) == 1 {
+			http.Error(w, `{"values":[{"name":"dev","user_editable":false}]}`, http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = io.WriteString(w, `{"values":[{"name":"dev","user_editable":true}]}`)
+	})
+	r := &userAttributeResource{api: api}
+	model := userAttributeResourceModel{
+		ID: types.StringValue("dev"), Name: types.StringValue("dev"), UserEditable: types.BoolValue(false),
+	}
+	state := resourceState(t, r, model)
+	model.UserEditable = types.BoolValue(true)
+	want := resourceState(t, r, model)
+	resp := resource.ReadResponse{State: state}
+	r.Read(t.Context(), resource.ReadRequest{State: state}, &resp)
+	if len(f.bodies(route)) != 2 || resp.Diagnostics.HasError() || !resp.State.Raw.Equal(want.Raw) {
+		t.Fatalf(
+			"expected refresh to use the successful retry: state=%v diagnostics=%v",
+			resp.State.Raw,
+			resp.Diagnostics,
+		)
+	}
+}
+
+func TestUserAttributeReadRefusesRedirect(t *testing.T) {
+	f, api := newFakeRauthy(t)
+	const target = "/redirect-target"
+	f.handle("GET /users/attr", func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, rauthy.APIBasePath+target, http.StatusTemporaryRedirect)
+	})
+	f.answer("GET "+target, map[string]any{"values": []rauthy.UserAttrResponse{}})
+
+	r := &userAttributeResource{api: api}
+	state := resourceState(t, r, userAttributeResourceModel{
+		ID: types.StringValue("dev"), Name: types.StringValue("dev"),
+	})
+	resp := resource.ReadResponse{State: state}
+	r.Read(t.Context(), resource.ReadRequest{State: state}, &resp)
+	if len(f.bodies("GET "+target)) != 0 {
+		t.Error("followed the HTTP redirect")
+	}
+	origin := strings.TrimSuffix(api.BaseURL().Reveal(), rauthy.APIBasePath)
+	if !resp.Diagnostics.HasError() || !strings.Contains(resp.Diagnostics[0].Detail(), "307") ||
+		!strings.Contains(resp.Diagnostics[0].Detail(), origin) || !resp.State.Raw.Equal(state.Raw) {
+		t.Fatalf("expected a 307 diagnostic with the destination origin and preserved state: %v", resp.Diagnostics)
+	}
+}
+
+func TestUserAttributeDataSourceDistinguishesMissingFromListErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		detail string
+	}{
+		{"attribute missing", http.StatusOK, "No user attribute with that name"},
+		{"route missing", http.StatusNotFound, "GET /users/attr: HTTP 404: proxy route missing"},
+		{"no content", http.StatusNoContent, "GET /users/attr returned HTTP 204"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, api := newFakeRauthy(t)
+			if tc.status == http.StatusOK {
+				f.answer("GET /users/attr", map[string]any{"values": []rauthy.UserAttrResponse{{Name: "Dev"}}})
+			} else {
+				f.handle("GET /users/attr", func(w http.ResponseWriter, _ *http.Request) {
+					if tc.status == http.StatusNotFound {
+						http.Error(w, "proxy route missing", tc.status)
+						return
+					}
+					w.WriteHeader(tc.status)
+				})
+			}
+			d := &userAttributeDataSource{api: api}
+			config := dataSourceConfig(t, d, userAttributeDataSourceModel{Name: types.StringValue("dev")})
+			resp := datasource.ReadResponse{}
+			d.Read(t.Context(), datasource.ReadRequest{Config: config}, &resp)
+			if !resp.Diagnostics.HasError() || !strings.Contains(resp.Diagnostics[0].Detail(), tc.detail) {
+				t.Fatalf("expected diagnostic containing %q: %v", tc.detail, resp.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestUserAttributeUpdateReportsInvalidReadback(t *testing.T) {
+	f, api := newFakeRauthy(t)
+	f.answer("PUT /users/attr/dev", nil)
+	f.handle("GET /users/attr", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	r := &userAttributeResource{api: api}
+	model := userAttributeResourceModel{ID: types.StringValue("dev"), Name: types.StringValue("dev")}
+	state := resourceState(t, r, model)
+	resp := resource.UpdateResponse{State: state}
+	r.Update(t.Context(), resource.UpdateRequest{State: state, Plan: resourcePlan(t, r, model)}, &resp)
+	if !resp.Diagnostics.HasError() ||
+		!strings.Contains(resp.Diagnostics[0].Detail(), "GET /users/attr returned HTTP 204") {
+		t.Fatalf("expected the invalid list response in the readback diagnostic: %v", resp.Diagnostics)
+	}
+}
+
 func TestUserAttributeMalformedList(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
@@ -88,6 +193,7 @@ func TestUserAttributeMalformedList(t *testing.T) {
 		{"null values", `{"values":null}`, http.StatusOK},
 		{"null entry", `{"values":[null]}`, http.StatusOK},
 		{"null entry with target", `{"values":[{"name":"dev"},null]}`, http.StatusOK},
+		{"invalid values type", `{"values":42}`, http.StatusOK},
 		{"no content", "", http.StatusNoContent},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -104,7 +210,9 @@ func TestUserAttributeMalformedList(t *testing.T) {
 
 			read := resource.ReadResponse{State: state}
 			r.Read(ctx, resource.ReadRequest{State: state}, &read)
+			operation := "GET /users/attr returned HTTP " + strconv.Itoa(tc.status)
 			if !read.Diagnostics.HasError() || !strings.Contains(read.Diagnostics[0].Detail(), "values") ||
+				!strings.Contains(read.Diagnostics[0].Detail(), operation) ||
 				!read.State.Raw.Equal(state.Raw) {
 				t.Errorf(
 					"Read must report an invalid list and preserve state: %v, %v",
@@ -116,6 +224,7 @@ func TestUserAttributeMalformedList(t *testing.T) {
 			deletion := resource.DeleteResponse{State: state}
 			r.Delete(ctx, resource.DeleteRequest{State: state}, &deletion)
 			if !deletion.Diagnostics.HasError() || !strings.Contains(deletion.Diagnostics[0].Detail(), "values") ||
+				!strings.Contains(deletion.Diagnostics[0].Detail(), operation) ||
 				!deletion.State.Raw.Equal(state.Raw) || len(f.bodies("DELETE /users/attr/dev")) != 0 {
 				t.Errorf(
 					"Delete must report an invalid list, preserve state, and skip DELETE: %v",
