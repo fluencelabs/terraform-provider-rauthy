@@ -194,3 +194,16 @@ func TestBuildAPIKeyRequest(t *testing.T) {
 		t.Errorf("access = %+v", req.Access)
 	}
 }
+
+func TestBuildAPIKeyRequest_ConfiguredExpiry(t *testing.T) {
+	var d diag.Diagnostics
+	m := apiKeyResourceModel{
+		Name:      types.StringValue("deploy"),
+		ExpiresAt: types.Int64Value(1900000000),
+		Access:    accessSetOf(t, rauthy.APIKeyAccess{Group: "Users", AccessRights: []string{"read"}}),
+	}
+	req := buildAPIKeyRequest(context.Background(), &m, &d)
+	if d.HasError() || req.Exp == nil || *req.Exp != 1900000000 {
+		t.Fatalf("configured expiry lost: %+v %v", req, d)
+	}
+}
