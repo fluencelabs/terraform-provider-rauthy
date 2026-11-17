@@ -57,4 +57,17 @@ func TestAPIKeyUpdate_FailedRotationSaysItMayHaveHappened(t *testing.T) {
 	if !strings.Contains(detail, "may have rotated") {
 		t.Errorf("the error does not say the secret may have changed anyway:\n%s", detail)
 	}
+	var got apiKeyResourceModel
+	if d := resp.State.Get(ctx, &got); d.HasError() {
+		t.Fatal(d)
+	}
+	if !got.SecretRotationTrigger.Equal(state.SecretRotationTrigger) {
+		t.Error("failed rotation consumed the pending trigger")
+	}
+	if !apiKeyRotationRequested(&got, &plan) {
+		t.Error("the next apply would not retry the pending rotation")
+	}
+	if !got.Secret.Equal(state.Secret) {
+		t.Error("failed rotation did not preserve the prior secret")
+	}
 }
