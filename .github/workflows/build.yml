@@ -39,7 +39,7 @@ jobs:
       - name: Test
         # Unit tests only. The OpenAPI contract tests of the API client live
         # with it, in github.com/fluencelabs/rauthy-go.
-        run: go test ./... -count=1 -timeout 5m
+        run: go test ./... -race -count=1 -timeout 5m
         env:
           # Acceptance tests are explicitly disabled in CI by design; they need a live Rauthy instance.
           TF_ACC: ""
@@ -71,10 +71,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The Rauthy version the provider tracks, read out of the Makefile
-          # so a version bump cannot leave CI booting the old release. This
-          # row must pass.
-          - rauthy: "from-makefile"
+          # Both supported releases must pass.
+          - rauthy: "0.36.2"
+            allow_failure: false
+          - rauthy: "0.37.2"
             allow_failure: false
           # Where Rauthy is heading. Allowed to fail so an upstream change is
           # reported without blocking a pull request that did not cause it.
@@ -90,19 +90,8 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Resolve the Rauthy version
-        id: version
-        run: |
-          set -euo pipefail
-          want='${{ matrix.rauthy }}'
-          if [ "$want" = "from-makefile" ]; then
-            want="$(make -s print-rauthy-version)"
-            echo "pinned Rauthy version from the Makefile: $want"
-          fi
-          echo "version=$want" >> "$GITHUB_OUTPUT"
-
       - name: Boot Rauthy
-        run: ./scripts/rauthy-up.sh "${{ steps.version.outputs.version }}" --github-env >> "$GITHUB_ENV"
+        run: ./scripts/rauthy-up.sh "${{ matrix.rauthy }}" --github-env >> "$GITHUB_ENV"
 
       # A skipped acceptance suite is indistinguishable from a passing one:
       # the harness calls t.Skip when these are unset, so a malformed

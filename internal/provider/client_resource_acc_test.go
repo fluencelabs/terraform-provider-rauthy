@@ -352,3 +352,67 @@ resource "rauthy_client" "u" {
 		Steps:                    []resource.TestStep{{Config: config("false", ""), Check: check}},
 	})
 }
+
+func TestAccClient_importPublicWithoutChallenges(t *testing.T) {
+	factories := acctest.Setup(t)
+	const id = "tf-acc-import-no-pkce"
+	const config = `
+resource "rauthy_client" "imported" {
+ id = "tf-acc-import-no-pkce"
+ confidential = false
+ redirect_uris = ["https://spa.example.com/callback"]
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientDestroyed,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() {
+					ctx := context.Background()
+					c, err := rauthy.New(envOrEmpty("RAUTHY_URL"), envOrEmpty("RAUTHY_API_KEY"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					t.Cleanup(func() { _ = c.DeleteClient(ctx, id) })
+					got, err := c.CreateClient(
+						ctx,
+						rauthy.NewClientRequest{
+							ID:           id,
+							Confidential: false,
+							RedirectURIs: []string{"https://spa.example.com/callback"},
+						},
+					)
+					if err != nil {
+						t.Fatal(err)
+					}
+					req := got.UpdateRequest()
+					req.Challenges = nil
+					got, err = c.UpdateClient(ctx, id, req)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if len(got.Challenges) != 0 {
+						t.Fatalf("fixture has challenges: %v", got.Challenges)
+					}
+				},
+				Config:             config,
+				ResourceName:       "rauthy_client.imported",
+				ImportState:        true,
+				ImportStateId:      id,
+				ImportStatePersist: true,
+				ImportStateCheck: func(states []*terraform.InstanceState) error {
+					if len(states) != 1 || states[0].Attributes["challenges.#"] != "" {
+						return fmt.Errorf("import did not preserve absent challenges: %v", states)
+					}
+					return nil
+				},
+			},
+			{
+				Config: config,
+				Check:  resource.TestCheckTypeSetElemAttr("rauthy_client.imported", "challenges.*", "S256"),
+			},
+			{Config: config, PlanOnly: true},
+		},
+	})
+}

@@ -1,8 +1,7 @@
 .PHONY: docs build test testacc rauthy-up rauthy-down print-rauthy-version fmt vet
 
-# Rauthy version the provider tracks and the acceptance tests boot. Bump it
-# together with the github.com/fluencelabs/rauthy-go release that tracks the
-# same version. Overriding it with anything older than 0.36 does not work: the
+# Default Rauthy version for local acceptance tests. Bump it together with
+# the github.com/fluencelabs/rauthy-go release that tracks the same version. Overriding it with anything older than 0.36 does not work: the
 # minimum supported Rauthy is stated in templates/index.md.tmpl and README.md,
 # and scripts/rauthy-up.sh cannot boot 0.35.
 RAUTHY_VERSION ?= 0.36.2
@@ -31,8 +30,7 @@ rauthy-up:
 rauthy-down:
 	@./scripts/rauthy-down.sh
 
-# The single place the pinned Rauthy version lives; CI reads it from here so a
-# version bump cannot leave the acceptance matrix on the old release.
+# Print the default version used by the local acceptance helpers.
 print-rauthy-version:
 	@echo $(RAUTHY_VERSION)
 
