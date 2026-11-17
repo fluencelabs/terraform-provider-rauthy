@@ -20,6 +20,7 @@ var (
 	_ resource.Resource                = (*roleResource)(nil)
 	_ resource.ResourceWithConfigure   = (*roleResource)(nil)
 	_ resource.ResourceWithImportState = (*roleResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*roleResource)(nil)
 )
 
 // NewRoleResource returns the rauthy_role resource.
@@ -55,9 +56,11 @@ func (r *roleResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				},
 			},
 			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "Name of the role, for example `admin`. Renaming in place is supported.",
-				Validators:          []validator.String{validators.RoleName()},
+				Required: true,
+				MarkdownDescription: "Name of the role, for example `admin`. Changing it is refused: Rauthy's rename drops the role from its users on PostgreSQL and " +
+					"rewrites other role names in user assignments on Hiqlite. Create the new role, move the users, " +
+					"then remove the old one. Deleting is refused while another role name starts or ends with this one.",
+				Validators: []validator.String{validators.RoleName()},
 			},
 		},
 	}
@@ -130,23 +133,34 @@ func (r *roleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
+// Update is never called: ModifyPlan refuses a change of name, the only
+// configurable attribute.
 func (r *roleResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan roleResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	id := plan.ID.ValueString()
-	updated, err := r.api.UpdateRole(ctx, id, rauthy.RoleRequest{Role: plan.Name.ValueString()})
-	if err != nil {
-		resp.Diagnostics.AddError("Could not update Rauthy role "+id, err.Error())
-		return
-	}
-
-	plan.ID = types.StringValue(updated.ID)
-	plan.Name = types.StringValue(updated.Name)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+// ModifyPlan refuses a rename: Rauthy would drop the role from its users on
+// PostgreSQL and rewrite other role names inside user assignments on Hiqlite.
+func (r *roleResource) ModifyPlan(
+	ctx context.Context,
+	req resource.ModifyPlanRequest,
+	resp *resource.ModifyPlanResponse,
+) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+	var state, plan roleResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() || plan.Name.IsUnknown() || plan.Name.Equal(state.Name) {
+		return
+	}
+	resp.Diagnostics.AddAttributeError(path.Root("name"), "Role rename is not supported",
+		"Rauthy's rename drops the role from its users on PostgreSQL and rewrites other role names in user "+
+			"assignments on Hiqlite. Create the new role as a separate resource, move the users, then remove "+
+			"the old one.")
 }
 
 func (r *roleResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -157,7 +171,24 @@ func (r *roleResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	}
 
 	id := state.ID.ValueString()
-	if err := r.api.DeleteRole(ctx, id); err != nil && !rauthy.IsNotFound(err) {
+	all, err := r.api.ListRoles(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Could not list Rauthy roles to check the deletion of "+id, err.Error())
+		return
+	}
+	names := make([]string, 0, len(all))
+	for _, x := range all {
+		names = append(names, x.Name)
+	}
+	if other, ok := cutName(state.Name.ValueString(), names); ok {
+		resp.Diagnostics.AddError("Unsafe role deletion",
+			fmt.Sprintf("Rauthy removes role %q from users by substring, so it would also cut %q in "+
+				"their assignments. Delete %q first; to make Terraform do that, give the resource for %q a "+
+				"depends_on that lists the resource for %q.",
+				state.Name.ValueString(), other, other, other, state.Name.ValueString()))
+		return
+	}
+	if err = r.api.DeleteRole(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy role "+id, err.Error())
 	}
 }

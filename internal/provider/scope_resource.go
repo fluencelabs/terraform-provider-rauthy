@@ -22,6 +22,7 @@ var (
 	_ resource.Resource                = (*scopeResource)(nil)
 	_ resource.ResourceWithConfigure   = (*scopeResource)(nil)
 	_ resource.ResourceWithImportState = (*scopeResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*scopeResource)(nil)
 )
 
 // NewScopeResource returns the rauthy_scope resource.
@@ -66,7 +67,8 @@ func (r *scopeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"name": schema.StringAttribute{
 				Required: true,
 				MarkdownDescription: "Name of the scope, for example `read:billing`. This is the value clients " +
-					"request. Renaming in place is supported.",
+					"request. Rauthy edits clients' scope lists by substring, so renaming is refused while another " +
+					"scope's name contains this one, and deleting while another scope's name starts or ends with it.",
 				Validators: []validator.String{validators.ScopeName()},
 			},
 			"attr_include_access": schema.SetAttribute{
@@ -210,7 +212,20 @@ func (r *scopeResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	id := state.ID.ValueString()
-	if err := r.api.DeleteScope(ctx, id); err != nil && !rauthy.IsNotFound(err) {
+	scopes, err := r.api.ListScopes(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Could not list Rauthy scopes to check the deletion of "+id, err.Error())
+		return
+	}
+	if other, ok := cutName(state.Name.ValueString(), scopeNames(scopes)); ok {
+		resp.Diagnostics.AddError("Unsafe scope deletion",
+			fmt.Sprintf("Rauthy removes scope %q from clients by substring, so it would also cut %q in "+
+				"their scope lists. Delete %q first; to make Terraform do that, give the resource for %q a "+
+				"depends_on that lists the resource for %q.",
+				state.Name.ValueString(), other, other, other, state.Name.ValueString()))
+		return
+	}
+	if err = r.api.DeleteScope(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy scope "+id, err.Error())
 	}
 }
@@ -276,4 +291,44 @@ func applyScope(m *scopeResourceModel, s *rauthy.ScopeResponse) {
 	m.AttrIncludeAccess = optionalStringSet(s.AttrIncludeAccess, m.AttrIncludeAccess)
 	m.AttrIncludeID = optionalStringSet(s.AttrIncludeID, m.AttrIncludeID)
 	m.ClaimsAtRoot = types.BoolValue(s.ClaimsAtRoot)
+}
+
+// ModifyPlan refuses a rename Rauthy would apply too widely. Rauthy renames a
+// scope by replacing the old name as a substring in every client's scopes and
+// default_scopes, so renaming "ro" to "read" also turns a client's "profile"
+// into "preadfile". The rename is safe only when no other scope name contains
+// the old one.
+func (r *scopeResource) ModifyPlan(
+	ctx context.Context,
+	req resource.ModifyPlanRequest,
+	resp *resource.ModifyPlanResponse,
+) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() || r.api == nil {
+		return
+	}
+	var state, plan scopeResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() || plan.Name.IsUnknown() || plan.Name.Equal(state.Name) {
+		return
+	}
+	old := state.Name.ValueString()
+	scopes, err := r.api.ListScopes(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Could not list Rauthy scopes to check the rename of "+old, err.Error())
+		return
+	}
+	if other, ok := containingName(old, scopeNames(scopes)); ok {
+		resp.Diagnostics.AddAttributeError(path.Root("name"), "Unsafe scope rename",
+			fmt.Sprintf("Rauthy renames scope %q by substring in every client's scope lists, so it would "+
+				"also rewrite scope %q there. Remove or rename %q first.", old, other, other))
+	}
+}
+
+func scopeNames(scopes []rauthy.ScopeResponse) []string {
+	names := make([]string, 0, len(scopes))
+	for _, s := range scopes {
+		names = append(names, s.Name)
+	}
+	return names
 }

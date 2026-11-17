@@ -20,6 +20,7 @@ var (
 	_ resource.Resource                = (*groupResource)(nil)
 	_ resource.ResourceWithConfigure   = (*groupResource)(nil)
 	_ resource.ResourceWithImportState = (*groupResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*groupResource)(nil)
 )
 
 // NewGroupResource returns the rauthy_group resource.
@@ -55,9 +56,11 @@ func (r *groupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "Name of the group, for example `developers`. Renaming in place is supported.",
-				Validators:          []validator.String{validators.GroupName()},
+				Required: true,
+				MarkdownDescription: "Name of the group, for example `developers`. Changing it is refused: Rauthy's rename drops the group from its users on PostgreSQL and " +
+					"rewrites other group names in user assignments on Hiqlite. Create the new group, move the users, " +
+					"then remove the old one. Deleting is refused while another group name starts or ends with this one.",
+				Validators: []validator.String{validators.GroupName()},
 			},
 		},
 	}
@@ -130,23 +133,34 @@ func (r *groupResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
+// Update is never called: ModifyPlan refuses a change of name, the only
+// configurable attribute.
 func (r *groupResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan groupResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	id := plan.ID.ValueString()
-	updated, err := r.api.UpdateGroup(ctx, id, rauthy.GroupRequest{Group: plan.Name.ValueString()})
-	if err != nil {
-		resp.Diagnostics.AddError("Could not update Rauthy group "+id, err.Error())
-		return
-	}
-
-	plan.ID = types.StringValue(updated.ID)
-	plan.Name = types.StringValue(updated.Name)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+// ModifyPlan refuses a rename: Rauthy would drop the group from its users on
+// PostgreSQL and rewrite other group names inside user assignments on Hiqlite.
+func (r *groupResource) ModifyPlan(
+	ctx context.Context,
+	req resource.ModifyPlanRequest,
+	resp *resource.ModifyPlanResponse,
+) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+	var state, plan groupResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() || plan.Name.IsUnknown() || plan.Name.Equal(state.Name) {
+		return
+	}
+	resp.Diagnostics.AddAttributeError(path.Root("name"), "Group rename is not supported",
+		"Rauthy's rename drops the group from its users on PostgreSQL and rewrites other group names in user "+
+			"assignments on Hiqlite. Create the new group as a separate resource, move the users, then remove "+
+			"the old one.")
 }
 
 func (r *groupResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -157,7 +171,24 @@ func (r *groupResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	id := state.ID.ValueString()
-	if err := r.api.DeleteGroup(ctx, id); err != nil && !rauthy.IsNotFound(err) {
+	all, err := r.api.ListGroups(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Could not list Rauthy groups to check the deletion of "+id, err.Error())
+		return
+	}
+	names := make([]string, 0, len(all))
+	for _, x := range all {
+		names = append(names, x.Name)
+	}
+	if other, ok := cutName(state.Name.ValueString(), names); ok {
+		resp.Diagnostics.AddError("Unsafe group deletion",
+			fmt.Sprintf("Rauthy removes group %q from users by substring, so it would also cut %q in "+
+				"their assignments. Delete %q first; to make Terraform do that, give the resource for %q a "+
+				"depends_on that lists the resource for %q.",
+				state.Name.ValueString(), other, other, other, state.Name.ValueString()))
+		return
+	}
+	if err = r.api.DeleteGroup(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy group "+id, err.Error())
 	}
 }
