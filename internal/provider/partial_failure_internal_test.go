@@ -137,6 +137,11 @@ func TestPartialFollowups(t *testing.T) {
 		if !resp.Diagnostics.HasError() || d.HasError() || !got.DefaultValue.Equal(plan.DefaultValue) {
 			t.Fatalf("updated attribute lost: %v %v", resp.Diagnostics, d)
 		}
+		var body rauthy.UserAttrRequest
+		f.lastBody(t, "PUT /users/attr/attr", &body)
+		if string(body.DefaultValue) != "42" {
+			t.Errorf("PUT default_value = %s, want 42", body.DefaultValue)
+		}
 	})
 	t.Run("image upload", func(t *testing.T) {
 		f, api := newFakeRauthy(t)

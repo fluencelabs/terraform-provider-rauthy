@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -216,17 +217,18 @@ func (r *userAttributeResource) Read(ctx context.Context, req resource.ReadReque
 	}
 
 	name := state.Name.ValueString()
-	got, err := r.api.GetUserAttr(ctx, name)
-	if rauthy.IsNotFound(err) {
-		resp.State.RemoveResource(ctx)
-		return
-	}
+	attrs, err := r.listUserAttrs(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Could not read Rauthy user attribute "+name, err.Error())
 		return
 	}
+	index := slices.IndexFunc(attrs, func(a rauthy.UserAttrResponse) bool { return a.Name == name })
+	if index < 0 {
+		resp.State.RemoveResource(ctx)
+		return
+	}
 
-	applyUserAttr(&state, got)
+	applyUserAttr(&state, &attrs[index])
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -307,8 +309,35 @@ func (r *userAttributeResource) ModifyPlan(
 	r.checkDeletion(ctx, state.ID.ValueString(), &resp.Diagnostics)
 }
 
+func (r *userAttributeResource) listUserAttrs(ctx context.Context) ([]rauthy.UserAttrResponse, error) {
+	var body bytes.Buffer
+	attrs, err := r.api.ListUserAttrs(context.WithValue(ctx, userAttrListBodyKey{}, &body))
+	if err != nil {
+		return nil, err
+	}
+	// The SDK decodes null entries and entries with an empty name into the
+	// same Go value. Check the original array before filtering empty names.
+	var response struct {
+		Values []*json.RawMessage `json:"values"`
+	}
+	if body.Len() != 0 {
+		if decodeErr := json.Unmarshal(body.Bytes(), &response); decodeErr != nil {
+			return nil, fmt.Errorf("decode response values: %w", decodeErr)
+		}
+	}
+	if response.Values == nil {
+		return nil, errors.New("response is missing the values array")
+	}
+	for i, entry := range response.Values {
+		if entry == nil {
+			return nil, fmt.Errorf("response has a null entry at values[%d]", i)
+		}
+	}
+	return slices.DeleteFunc(attrs, func(attr rauthy.UserAttrResponse) bool { return attr.Name == "" }), nil
+}
+
 func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) {
-	attrs, err := r.api.ListUserAttrs(ctx)
+	attrs, err := r.listUserAttrs(ctx)
 	if err != nil {
 		diags.AddError("Could not list Rauthy user attributes before checking deletion", err.Error())
 		return

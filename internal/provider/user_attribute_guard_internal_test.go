@@ -2,15 +2,129 @@ package provider
 
 import (
 	"context"
+	"io"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/fluencelabs/rauthy-go"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+func TestUserAttributeReadList(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		attrs   []rauthy.UserAttrResponse
+		present bool
+	}{
+		{name: "route missing", status: http.StatusNotFound},
+		{name: "forbidden", status: http.StatusForbidden},
+		{name: "attribute missing", attrs: []rauthy.UserAttrResponse{{Name: "developer"}}},
+		{name: "empty list", attrs: []rauthy.UserAttrResponse{}},
+		{
+			name:    "attribute present",
+			attrs:   []rauthy.UserAttrResponse{{Name: "developer"}, {Name: "dev", UserEditable: true}},
+			present: true,
+		},
+		{
+			name:    "unnamed entry before target",
+			attrs:   []rauthy.UserAttrResponse{{Name: ""}, {Name: "dev", UserEditable: true}},
+			present: true,
+		},
+		{
+			name:    "unnamed entry after target",
+			attrs:   []rauthy.UserAttrResponse{{Name: "dev", UserEditable: true}, {Name: ""}},
+			present: true,
+		},
+		{name: "only unnamed entry", attrs: []rauthy.UserAttrResponse{{Name: ""}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, api := newFakeRauthy(t)
+			r := &userAttributeResource{api: api}
+			model := userAttributeResourceModel{
+				ID: types.StringValue("dev"), Name: types.StringValue("dev"), UserEditable: types.BoolValue(false),
+			}
+			state := resourceState(t, r, model)
+			want := emptyState(t, r)
+			if tc.status != 0 {
+				f.handle("GET /users/attr", func(w http.ResponseWriter, _ *http.Request) {
+					http.Error(w, "list unavailable", tc.status)
+				})
+				want = state
+			} else {
+				if tc.present {
+					model.UserEditable = types.BoolValue(true)
+					want = resourceState(t, r, model)
+				}
+				f.answer("GET /users/attr", map[string]any{"values": tc.attrs})
+			}
+			resp := resource.ReadResponse{State: state}
+			r.Read(t.Context(), resource.ReadRequest{State: state}, &resp)
+			if !resp.State.Raw.Equal(want.Raw) {
+				t.Errorf("state = %v, want %v", resp.State.Raw, want.Raw)
+			}
+			if resp.Diagnostics.HasError() != (tc.status != 0) {
+				t.Fatalf("unexpected diagnostics for status %d: %v", tc.status, resp.Diagnostics)
+			}
+			if tc.status != 0 && !strings.Contains(resp.Diagnostics[0].Detail(), strconv.Itoa(tc.status)) {
+				t.Errorf("list API error lost status %d: %v", tc.status, resp.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestUserAttributeMalformedList(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		status     int
+	}{
+		{"missing values", `{}`, http.StatusOK},
+		{"null values", `{"values":null}`, http.StatusOK},
+		{"null entry", `{"values":[null]}`, http.StatusOK},
+		{"null entry with target", `{"values":[{"name":"dev"},null]}`, http.StatusOK},
+		{"no content", "", http.StatusNoContent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, api := newFakeRauthy(t)
+			f.handle("GET /users/attr", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, tc.body)
+			})
+			r := &userAttributeResource{api: api}
+			ctx := t.Context()
+			state := resourceState(t, r, userAttributeResourceModel{
+				ID: types.StringValue("dev"), Name: types.StringValue("dev"),
+			})
+
+			read := resource.ReadResponse{State: state}
+			r.Read(ctx, resource.ReadRequest{State: state}, &read)
+			if !read.Diagnostics.HasError() || !strings.Contains(read.Diagnostics[0].Detail(), "values") ||
+				!read.State.Raw.Equal(state.Raw) {
+				t.Errorf(
+					"Read must report an invalid list and preserve state: %v, %v",
+					read.Diagnostics,
+					read.State.Raw,
+				)
+			}
+
+			deletion := resource.DeleteResponse{State: state}
+			r.Delete(ctx, resource.DeleteRequest{State: state}, &deletion)
+			if !deletion.Diagnostics.HasError() || !strings.Contains(deletion.Diagnostics[0].Detail(), "values") ||
+				!deletion.State.Raw.Equal(state.Raw) || len(f.bodies("DELETE /users/attr/dev")) != 0 {
+				t.Errorf(
+					"Delete must report an invalid list, preserve state, and skip DELETE: %v",
+					deletion.Diagnostics,
+				)
+			}
+		})
+	}
+}
 
 type attributeGuardCase struct {
 	name, other, failure string
@@ -121,8 +235,12 @@ func checkAttributeGuardPlans(
 		var resp resource.ModifyPlanResponse
 		r.ModifyPlan(context.Background(), resource.ModifyPlanRequest{State: prior, Plan: plan}, &resp)
 		wantError := unsafe && (op == "destroy" || op == "replace")
-		if (len(resp.RequiresReplace) > 0) != (op == "replace") {
-			t.Errorf("%s plan: unexpected replacement paths %v", op, resp.RequiresReplace)
+		var wantReplace path.Paths
+		if op == "replace" {
+			wantReplace = path.Paths{path.Root("name")}
+		}
+		if !slices.EqualFunc(resp.RequiresReplace, wantReplace, path.Path.Equal) {
+			t.Errorf("%s plan: replacement paths %v, want %v", op, resp.RequiresReplace, wantReplace)
 		}
 		if resp.Diagnostics.HasError() != wantError {
 			t.Errorf("%s plan: %v, wantError=%v", op, resp.Diagnostics, wantError)

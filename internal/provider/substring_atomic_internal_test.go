@@ -76,8 +76,12 @@ func waitForMutation(t *testing.T, frame string, done, reached <-chan struct{}) 
 		stack := make([]byte, 1<<20)
 		stack = stack[:runtime.Stack(stack, true)]
 		for goroutine := range strings.SplitSeq(string(stack), "\n\n") {
-			if strings.Contains(goroutine, frame) &&
-				strings.Contains(goroutine, "lockSubstringMutation") {
+			header, trace, _ := strings.Cut(goroutine, "\n")
+			top, _, _ := strings.Cut(trace, "\n")
+			// The contender must be parked in the lock's select.
+			if strings.HasSuffix(header, " [select]:") &&
+				strings.Contains(top, "/provider.lockSubstringMutation(") &&
+				strings.Contains(trace, frame+"(") {
 				return true
 			}
 		}
@@ -91,6 +95,76 @@ func waitForMutation(t *testing.T, frame string, done, reached <-chan struct{}) 
 		}
 	}
 	return false
+}
+
+func TestRoleDeleteHoldsSubstringLock(t *testing.T) {
+	f, api := newFakeRauthy(t)
+	listStarted := make(chan struct{})
+	completeList := make(chan struct{})
+	f.handle("GET /roles", func(w http.ResponseWriter, _ *http.Request) {
+		snapshot := []rauthy.RoleResponse{{ID: "r", Name: "dev"}}
+		close(listStarted)
+		<-completeList
+		_ = json.NewEncoder(w).Encode(snapshot)
+	})
+	deleteStarted := make(chan struct{})
+	completeDelete := make(chan struct{})
+	f.handle("DELETE /roles/r", func(w http.ResponseWriter, _ *http.Request) {
+		close(deleteStarted)
+		<-completeDelete
+		w.WriteHeader(http.StatusOK)
+	})
+	postStarted := make(chan struct{})
+	f.handle("POST /roles", func(w http.ResponseWriter, _ *http.Request) {
+		close(postStarted)
+		_ = json.NewEncoder(w).Encode(rauthy.RoleResponse{ID: "new", Name: "developer"})
+	})
+
+	r := &roleResource{api: api}
+	ctx := t.Context()
+	state := resourceState(t, r, roleResourceModel{ID: types.StringValue("r"), Name: types.StringValue("dev")})
+	plan := resourcePlan(t, r, roleResourceModel{Name: types.StringValue("developer")})
+	deletion := resource.DeleteResponse{State: state}
+	deleteDone := make(chan struct{})
+	go func() {
+		defer close(deleteDone)
+		r.Delete(ctx, resource.DeleteRequest{State: state}, &deletion)
+	}()
+	select {
+	case <-listStarted:
+	case <-deleteDone:
+		t.Fatalf("role deletion failed before listing roles: %v", deletion.Diagnostics)
+	}
+
+	creation := resource.CreateResponse{State: emptyState(t, r)}
+	createDone := make(chan struct{})
+	go func() {
+		defer close(createDone)
+		r.Create(ctx, resource.CreateRequest{Plan: plan}, &creation)
+	}()
+	observedAtList := waitForMutation(t, "roleResource).Create", createDone, postStarted)
+	if !observedAtList || len(f.bodies("POST /roles")) != 0 {
+		t.Error("role creation did not wait for the guard's GET")
+	}
+	close(completeList)
+	select {
+	case <-deleteStarted:
+	case <-deleteDone:
+		<-createDone
+		t.Fatalf("role deletion failed before DELETE: %v", deletion.Diagnostics)
+	}
+
+	observed := waitForMutation(t, "roleResource).Create", createDone, postStarted)
+	earlyPost := len(f.bodies("POST /roles")) != 0
+	close(completeDelete)
+	<-deleteDone
+	<-createDone
+	if !observed || earlyPost {
+		t.Fatalf("role creation did not wait for DELETE: observed=%v early POST=%v", observed, earlyPost)
+	}
+	if deletion.Diagnostics.HasError() || creation.Diagnostics.HasError() || len(f.bodies("POST /roles")) != 1 {
+		t.Fatalf("delete=%v create=%v", deletion.Diagnostics, creation.Diagnostics)
+	}
 }
 
 func TestUserAttributeConcurrentScopeMapping(t *testing.T) {
@@ -116,14 +190,19 @@ func TestUserAttributeConcurrentScopeMapping(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode([]rauthy.ScopeResponse{{ID: "s", Name: "mapped"}})
 	})
-	f.handle("PUT /scopes/s", func(w http.ResponseWriter, _ *http.Request) {
+	f.handle("PUT /scopes/s", func(w http.ResponseWriter, r *http.Request) {
+		var req rauthy.ScopeRequest
+		if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
+			http.Error(w, decodeErr.Error(), http.StatusBadRequest)
+			return
+		}
 		mu.Lock()
-		mapping = "developer"
+		mapping = strings.Join(req.AttrIncludeAccess, ",")
 		mu.Unlock()
 		close(putStarted)
 		<-deleted
 		_ = json.NewEncoder(w).
-			Encode(rauthy.ScopeResponse{ID: "s", Name: "mapped", AttrIncludeAccess: []string{"developer"}})
+			Encode(rauthy.ScopeResponse{ID: "s", Name: "mapped", AttrIncludeAccess: req.AttrIncludeAccess})
 	})
 	f.handle("DELETE /users/attr/dev", func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()
