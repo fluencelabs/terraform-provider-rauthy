@@ -70,6 +70,7 @@ existing setup can run into:
 
 ## Known limits
 
+* **Proxies and gateways.** Any proxy or gateway between the provider and Rauthy must pass through response bodies and HTTP status codes unchanged. The provider only supports responses that Rauthy itself returns.
 * **Conflicts discovered at apply.** A scope, role, group, or user attribute created in the same
   apply can introduce a substring conflict after planning. A new name that is unknown at plan
   time can defer a scope rename error to apply. The provider
