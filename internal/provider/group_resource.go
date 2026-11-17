@@ -55,9 +55,13 @@ func (r *groupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "Name of the group, for example `developers`. Renaming in place is supported.",
-				Validators:          []validator.String{validators.GroupName()},
+				Required: true,
+				MarkdownDescription: "Name of the group, for example `developers`. Changing it replaces the group: " +
+					"Rauthy's in-place rename drops the group from its users on PostgreSQL and rewrites other " +
+					"groups whose names contain this one on Hiqlite. A replacement removes the group from " +
+					"its users, and the plan shows that.",
+				Validators:    []validator.String{validators.GroupName()},
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 		},
 	}
@@ -130,22 +134,11 @@ func (r *groupResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
+// Update is never called: name, the only configurable attribute, requires
+// replacement.
 func (r *groupResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan groupResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	id := plan.ID.ValueString()
-	updated, err := r.api.UpdateGroup(ctx, id, rauthy.GroupRequest{Group: plan.Name.ValueString()})
-	if err != nil {
-		resp.Diagnostics.AddError("Could not update Rauthy group "+id, err.Error())
-		return
-	}
-
-	plan.ID = types.StringValue(updated.ID)
-	plan.Name = types.StringValue(updated.Name)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

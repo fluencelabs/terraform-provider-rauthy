@@ -55,9 +55,13 @@ func (r *roleResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				},
 			},
 			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "Name of the role, for example `admin`. Renaming in place is supported.",
-				Validators:          []validator.String{validators.RoleName()},
+				Required: true,
+				MarkdownDescription: "Name of the role, for example `admin`. Changing it replaces the role: " +
+					"Rauthy's in-place rename drops the role from its users on PostgreSQL and rewrites other " +
+					"roles whose names contain this one on Hiqlite. A replacement removes the role from " +
+					"its users, and the plan shows that.",
+				Validators:    []validator.String{validators.RoleName()},
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 		},
 	}
@@ -130,22 +134,11 @@ func (r *roleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
+// Update is never called: name, the only configurable attribute, requires
+// replacement.
 func (r *roleResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan roleResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	id := plan.ID.ValueString()
-	updated, err := r.api.UpdateRole(ctx, id, rauthy.RoleRequest{Role: plan.Name.ValueString()})
-	if err != nil {
-		resp.Diagnostics.AddError("Could not update Rauthy role "+id, err.Error())
-		return
-	}
-
-	plan.ID = types.StringValue(updated.ID)
-	plan.Name = types.StringValue(updated.Name)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

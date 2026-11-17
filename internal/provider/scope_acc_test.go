@@ -3,6 +3,7 @@ package provider_test
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -147,6 +148,32 @@ data "rauthy_scope" "test" {
 						"data.rauthy_scope.test", "id", "rauthy_scope.test", "id"),
 				),
 			},
+		},
+	})
+}
+
+// Rauthy renames a scope by substring in every client's scope lists. A rename
+// whose old name is part of another scope's name is refused at plan time.
+func TestAccScope_unsafeRenameRefused(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(name string) string {
+		return `
+resource "rauthy_scope" "short" {
+  name = "` + name + `"
+}
+resource "rauthy_scope" "long" {
+  name       = "tf-acc-ro-extra"
+  depends_on = [rauthy_scope.short]
+}
+`
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckScopesDestroyed,
+		Steps: []resource.TestStep{
+			{Config: config("tf-acc-ro")},
+			{Config: config("tf-acc-read"), ExpectError: regexp.MustCompile("Unsafe scope rename")},
+			{Config: config("tf-acc-ro"), PlanOnly: true},
 		},
 	})
 }

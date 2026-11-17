@@ -27,7 +27,7 @@ resource "rauthy_role" "admin" {
 
 ### Required
 
-- `name` (String) Name of the role, for example `admin`. Renaming in place is supported.
+- `name` (String) Name of the role, for example `admin`. Changing it replaces the role: Rauthy's in-place rename drops the role from its users on PostgreSQL and rewrites other roles whose names contain this one on Hiqlite. A replacement removes the role from its users, and the plan shows that.
 
 ### Read-Only
 

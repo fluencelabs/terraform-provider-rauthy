@@ -27,7 +27,7 @@ resource "rauthy_group" "developers" {
 
 ### Required
 
-- `name` (String) Name of the group, for example `developers`. Renaming in place is supported.
+- `name` (String) Name of the group, for example `developers`. Changing it replaces the group: Rauthy's in-place rename drops the group from its users on PostgreSQL and rewrites other groups whose names contain this one on Hiqlite. A replacement removes the group from its users, and the plan shows that.
 
 ### Read-Only
 

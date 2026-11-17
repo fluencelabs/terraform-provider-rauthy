@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -75,8 +76,12 @@ func TestAccRole_lifecycle(t *testing.T) {
 				),
 			},
 			{
-				// A rename is an in-place update, not a replacement.
+				// A rename replaces the role: Rauthy's in-place rename drops or
+				// rewrites user assignments.
 				Config: testAccRoleConfig("tf-acc-role-renamed"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction("rauthy_role.test", plancheck.ResourceActionReplace),
+				}},
 				Check: resource.TestCheckResourceAttr(
 					"rauthy_role.test", "name", "tf-acc-role-renamed"),
 			},
@@ -104,7 +109,11 @@ func TestAccGroup_lifecycle(t *testing.T) {
 				),
 			},
 			{
+				// A rename replaces the group, as for roles.
 				Config: testAccGroupConfig("tf-acc-group-renamed"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction("rauthy_group.test", plancheck.ResourceActionReplace),
+				}},
 				Check: resource.TestCheckResourceAttr(
 					"rauthy_group.test", "name", "tf-acc-group-renamed"),
 			},
