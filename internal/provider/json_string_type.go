@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -109,11 +111,15 @@ func (v jsonString) StringSemanticEquals(
 	}
 
 	var lhs, rhs any
-	if json.Unmarshal([]byte(v.ValueString()), &lhs) != nil ||
-		json.Unmarshal([]byte(other.ValueString()), &rhs) != nil {
+	left := json.NewDecoder(strings.NewReader(v.ValueString()))
+	right := json.NewDecoder(strings.NewReader(other.ValueString()))
+	left.UseNumber()
+	right.UseNumber()
+	if !json.Valid([]byte(v.ValueString())) || !json.Valid([]byte(other.ValueString())) || left.Decode(&lhs) != nil ||
+		right.Decode(&rhs) != nil {
 		return v.ValueString() == other.ValueString(), diags
 	}
-	return reflect.DeepEqual(lhs, rhs), diags
+	return reflect.DeepEqual(exactJSONNumbers(lhs), exactJSONNumbers(rhs)), diags
 }
 
 func newJSONString(s string) jsonString {
@@ -122,4 +128,23 @@ func newJSONString(s string) jsonString {
 
 func nullJSONString() jsonString {
 	return jsonString{StringValue: basetypes.NewStringNull()}
+}
+
+// exactJSONNumbers compares numeric spellings without rounding integers through float64.
+func exactJSONNumbers(value any) any {
+	switch v := value.(type) {
+	case json.Number:
+		if number, ok := new(big.Rat).SetString(v.String()); ok {
+			return number
+		}
+	case []any:
+		for i, element := range v {
+			v[i] = exactJSONNumbers(element)
+		}
+	case map[string]any:
+		for key, element := range v {
+			v[key] = exactJSONNumbers(element)
+		}
+	}
+	return value
 }

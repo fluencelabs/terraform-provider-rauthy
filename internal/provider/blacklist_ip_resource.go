@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -125,7 +126,7 @@ func (r *blacklistIPResource) Create(ctx context.Context, req resource.CreateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.write(ctx, &plan, &resp.Diagnostics)
+	r.write(ctx, &plan, &resp.State, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -165,7 +166,7 @@ func (r *blacklistIPResource) Update(ctx context.Context, req resource.UpdateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.write(ctx, &plan, &resp.Diagnostics)
+	r.write(ctx, &plan, &resp.State, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -194,7 +195,12 @@ func (r *blacklistIPResource) Delete(ctx context.Context, req resource.DeleteReq
 // has already passed and then throws the entry away, so trusting the status
 // code would write state for a block that does not exist and hand Terraform an
 // apply that silently achieved nothing.
-func (r *blacklistIPResource) write(ctx context.Context, plan *blacklistIPResourceModel, diags *diag.Diagnostics) {
+func (r *blacklistIPResource) write(
+	ctx context.Context,
+	plan *blacklistIPResourceModel,
+	state *tfsdk.State,
+	diags *diag.Diagnostics,
+) {
 	ip := plan.IP.ValueString()
 	err := r.api.BlacklistIP(ctx, rauthy.IPBlacklistRequest{
 		IP:  ip,
@@ -205,8 +211,11 @@ func (r *blacklistIPResource) write(ctx context.Context, plan *blacklistIPResour
 		return
 	}
 
+	plan.ID = plan.IP
+	diags.Append(state.Set(ctx, plan)...)
 	got, err := r.api.GetBlacklistedIP(ctx, ip)
 	if rauthy.IsNotFound(err) {
+		state.RemoveResource(ctx)
 		diags.AddError(
 			"Rauthy discarded the blacklist entry for "+ip,
 			"Rauthy accepted the request and then dropped the entry, which it does when `exp` is already "+

@@ -273,25 +273,7 @@ func buildScopeRequest(ctx context.Context, m *scopeResourceModel, diags *diag.D
 func applyScope(m *scopeResourceModel, s *rauthy.ScopeResponse) {
 	m.ID = types.StringValue(s.ID)
 	m.Name = types.StringValue(s.Name)
-	m.AttrIncludeAccess = attrSet(s.AttrIncludeAccess, m.AttrIncludeAccess)
-	m.AttrIncludeID = attrSet(s.AttrIncludeID, m.AttrIncludeID)
+	m.AttrIncludeAccess = optionalStringSet(s.AttrIncludeAccess, m.AttrIncludeAccess)
+	m.AttrIncludeID = optionalStringSet(s.AttrIncludeID, m.AttrIncludeID)
 	m.ClaimsAtRoot = types.BoolValue(s.ClaimsAtRoot)
-}
-
-// attrSet renders an attribute mapping, keeping `[]` distinct from unset.
-//
-// Rauthy collapses the two: an empty mapping and an absent one both come back
-// as null, which splits to nil. These attributes are Optional and not Computed,
-// so Terraform requires post-apply state to equal the configuration exactly —
-// deriving null from the response would abort an apply that wrote `[]` with
-// "inconsistent result after apply". When the response carries nothing, the
-// value the configuration (or prior state) expressed is therefore kept.
-func attrSet(values rauthy.AttrList, prior types.Set) types.Set {
-	if len(values) > 0 {
-		return stringsToSet(values)
-	}
-	if !prior.IsNull() && !prior.IsUnknown() && len(prior.Elements()) == 0 {
-		return prior
-	}
-	return types.SetNull(types.StringType)
 }

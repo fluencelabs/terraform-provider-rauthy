@@ -50,8 +50,8 @@ func TestAttrSet_KeepsEmptyDistinctFromUnset(t *testing.T) {
 	}
 
 	for name, tc := range cases {
-		if got := attrSet(tc.values, tc.prior); !got.Equal(tc.want) {
-			t.Errorf("%s: attrSet(%v, %v) = %v, want %v", name, tc.values, tc.prior, got, tc.want)
+		if got := optionalStringSet(tc.values, tc.prior); !got.Equal(tc.want) {
+			t.Errorf("%s: optionalStringSet(%v, %v) = %v, want %v", name, tc.values, tc.prior, got, tc.want)
 		}
 	}
 }

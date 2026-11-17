@@ -195,8 +195,8 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 			Optional:            true,
 			Computed:            true,
 			ElementType:         types.StringType,
-			MarkdownDescription: "Scopes the client may request." + optionalComputedNote,
-			Validators:          []validator.Set{validators.ScopeSet()},
+			MarkdownDescription: "Scopes the client may request. Must include `openid`." + optionalComputedNote,
+			Validators:          []validator.Set{validators.ScopeSet(), clientOpenIDScopes{}},
 			PlanModifiers: []planmodifier.Set{
 				setplanmodifier.UseStateForUnknown(),
 			},
@@ -205,8 +205,8 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 			Optional:            true,
 			Computed:            true,
 			ElementType:         types.StringType,
-			MarkdownDescription: "Scopes granted even when the client does not ask for them." + optionalComputedNote,
-			Validators:          []validator.Set{validators.ScopeSet()},
+			MarkdownDescription: "Scopes granted even when the client does not ask for them. Must include `openid`." + optionalComputedNote,
+			Validators:          []validator.Set{validators.ScopeSet(), clientOpenIDScopes{}},
 			PlanModifiers: []planmodifier.Set{
 				setplanmodifier.UseStateForUnknown(),
 			},

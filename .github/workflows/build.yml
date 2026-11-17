@@ -55,7 +55,7 @@ jobs:
       - name: Docs stale check
         run: |
           go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate --provider-name rauthy
-          if ! git diff --exit-code docs/; then
+          if [ -n "$(git status --porcelain --untracked-files=all -- docs/)" ]; then
             echo "docs/ is stale — run 'make docs' and commit the result"
             exit 1
           fi

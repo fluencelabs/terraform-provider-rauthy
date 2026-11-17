@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -107,6 +108,9 @@ func TestBuildUpdateRequest_RoundTripsEveryField(t *testing.T) {
 		t.Fatalf("buildUpdateRequest: %v", diags)
 	}
 	orig := fullResponse()
+	if !reflect.DeepEqual(req, orig.UpdateRequest()) {
+		t.Errorf("full request differs: got %+v, want %+v", req, orig.UpdateRequest())
+	}
 	for name, pair := range map[string][2][]string{
 		"redirect URIs":  {req.RedirectURIs, orig.RedirectURIs},
 		"flows":          {req.FlowsEnabled, orig.FlowsEnabled},

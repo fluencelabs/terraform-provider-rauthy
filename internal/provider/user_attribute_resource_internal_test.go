@@ -20,6 +20,8 @@ func TestJSONString_SemanticEquals(t *testing.T) {
 		a, b string
 		want bool
 	}{
+		"equivalent numbers":      {`{"n":1e2}`, `{"n":100.0}`, true},
+		"adjacent large integers": {`{"n":9007199254740992}`, `{"n":9007199254740993}`, false},
 		"identical":               {`{"a":1}`, `{"a":1}`, true},
 		"whitespace only":         {"{\n  \"a\": 1\n}", `{"a":1}`, true},
 		"reordered object keys":   {`{"a":1,"b":2}`, `{"b":2,"a":1}`, true},

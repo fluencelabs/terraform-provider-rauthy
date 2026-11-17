@@ -172,6 +172,9 @@ func TestContactSet(t *testing.T) {
 	if acceptsSet([]validator.Set{validators.ContactSet()}, "ops example") {
 		t.Error("ContactSet accepted a value with a space")
 	}
+	if acceptsSet([]validator.Set{validators.ContactSet()}, "") {
+		t.Error("ContactSet accepted an empty contact, which Rauthy drops on write")
+	}
 }
 
 // Rauthy rejects flows_enabled and challenges when they are present but empty,
@@ -339,4 +342,49 @@ func TestUserAttrNameAndZip(t *testing.T) {
 		[]string{"1", "SW1A1AA", strings.Repeat("9", 24)},
 		[]string{"", strings.Repeat("9", 25), "12 34"},
 	)
+}
+
+func TestPamHostnameLength(t *testing.T) {
+	if !acceptsString(validators.PamHostname(), strings.Repeat("a", 61)) ||
+		acceptsString(validators.PamHostname(), strings.Repeat("a", 62)) {
+		t.Fatal("hostname length does not match Rauthy")
+	}
+}
+
+// Rauthy stores these values comma-separated: a comma never converges.
+func TestCommaRefused(t *testing.T) {
+	t.Parallel()
+	for name, ok := range map[string]bool{
+		"redirect": acceptsSet([]validator.Set{validators.URISet()}, "https://example.com/a,b"),
+		"scopes":   acceptsSet([]validator.Set{validators.ScopeSet()}, "team,read"),
+		"roles":    acceptsSet([]validator.Set{validators.RoleNameSet()}, "cold,role"),
+		"groups":   acceptsSet([]validator.Set{validators.GroupNameSet()}, "cold,group"),
+		"role":     acceptsString(validators.RoleName(), "cold,role"),
+		"group":    acceptsString(validators.GroupName(), "cold,group"),
+		"scope":    acceptsString(validators.ScopeName(), "cold,scope"),
+	} {
+		if ok {
+			t.Errorf("%s: a value with a comma was accepted", name)
+		}
+	}
+}
+
+// Only emails whose non-ASCII part is already lowercase pass: for them Go's
+// and Rust's lowercasing agree.
+func TestEmail(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]bool{
+		"Cold@Example.COM":  true,
+		"cold@ασ.example":   true,
+		"cold@ʰσ-x.example": true,
+		"cold@İ.example":    false,
+		"cold@ΑΣ.example":   false,
+		"cold@ⅠΣ-x.example": false,
+		"cold@ªΣ-x.example": false,
+		"cold@ǅ.example":    false,
+	} {
+		if got := acceptsString(validators.Email(), in); got != want {
+			t.Errorf("Email accepts %q = %v, want %v", in, got, want)
+		}
+	}
 }

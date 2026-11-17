@@ -80,7 +80,7 @@ func applyPamUserDetails(
 
 	model.ID = types.Int64Value(got.ID)
 	model.Username = types.StringValue(got.Name)
-	model.Email = types.StringValue(got.Email)
+	model.Email = emailValue(model.Email, got.Email)
 	model.GID = types.Int64Value(got.GID)
 	model.Shell = types.StringValue(got.Shell)
 	model.HomeDir = types.StringValue(got.HomeDir)

@@ -3,12 +3,16 @@ package provider
 import (
 	"context"
 
+	"github.com/fluencelabs/terraform-provider-rauthy/internal/provider/validators"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -54,6 +58,7 @@ func (r *pamUserResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Required: true,
 				MarkdownDescription: "Email of the existing Rauthy user this account belongs to. As with the " +
 					"username, it cannot be changed in place.",
+				Validators: []validator.String{validators.Email()},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -90,6 +95,7 @@ func (r *pamUserResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 					"the whole membership list on every write, and it makes no exception for the personal " +
 					"group in `gid` — declaring `groups = []` really does leave the account in no group at " +
 					"all. Leave the attribute out to keep whatever Rauthy set up at creation.",
+				PlanModifiers: []planmodifier.Set{setplanmodifier.UseStateForUnknown()},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"gid": schema.Int64Attribute{

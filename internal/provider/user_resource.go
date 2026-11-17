@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -115,7 +116,9 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	// PUT that follows fails; otherwise the next apply tries to create the
 	// same email again and Rauthy rejects it as a duplicate.
 	plan.ID = types.StringValue(created.ID)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), created.ID)...)
+	saved := plan
+	applyUser(&saved, created)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &saved)...)
 
 	password := writeOnlyString(ctx, req.Config, path.Root("password_wo"), &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -258,7 +261,7 @@ func buildUpdateUserRequest(
 // back for it at all.
 func applyUser(m *userResourceModel, u *rauthy.UserResponse) {
 	m.ID = types.StringValue(u.ID)
-	m.Email = types.StringValue(u.Email)
+	m.Email = emailValue(m.Email, u.Email)
 	m.Enabled = types.BoolValue(u.Enabled)
 	m.EmailVerified = types.BoolValue(u.EmailVerified)
 	m.Language = types.StringValue(u.Language)
@@ -303,4 +306,15 @@ func setToStringsNonNil(ctx context.Context, set types.Set, diags *diag.Diagnost
 		return []string{}
 	}
 	return out
+}
+
+// emailValue keeps a known email that Rauthy stores lowercased, so the value
+// the configuration gave survives a read; any other difference is drift.
+// validators.Email keeps strings.ToLower equal to Rauthy's lowercasing. Every
+// email attribute goes through it: users, PAM users and the user lookup.
+func emailValue(known types.String, stored string) types.String {
+	if !known.IsNull() && !known.IsUnknown() && strings.ToLower(known.ValueString()) == stored {
+		return known
+	}
+	return types.StringValue(stored)
 }

@@ -69,9 +69,20 @@ func URI() validator.String {
 	return stringvalidator.RegexMatches(rauthy.URIPattern(), "must match "+rauthy.URIPattern().String())
 }
 
-// URISet validates every element of a set against RE_URI.
+// URISet validates every element of a set against RE_URI. Rauthy stores these
+// sets comma-separated, so an element with a comma is refused too.
 func URISet() validator.Set {
-	return setvalidator.ValueStringsAre(URI())
+	return setvalidator.ValueStringsAre(URI(), noComma())
+}
+
+// noComma refuses a value Rauthy would split: it stores redirect URIs, scope
+// lists and role and group memberships as one comma-separated string, so a
+// value with a comma comes back as several and never converges. A role, group
+// or scope name with a comma breaks every membership that names it, so names
+// are refused too.
+func noComma() validator.String {
+	return stringvalidator.RegexMatches(regexp.MustCompile(`^[^,]*$`),
+		"must not contain a comma: Rauthy stores it in a comma-separated list")
 }
 
 // OriginSet validates every element of a set as an allowed origin.
@@ -81,9 +92,11 @@ func OriginSet() validator.Set {
 	)
 }
 
-// ContactSet validates every element of a set as a contact.
+// ContactSet validates every element of a set as a contact. Rauthy drops an
+// empty contact on write, so one could never converge: it is refused here.
 func ContactSet() validator.Set {
 	return setvalidator.ValueStringsAre(
+		stringvalidator.LengthAtLeast(1),
 		stringvalidator.RegexMatches(rauthy.ContactPattern(), "must match "+rauthy.ContactPattern().String()),
 	)
 }
@@ -92,6 +105,7 @@ func ContactSet() validator.Set {
 func ScopeSet() validator.Set {
 	return setvalidator.ValueStringsAre(
 		stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String()),
+		noComma(),
 	)
 }
 
@@ -141,12 +155,18 @@ func CacheCurrentHours() validator.Int64 {
 // RoleName validates a role name against RE_ROLES_SCOPES, the same pattern
 // Rauthy applies to scopes.
 func RoleName() validator.String {
-	return stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String())
+	return stringvalidator.All(
+		stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String()),
+		noComma(),
+	)
 }
 
 // GroupName validates a group name against RE_GROUPS.
 func GroupName() validator.String {
-	return stringvalidator.RegexMatches(rauthy.GroupPattern(), "must match "+rauthy.GroupPattern().String())
+	return stringvalidator.All(
+		stringvalidator.RegexMatches(rauthy.GroupPattern(), "must match "+rauthy.GroupPattern().String()),
+		noComma(),
+	)
 }
 
 // PasswordLength validates length_min and length_max.
@@ -171,7 +191,10 @@ func PasswordNotRecentlyUsed() validator.Int64 {
 
 // ScopeName validates a scope name against RE_ROLES_SCOPES.
 func ScopeName() validator.String {
-	return stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String())
+	return stringvalidator.All(
+		stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String()),
+		noComma(),
+	)
 }
 
 // UserAttrNameSet validates every element of a set as a user-attribute name,
@@ -325,19 +348,20 @@ func PamGroupType() validator.String {
 	return stringvalidator.OneOf(pamGroupTypes...)
 }
 
-// PamHostname validates a PAM host's hostname. The bound is implicit in the
-// pattern rather than stated: the two anchored character classes make two
-// characters the shortest legal hostname, which a live 0.36.2 confirms by
-// rejecting a one-character alias.
+// PamHostname validates the hostname pattern and the 61-character request limit.
 func PamHostname() validator.String {
-	return stringvalidator.RegexMatches(pamHostname,
-		`must match ^[a-zA-Z0-9][a-zA-Z0-9-.]*[a-zA-Z0-9]$ (at least two characters)`)
+	const maxHostnameLength = 61
+	return stringvalidator.All(
+		stringvalidator.LengthAtMost(maxHostnameLength),
+		stringvalidator.RegexMatches(pamHostname,
+			`must match ^[a-zA-Z0-9][a-zA-Z0-9-.]*[a-zA-Z0-9]$ (at least two characters)`),
+	)
 }
 
 // PamHostAliasSet validates every alias of a PAM host. Aliases carry the same
 // pattern as the hostname itself.
 func PamHostAliasSet() validator.Set {
-	return setvalidator.ValueStringsAre(PamHostname())
+	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(pamHostname, "must be a Linux hostname"))
 }
 
 // PamHostIPSet validates every element of a PAM host's address list as an IP
@@ -433,4 +457,33 @@ func (v ipAddressValidator) ValidateString(
 // length.
 func IPAddress() validator.String {
 	return ipAddressValidator{}
+}
+
+// Email refuses an email with a non-ASCII character that lowercasing changes.
+// Rauthy stores emails through Rust's to_lowercase, which differs from Go's
+// lowercasing only for such characters (final sigma, U+0130 and the context
+// rules around them). Without them both agree exactly, so the provider can
+// tell Rauthy's spelling of the configured email from a real change.
+func Email() validator.String { return emailValidator{} }
+
+type emailValidator struct{}
+
+func (emailValidator) Description(context.Context) string {
+	return "non-ASCII characters must already be lowercase"
+}
+
+func (v emailValidator) MarkdownDescription(ctx context.Context) string { return v.Description(ctx) }
+
+func (emailValidator) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	for _, r := range req.ConfigValue.ValueString() {
+		if r > unicode.MaxASCII && unicode.ToLower(r) != r {
+			resp.Diagnostics.AddAttributeError(req.Path, "Email with uppercase non-ASCII characters",
+				"Rauthy lowercases emails with rules that differ from Go's for non-ASCII characters. "+
+					"Write the non-ASCII part of the email in lowercase.")
+			return
+		}
+	}
 }

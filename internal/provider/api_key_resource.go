@@ -95,6 +95,8 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 	plan.Secret = types.StringValue(secret)
+	plan.CreatedAt = types.Int64Null()
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 
 	// POST answers with the credential and nothing else, so created_at and the
 	// stored form of the grants have to be read back separately. If that read
@@ -166,6 +168,10 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 	// Carry the old secret forward by default: an update does not touch it, and
 	// there is no way to re-read it.
 	plan.Secret = state.Secret
+	plan.CreatedAt = state.CreatedAt
+	saved := plan
+	saved.SecretRotationTrigger = state.SecretRotationTrigger
+	resp.Diagnostics.Append(resp.State.Set(ctx, &saved)...)
 
 	// Rotation is never implicit: it happens only when the trigger value
 	// actually changes.
@@ -180,6 +186,7 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 		plan.Secret = types.StringValue(rotated)
+		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	}
 
 	got, err := r.api.GetAPIKey(ctx, name)

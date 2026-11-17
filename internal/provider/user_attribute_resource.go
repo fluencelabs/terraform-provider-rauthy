@@ -229,6 +229,8 @@ func (r *userAttributeResource) Update(
 		return
 	}
 
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+
 	// The PUT response is not to be trusted (the spec declares none at all), so
 	// the stored attribute is read back to learn what Rauthy actually kept.
 	updated, err := r.api.GetUserAttr(ctx, name)
@@ -273,7 +275,13 @@ func applyUserAttr(m *userAttributeResourceModel, a *rauthy.UserAttrResponse) {
 	m.ID = types.StringValue(a.Name)
 	m.Name = types.StringValue(a.Name)
 	m.Desc = optionalString(a.Desc)
-	m.DefaultValue = defaultValueString(a.DefaultValue)
+	value := defaultValueString(a.DefaultValue)
+	preserveNull := value.IsNull() && !m.DefaultValue.IsNull() && !m.DefaultValue.IsUnknown() &&
+		bytes.Equal(bytes.TrimSpace([]byte(m.DefaultValue.ValueString())), []byte("null"))
+	if !preserveNull {
+		m.DefaultValue = value
+	}
+
 	m.UserEditable = types.BoolValue(a.UserEditable)
 }
 

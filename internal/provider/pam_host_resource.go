@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"sort"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -98,6 +99,14 @@ func (r *pamHostResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
+	plan.ID = types.StringValue(created.ID)
+	plan.Secret = types.StringNull()
+	saved := plan
+	saved.IPs = stringsToSet([]string{})
+	saved.Aliases = stringsToSet([]string{})
+	saved.Notes = types.StringNull()
+	resp.Diagnostics.Append(resp.State.Set(ctx, &saved)...)
+
 	if isSet(plan.IPs) || isSet(plan.Aliases) || isSet(plan.Notes) {
 		r.applyPlan(ctx, created.ID, &plan, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
@@ -120,12 +129,22 @@ func (r *pamHostResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	id := state.ID.ValueString()
-	if _, err := r.api.GetPamHost(ctx, id); rauthy.IsNotFound(err) {
+	got, err := r.api.GetPamHost(ctx, id)
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	r.refresh(ctx, id, &state, &resp.Diagnostics)
+	if err != nil {
+		resp.Diagnostics.AddError("Could not read Rauthy PAM host "+id, err.Error())
+		return
+	}
+	secret, err := r.api.GetPamHostSecret(ctx, id)
+	if err != nil {
+		resp.Diagnostics.AddError("Could not read the secret of Rauthy PAM host "+id, err.Error())
+		return
+	}
+	resp.Diagnostics.Append(applyPamHostDetails(ctx, &state, got, secret.Secret)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -139,11 +158,18 @@ func (r *pamHostResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
+	var prior pamHostResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &prior)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	plan.Secret = prior.Secret
 	id := plan.ID.ValueString()
 	r.applyPlan(ctx, id, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	r.refresh(ctx, id, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -231,6 +257,22 @@ func applyPamHostDetails(
 	model.GID = types.Int64Value(got.GID)
 	model.ForceMfa = types.BoolValue(got.ForceMfa)
 	model.LocalPasswordOnly = types.BoolValue(got.LocalPasswordOnly)
+	if !model.IPs.IsNull() && !model.IPs.IsUnknown() {
+		var prior []string
+		diags.Append(model.IPs.ElementsAs(ctx, &prior, false)...)
+		canonical := make([]string, 0, len(prior))
+		for _, ip := range prior {
+			addr, err := netip.ParseAddr(ip)
+			if err != nil {
+				canonical = nil
+				break
+			}
+			canonical = append(canonical, addr.String())
+		}
+		if stringsToSet(canonical).Equal(ips) {
+			ips = model.IPs
+		}
+	}
 	model.IPs = ips
 	model.Aliases = aliases
 	model.Notes = types.StringPointerValue(got.Notes)

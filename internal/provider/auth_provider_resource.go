@@ -160,6 +160,8 @@ func (r *authProviderResource) Update(
 		return
 	}
 
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+
 	// PUT answers with an empty body, so the stored form has to be fetched
 	// back. That matters here rather than being a formality: Rauthy rewrites
 	// `scope` on the way in, and the resource's state must hold what the server
