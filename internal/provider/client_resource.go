@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	_ resource.Resource                = (*clientResource)(nil)
-	_ resource.ResourceWithConfigure   = (*clientResource)(nil)
-	_ resource.ResourceWithImportState = (*clientResource)(nil)
-	_ resource.ResourceWithModifyPlan  = (*clientResource)(nil)
+	_ resource.Resource                   = (*clientResource)(nil)
+	_ resource.ResourceWithConfigure      = (*clientResource)(nil)
+	_ resource.ResourceWithImportState    = (*clientResource)(nil)
+	_ resource.ResourceWithModifyPlan     = (*clientResource)(nil)
+	_ resource.ResourceWithValidateConfig = (*clientResource)(nil)
 )
 
 // NewClientResource returns the rauthy_client resource.
@@ -383,4 +384,33 @@ func stringsToSet(values []string) types.Set {
 		elems = append(elems, types.StringValue(v))
 	}
 	return types.SetValueMust(types.StringType, elems)
+}
+
+// ValidateConfig refuses a public client whose challenges leave out S256.
+// Rauthy checks the PKCE method against the stored list for public clients
+// too, so ["plain"] forbids S256 and allows the plain method, which is no
+// protection for a client without a secret. Leaving challenges out keeps
+// Rauthy's S256 default.
+func (r *clientResource) ValidateConfig(
+	ctx context.Context,
+	req resource.ValidateConfigRequest,
+	resp *resource.ValidateConfigResponse,
+) {
+	var confidential types.Bool
+	var challenges types.Set
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("confidential"), &confidential)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("challenges"), &challenges)...)
+	if resp.Diagnostics.HasError() || confidential.IsUnknown() || confidential.ValueBool() ||
+		challenges.IsNull() || challenges.IsUnknown() {
+		return
+	}
+	for _, v := range challenges.Elements() {
+		s, ok := v.(types.String)
+		if !ok || s.IsUnknown() || s.ValueString() == "S256" {
+			return
+		}
+	}
+	resp.Diagnostics.AddAttributeError(path.Root("challenges"), "Public client without S256",
+		"A public client must keep S256 among its PKCE challenges: Rauthy checks the method against this "+
+			"list for public clients too. Include \"S256\", or leave challenges out to keep Rauthy's S256 default.")
 }

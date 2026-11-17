@@ -102,7 +102,7 @@ Optional and computed: leaving this out adopts whatever Rauthy has, and removing
 
 Optional and computed: leaving this out adopts whatever Rauthy has, and removing it from the configuration later keeps the last applied value rather than reverting it. To change it, set it explicitly.
 - `backchannel_logout_uri` (String) OIDC back-channel logout endpoint of the application.
-- `challenges` (Set of String) Accepted PKCE challenge methods: `plain`, `S256`. Rauthy requires `S256` from public clients regardless of this setting.
+- `challenges` (Set of String) Accepted PKCE challenge methods: `plain`, `S256`. Rauthy checks the method a login uses against this list, for public clients too, so a public client must include `S256`; the provider refuses one that does not. Left out, a new client gets Rauthy's default, `S256`.
 
 Optional and computed: leaving this out adopts whatever Rauthy has, and removing it from the configuration later keeps the last applied value rather than reverting it. To change it, set it explicitly.
 - `client_uri` (String) Informational URI of the application.

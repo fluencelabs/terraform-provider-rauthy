@@ -218,8 +218,9 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 			MarkdownDescription: "Accepted PKCE challenge methods: `" + strings.Join(
 				rauthy.ChallengeMethods(),
 				"`, `",
-			) + "`. Rauthy requires " +
-				"`S256` from public clients regardless of this setting." + optionalComputedNote,
+			) + "`. Rauthy checks the method a login uses against this list, for public clients too, so " +
+				"a public client must include `S256`; the provider refuses one that does not. Left out, a new " +
+				"client gets Rauthy's default, `S256`." + optionalComputedNote,
 			Validators: validators.ChallengeSet(),
 			PlanModifiers: []planmodifier.Set{
 				setplanmodifier.UseStateForUnknown(),

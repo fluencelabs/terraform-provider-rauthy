@@ -256,3 +256,36 @@ func captureAttr(resourceName, attr string, into *string) resource.TestCheckFunc
 		return nil
 	}
 }
+
+// Rauthy checks the PKCE method against the stored list for public clients
+// too: a public client must keep S256. Left out, the client keeps Rauthy's
+// S256 default.
+func TestAccClient_publicRequiresS256(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(challenges string) string {
+		return `
+resource "rauthy_client" "public" {
+  id            = "tf-acc-public-pkce"
+  confidential  = false
+  redirect_uris = ["https://spa.example.com/callback"]
+  ` + challenges + `
+}
+`
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientDestroyed,
+		Steps: []resource.TestStep{
+			{Config: config(`challenges = ["plain"]`), ExpectError: regexp.MustCompile("Public client without S256")},
+			{Config: config(`challenges = []`), ExpectError: regexp.MustCompile("Public client without S256")},
+			{
+				Config: config(""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("rauthy_client.public", "challenges.#", "1"),
+					resource.TestCheckTypeSetElemAttr("rauthy_client.public", "challenges.*", "S256"),
+				),
+			},
+			{Config: config(`challenges = ["S256", "plain"]`)},
+		},
+	})
+}
