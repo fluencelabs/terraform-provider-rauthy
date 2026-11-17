@@ -51,7 +51,7 @@ resource "rauthy_scope" "billing" {
 
 ### Optional
 
-- `default_value` (String) Default value for the attribute, as a JSON document — Rauthy stores arbitrary JSON here, not just strings, so a plain string default has to be written as `jsonencode("engineering")` or `"\"engineering\""`. Values are compared as JSON rather than as text, so reformatting or reordering object keys is not a change. Rauthy re-serialises what it stores, so without that the value would never settle.
+- `default_value` (String) Default value for the attribute, as a JSON document — Rauthy stores arbitrary JSON here, not just strings, so a plain string default has to be written as `jsonencode("engineering")` or `"\"engineering\""`. Values are compared as JSON rather than as text, so reformatting or reordering object keys is not a change. Numbers must be integer literals in the i64/u64 range, or decimals with at most 15 significant mantissa digits and decimal scale (exponent minus fractional digit count) between -15 and 15. Other numbers are rejected before apply because Rauthy may round them during storage.
 - `desc` (String) Description of the attribute, shown in the Admin UI. Rauthy validates it against `^[a-zA-Z0-9-_/\x{0009}-\x{000D}\x{0085}\p{Zs}\x{2028}\x{2029}]{0,128}$`.
 - `user_editable` (Boolean) Whether users may change this attribute on themselves from the account page. Defaults to `false`, which keeps the attribute admin-only.
 

@@ -3,6 +3,7 @@ package provider_test
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -186,6 +187,33 @@ data "rauthy_user_attribute" "department" {
 						"rauthy_user_attribute.department", "id"),
 				),
 			},
+		},
+	})
+}
+
+func TestAccUserAttribute_numericValidation(t *testing.T) {
+	factories := acctest.Setup(t)
+	api := acctest.RealClient(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{{
+			Config:      testAccUserAttributeConfig("tf-acc-numeric", `default_value = "-974132620847463.82"`),
+			ExpectError: regexp.MustCompile(`Unsupported JSON number`),
+		}},
+	})
+	if _, err := api.GetUserAttr(context.Background(), "tf-acc-numeric"); !rauthy.IsNotFound(err) {
+		t.Fatalf("rejected default reached API: %v", err)
+	}
+	config := testAccUserAttributeConfig("tf-acc-numeric", `default_value = "12.345"`)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckUserAttributesDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check:  resource.TestCheckResourceAttr("rauthy_user_attribute.test", "default_value", "12.345"),
+			},
+			{Config: config, PlanOnly: true},
 		},
 	})
 }

@@ -96,7 +96,9 @@ func (r *userAttributeResource) Schema(
 					"arbitrary JSON here, not just strings, so a plain string default has to be written as " +
 					"`jsonencode(\"engineering\")` or `\"\\\"engineering\\\"\"`. Values are compared as " +
 					"JSON rather than as text, so reformatting or reordering object keys is not a change. " +
-					"Rauthy re-serialises what it stores, so without that the value would never settle.",
+					"Numbers must be integer literals in the i64/u64 range, or decimals with at most 15 " +
+					"significant mantissa digits and decimal scale (exponent minus fractional digit count) " +
+					"between -15 and 15. Other numbers are rejected before apply because Rauthy may round them during storage.",
 			},
 			"user_editable": schema.BoolAttribute{
 				Optional: true,
@@ -128,9 +130,8 @@ func (r *userAttributeResource) Configure(
 	r.api = api
 }
 
-// ValidateConfig rejects a default_value that is not JSON at plan time. Rauthy
-// would answer with a deserialization error at apply, naming neither the
-// resource nor the attribute.
+// ValidateConfig rejects invalid JSON and unsupported numeric precision before
+// mutation. Rauthy may round numbers during its two storage parse/serialize passes.
 func (r *userAttributeResource) ValidateConfig(
 	ctx context.Context,
 	req resource.ValidateConfigRequest,
@@ -150,6 +151,17 @@ func (r *userAttributeResource) ValidateConfig(
 			"default_value is not valid JSON",
 			"Rauthy stores this attribute's default as arbitrary JSON. Wrap a plain string with "+
 				"jsonencode(), for example jsonencode(\"engineering\").",
+		)
+		return
+	}
+	if number := unstableJSONNumber(cfg.DefaultValue.ValueString()); number != "" {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("default_value"),
+			"Unsupported JSON number",
+			fmt.Sprintf(
+				"Number %s may change during Rauthy's JSON storage round trip. Use an integer literal in the i64/u64 range, or a decimal with at most 15 significant mantissa digits and decimal scale (exponent minus fractional digit count) between -15 and 15.",
+				number,
+			),
 		)
 	}
 }
