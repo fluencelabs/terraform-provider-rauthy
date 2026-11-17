@@ -232,7 +232,7 @@ func (r *clientResource) Update(ctx context.Context, req resource.UpdateRequest,
 
 	// Rotation is never implicit: it happens only when the trigger value
 	// actually changes.
-	if rotationRequested(&state, &plan) {
+	if rotationRequested(&state, &plan) && (!plan.SecretRotationTrigger.IsNull() || plan.Confidential.ValueBool()) {
 		if !plan.Confidential.ValueBool() {
 			resp.Diagnostics.AddAttributeError(
 				path.Root("secret_rotation_trigger"),
