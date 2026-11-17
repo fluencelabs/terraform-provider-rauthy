@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func TestRound2LogoFallback(t *testing.T) {
+func TestLogoFallback(t *testing.T) {
 	ctx := context.Background()
 	for _, data := range []string{"custom", "global"} {
 		f, api := newFakeRauthy(t)

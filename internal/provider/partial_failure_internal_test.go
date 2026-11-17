@@ -14,7 +14,7 @@ func forbid(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, `{"error":"Forbidden","message":"missing permission"}`, http.StatusForbidden)
 }
 
-func TestRound2PartialFailure(t *testing.T) {
+func TestPartialFailure(t *testing.T) {
 	ctx := context.Background()
 	t.Run("API key rotation", func(t *testing.T) {
 		f, api := newFakeRauthy(t)
@@ -114,7 +114,7 @@ func TestRound2PartialFailure(t *testing.T) {
 	})
 }
 
-func TestRound2PartialFollowups(t *testing.T) {
+func TestPartialFollowups(t *testing.T) {
 	ctx := context.Background()
 	t.Run("attribute update", func(t *testing.T) {
 		f, api := newFakeRauthy(t)

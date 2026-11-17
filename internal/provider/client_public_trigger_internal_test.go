@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func TestRound2PublicTriggerRemoval(t *testing.T) {
+func TestPublicTriggerRemoval(t *testing.T) {
 	ctx := context.Background()
 	f, api := newFakeRauthy(t)
 	c := fullResponse()
@@ -33,7 +33,7 @@ func TestRound2PublicTriggerRemoval(t *testing.T) {
 	}
 }
 
-func TestRound2PublicTriggerSetRejected(t *testing.T) {
+func TestPublicTriggerSetRejected(t *testing.T) {
 	ctx := context.Background()
 	f, api := newFakeRauthy(t)
 	c := fullResponse()

@@ -10,9 +10,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-const round2Config = `
-resource "rauthy_client" "round2" {
- id = "tf-round2"
+const normalizationConfig = `
+resource "rauthy_client" "normalization" {
+ id = "tf-normalization"
  confidential = true
  redirect_uris = ["https://app.example.com/callback"]
  post_logout_redirect_uris = []
@@ -27,56 +27,56 @@ resource "rauthy_client" "round2" {
   sync_groups = false
  }
 }
-resource "rauthy_user" "round2" {
- email = "RoundTwo@Example.com"
+resource "rauthy_user" "normalization" {
+ email = "Mixed@Example.com"
  given_name = "Round"
 }
-resource "rauthy_user_attribute" "round2null" {
- name = "round2null"
+resource "rauthy_user_attribute" "jsonnull" {
+ name = "jsonnull"
  default_value = "null"
  user_editable = true
 }
-resource "rauthy_user_attribute" "round2big" {
- name = "round2big"
+resource "rauthy_user_attribute" "bigint" {
+ name = "bigint"
  default_value = "{\"n\":9007199254740992}"
 }
-resource "rauthy_pam_group" "round2" {
- name = "round2host"
+resource "rauthy_pam_group" "normalization" {
+ name = "normhost"
  typ = "host"
 }
-resource "rauthy_pam_host" "round2" {
- hostname = "round2host"
- gid = rauthy_pam_group.round2.id
+resource "rauthy_pam_host" "normalization" {
+ hostname = "normhost"
+ gid = rauthy_pam_group.id
  ips = ["2001:0DB8:0000:0000:0000:0000:0000:0002"]
 }
 `
 
-func TestAccRound2Normalization(t *testing.T) {
+func TestAccNormalization(t *testing.T) {
 	factories := acctest.Setup(t)
 	api := acctest.RealClient(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: factories,
 		Steps: []resource.TestStep{
-			{Config: round2Config, Check: resource.ComposeAggregateTestCheckFunc(
-				resource.TestCheckResourceAttr("rauthy_client.round2", "allowed_origins.#", "0"),
-				resource.TestCheckResourceAttr("rauthy_client.round2", "challenges.#", "1"),
-				resource.TestCheckResourceAttr("rauthy_user.round2", "email", "RoundTwo@Example.com"),
-				resource.TestCheckResourceAttr("rauthy_user_attribute.round2null", "default_value", "null"),
-				resource.TestCheckResourceAttr("rauthy_user_attribute.round2null", "user_editable", "true"),
+			{Config: normalizationConfig, Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("rauthy_client.normalization", "allowed_origins.#", "0"),
+				resource.TestCheckResourceAttr("rauthy_client.normalization", "challenges.#", "1"),
+				resource.TestCheckResourceAttr("rauthy_user.normalization", "email", "Mixed@Example.com"),
+				resource.TestCheckResourceAttr("rauthy_user_attribute.jsonnull", "default_value", "null"),
+				resource.TestCheckResourceAttr("rauthy_user_attribute.jsonnull", "user_editable", "true"),
 				resource.TestCheckTypeSetElemAttr(
-					"rauthy_pam_host.round2",
+					"rauthy_pam_host.normalization",
 					"ips.*",
 					"2001:0DB8:0000:0000:0000:0000:0000:0002",
 				),
 			)},
-			{Config: round2Config, PlanOnly: true},
-			{Config: round2Config, PlanOnly: true, ExpectNonEmptyPlan: true, PreConfig: func() {
+			{Config: normalizationConfig, PlanOnly: true},
+			{Config: normalizationConfig, PlanOnly: true, ExpectNonEmptyPlan: true, PreConfig: func() {
 				editable := false
 				err := api.UpdateUserAttr(
 					context.Background(),
-					"round2big",
+					"bigint",
 					rauthy.UserAttrRequest{
-						Name:         "round2big",
+						Name:         "bigint",
 						DefaultValue: []byte(`{"n":9007199254740993}`),
 						UserEditable: &editable,
 					},
@@ -89,11 +89,11 @@ func TestAccRound2Normalization(t *testing.T) {
 	})
 }
 
-func TestAccRound2ScopesPlan(t *testing.T) {
+func TestAccScopesPlan(t *testing.T) {
 	factories := acctest.Setup(t)
 	resource.Test(t, resource.TestCase{ProtoV6ProviderFactories: factories, Steps: []resource.TestStep{{
 		Config: `resource "rauthy_client" "test" {
- id = "tf-round2-scope"
+ id = "tf-normalization-scope"
  confidential = true
  redirect_uris = ["https://example.com/callback"]
  scopes = ["profile"]

@@ -45,26 +45,26 @@ func livePartialClients(t *testing.T, deny func(*http.Request) bool) (*rauthy.Cl
 	return api, direct
 }
 
-func TestAccRound2PartialClient(t *testing.T) {
+func TestAccPartialClient(t *testing.T) {
 	ctx := context.Background()
 	api, direct := livePartialClients(t, func(r *http.Request) bool {
 		return r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/secret")
 	})
 	t.Cleanup(func() {
-		if deleteErr := direct.DeleteClient(ctx, "tf-round2-partial"); deleteErr != nil {
+		if deleteErr := direct.DeleteClient(ctx, "tf-partial-failure"); deleteErr != nil {
 			t.Error(deleteErr)
 		}
 	})
 	r := &clientResource{api: api}
 	plan := clientModelOf(t, fullResponse())
-	plan.ID = types.StringValue("tf-round2-partial")
+	plan.ID = types.StringValue("tf-partial-failure")
 	plan.Scim = nil
 	plan.ForceMFA = types.BoolValue(false)
 	resp := resource.CreateResponse{State: emptyState(t, r)}
 	r.Create(ctx, resource.CreateRequest{Plan: resourcePlan(t, r, &plan)}, &resp)
 	var got clientResourceModel
 	d := resp.State.Get(ctx, &got)
-	if !resp.Diagnostics.HasError() || d.HasError() || got.ID.ValueString() != "tf-round2-partial" {
+	if !resp.Diagnostics.HasError() || d.HasError() || got.ID.ValueString() != "tf-partial-failure" {
 		t.Fatalf("client lost: %v %v", resp.Diagnostics, d)
 	}
 	if _, readErr := direct.GetClient(ctx, got.ID.ValueString()); readErr != nil {
@@ -72,12 +72,12 @@ func TestAccRound2PartialClient(t *testing.T) {
 	}
 }
 
-func TestAccRound2PartialPamHost(t *testing.T) {
+func TestAccPartialPamHost(t *testing.T) {
 	ctx := context.Background()
 	api, direct := livePartialClients(t, func(r *http.Request) bool {
 		return r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pam/hosts/")
 	})
-	group, err := direct.CreatePamGroup(ctx, rauthy.PamGroupCreateRequest{Name: "round2partial", Typ: "host"})
+	group, err := direct.CreatePamGroup(ctx, rauthy.PamGroupCreateRequest{Name: "partialfailure", Typ: "host"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestAccRound2PartialPamHost(t *testing.T) {
 	})
 	r := &pamHostResource{api: api}
 	plan := pamHostResourceModel{
-		Hostname: types.StringValue("round2partial"),
+		Hostname: types.StringValue("partialfailure"),
 		GID:      types.Int64Value(group.ID),
 		IPs:      types.SetUnknown(types.StringType),
 		Aliases:  types.SetUnknown(types.StringType),
@@ -112,7 +112,7 @@ func TestAccRound2PartialPamHost(t *testing.T) {
 	}
 }
 
-func TestAccRound2PartialPamUser(t *testing.T) {
+func TestAccPartialPamUser(t *testing.T) {
 	ctx := context.Background()
 	api, direct := livePartialClients(t, func(r *http.Request) bool {
 		return r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pam/users/")
@@ -120,7 +120,7 @@ func TestAccRound2PartialPamUser(t *testing.T) {
 	name := "Round"
 	user, err := direct.CreateUser(
 		ctx,
-		rauthy.NewUserRequest{Email: "round2partial@example.com", GivenName: &name, Language: "en", Roles: []string{}},
+		rauthy.NewUserRequest{Email: "partialfailure@example.com", GivenName: &name, Language: "en", Roles: []string{}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -132,8 +132,8 @@ func TestAccRound2PartialPamUser(t *testing.T) {
 	})
 	r := &pamUserResource{api: api}
 	plan := pamUserResourceModel{
-		Username: types.StringValue("round2partial"),
-		Email:    types.StringValue("round2partial@example.com"),
+		Username: types.StringValue("partialfailure"),
+		Email:    types.StringValue("partialfailure@example.com"),
 		Shell:    types.StringValue("/bin/zsh"),
 		Groups:   types.SetUnknown(types.ObjectType{AttrTypes: pamUserGroupAttrTypes}),
 	}
@@ -156,22 +156,22 @@ func TestAccRound2PartialPamUser(t *testing.T) {
 	}
 }
 
-func TestAccRound2PartialRotation(t *testing.T) {
+func TestAccPartialRotation(t *testing.T) {
 	ctx := context.Background()
 	api, direct := livePartialClients(t, func(r *http.Request) bool {
 		return r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/api_keys")
 	})
 	access := []rauthy.APIKeyAccess{{Group: "Users", AccessRights: []string{"read"}}}
-	old, err := direct.CreateAPIKey(ctx, rauthy.APIKeyRequest{Name: "round2partial", Access: access})
+	old, err := direct.CreateAPIKey(ctx, rauthy.APIKeyRequest{Name: "partialfailure", Access: access})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if deleteErr := direct.DeleteAPIKey(ctx, "round2partial"); deleteErr != nil {
+		if deleteErr := direct.DeleteAPIKey(ctx, "partialfailure"); deleteErr != nil {
 			t.Error(deleteErr)
 		}
 	})
-	current, err := direct.GetAPIKey(ctx, "round2partial")
+	current, err := direct.GetAPIKey(ctx, "partialfailure")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestAccRound2PartialRotation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, readErr := credential.GetUser(ctx, "round2missing"); !rauthy.IsNotFound(readErr) {
+	if _, readErr := credential.GetUser(ctx, "missinguser"); !rauthy.IsNotFound(readErr) {
 		t.Fatalf("saved rotated secret does not authenticate: %v", readErr)
 	}
 }

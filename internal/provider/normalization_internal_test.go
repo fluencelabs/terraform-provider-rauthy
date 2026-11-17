@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func TestRound2Normalization_client_sets_and_scim(t *testing.T) {
+func TestNormalization_client_sets_and_scim(t *testing.T) {
 	ctx := context.Background()
 	got := fullResponse()
 	m := clientModelOf(t, got)
@@ -42,7 +42,7 @@ func TestRound2Normalization_client_sets_and_scim(t *testing.T) {
 	}
 }
 
-func TestRound2Normalization_openid(t *testing.T) {
+func TestNormalization_openid(t *testing.T) {
 	ctx := context.Background()
 	var sr resource.SchemaResponse
 	NewClientResource().Schema(ctx, resource.SchemaRequest{}, &sr)
@@ -67,7 +67,7 @@ func TestRound2Normalization_openid(t *testing.T) {
 	}
 }
 
-func TestRound2Normalization_email(t *testing.T) {
+func TestNormalization_email(t *testing.T) {
 	m := userResourceModel{Email: types.StringValue("Ada@Example.com")}
 	applyUser(&m, &rauthy.UserResponse{Email: "ada@example.com"})
 	if m.Email.ValueString() != "Ada@Example.com" {
@@ -79,7 +79,7 @@ func TestRound2Normalization_email(t *testing.T) {
 	}
 }
 
-func TestRound2Normalization_JSON_null_and_integers(t *testing.T) {
+func TestNormalization_JSON_null_and_integers(t *testing.T) {
 	ctx := context.Background()
 	m := userAttributeResourceModel{DefaultValue: newJSONString(" null ")}
 	applyUserAttr(&m, &rauthy.UserAttrResponse{Name: "attr"})
@@ -99,7 +99,7 @@ func TestRound2Normalization_JSON_null_and_integers(t *testing.T) {
 	}
 }
 
-func TestRound2Normalization_IPv6(t *testing.T) {
+func TestNormalization_IPv6(t *testing.T) {
 	ctx := context.Background()
 	m := pamHostResourceModel{IPs: stringSet(t, "2001:0DB8:0000:0000:0000:0000:0000:0002")}
 	want := m.IPs

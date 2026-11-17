@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func TestRound2PAMErrors(t *testing.T) {
+func TestPAMErrors(t *testing.T) {
 	ctx := context.Background()
 	t.Run("host reads once", func(t *testing.T) {
 		f, api := newFakeRauthy(t)
