@@ -39,9 +39,12 @@ func TestPamGroupDeleteHints(t *testing.T) {
 	}{
 		{"host", 400, "BadRequest", "Cannot delete group with assigned hosts", true},
 		{"sqlite", 400, "BadRequest", "Error code 787: Foreign key constraint failed", true},
-		{"sqlite database", 500, "Database", "Error code 787: Foreign key constraint failed", true},
+		{"sqlite database", 500, "Database", "Error code 787: Foreign key constraint failed", false},
 		{"postgres", 500, "Database", "db error", true},
-		{"status independent", 500, "BadRequest", "Cannot delete group with assigned hosts", true},
+		{"wrong host status", 500, "BadRequest", "Cannot delete group with assigned hosts", false},
+		{"original forbidden assertion", 403, "BadRequest", "Error code 787", false},
+		{"forbidden postgres", 403, "Database", "db error", false},
+		{"wrong postgres status", 400, "Database", "db error", false},
 		{"forbidden", 403, "Forbidden", "Error code 787", false},
 		{"other database", 500, "Database", "connection closed", false},
 		{"other constraint", 400, "BadRequest", "Error code 1555", false},
@@ -73,18 +76,21 @@ func TestPamGroupDeleteHints(t *testing.T) {
 func TestPamGroupCreateHints(t *testing.T) {
 	for _, tc := range []struct {
 		name, code, message string
+		status              int
 		plain, hint         bool
 	}{
-		{"sqlite duplicate", "NotFound", "no rows returned", false, true},
-		{"postgres duplicate", "NotFound", "No results found", false, true},
-		{"proxy", "", "404 page not found", true, false},
-		{"missing code", "", "no rows returned", false, false},
-		{"other code", "BadRequest", "no rows returned", false, false},
+		{"sqlite duplicate", "NotFound", "no rows returned", 404, false, true},
+		{"postgres duplicate", "NotFound", "No results found", 404, false, true},
+		{"other structured 404", "NotFound", "Route not found", 404, false, false},
+		{"wrong status", "NotFound", "no rows returned", 500, false, false},
+		{"proxy", "", "404 page not found", 404, true, false},
+		{"missing code", "", "no rows returned", 404, false, false},
+		{"other code", "BadRequest", "no rows returned", 404, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, api := newFakeRauthy(t)
 			f.handle("POST /pam/groups", func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusNotFound)
+				w.WriteHeader(tc.status)
 				if tc.plain {
 					_, _ = w.Write([]byte(tc.message))
 				} else {
