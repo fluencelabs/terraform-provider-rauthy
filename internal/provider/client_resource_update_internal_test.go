@@ -158,4 +158,19 @@ func TestClientUpdate_FailedRotationSaysItMayHaveHappened(t *testing.T) {
 	if !strings.Contains(detail, "may have rotated") {
 		t.Errorf("the error does not say the secret may have changed anyway:\n%s", detail)
 	}
+
+	var saved clientResourceModel
+	if diags := resp.State.Get(ctx, &saved); diags.HasError() {
+		t.Fatalf("read state after failed rotation: %v", diags)
+	}
+	if !saved.SecretRotationTrigger.Equal(state.SecretRotationTrigger) {
+		t.Errorf("rotation trigger = %v, want the previous %v",
+			saved.SecretRotationTrigger, state.SecretRotationTrigger)
+	}
+	if !rotationRequested(&saved, &plan) {
+		t.Error("failed rotation consumed the pending trigger")
+	}
+	if !saved.Secret.Equal(state.Secret) {
+		t.Errorf("secret = %v, want the previous secret", saved.Secret)
+	}
 }

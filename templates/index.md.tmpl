@@ -68,6 +68,21 @@ existing setup can run into:
   `rauthy_api_key`. If the request fails after it went out (a `5xx`, a dropped connection), the
   error says Rauthy may have rotated the secret anyway; the next apply rotates again.
 
+## Known limits
+
+* PAM user `shell` and `home_dir` lengths are checked only by Rauthy (24 and 128 characters,
+  respectively). An invalid value can fail at apply after the account has been created.
+* Creating a PAM user whose username matches an existing PAM group can return 404. The diagnostic
+  describes an email problem, but choosing another username or resolving the group collision may
+  be necessary.
+* JSON number validation is conservative and rejects some fractions that Rauthy could safely
+  store. See `rauthy_user_attribute.default_value` for the accepted ranges.
+* The substring safety checks for scope, role and group changes are separate from the write.
+  A concurrent Rauthy client can introduce a conflicting name between the check and deletion
+  or rename. Rauthy provides no conditional deletion to close this race.
+* A conflicting name created in the same apply may be absent during planning. If it exists when
+  the safety check runs, the operation is refused at apply.
+
 ## Example usage
 
 {{ tffile "examples/provider/provider.tf" }}
