@@ -20,14 +20,17 @@ func TestJSONString_SemanticEquals(t *testing.T) {
 		a, b string
 		want bool
 	}{
-		"equivalent numbers":      {`{"n":1e2}`, `{"n":100.0}`, true},
-		"adjacent large integers": {`{"n":9007199254740992}`, `{"n":9007199254740993}`, false},
-		"identical":               {`{"a":1}`, `{"a":1}`, true},
-		"whitespace only":         {"{\n  \"a\": 1\n}", `{"a":1}`, true},
-		"reordered object keys":   {`{"a":1,"b":2}`, `{"b":2,"a":1}`, true},
-		"different value":         {`{"a":1}`, `{"a":2}`, false},
-		"array order is not free": {`[1,2]`, `[2,1]`, false},
-		"scalar string":           {`"engineering"`, `  "engineering" `, true},
+		"equivalent numbers":              {`{"n":1e2}`, `{"n":100.0}`, true},
+		"equivalent array numbers":        {`[1e2]`, `[100.0]`, true},
+		"equivalent nested array numbers": {`{"n":[[1e2],{"v":2e1}]}`, `{"n":[[100.0],{"v":20.0}]}`, true},
+		"adjacent large array integers":   {`[9007199254740992]`, `[9007199254740993]`, false},
+		"adjacent large integers":         {`{"n":9007199254740992}`, `{"n":9007199254740993}`, false},
+		"identical":                       {`{"a":1}`, `{"a":1}`, true},
+		"whitespace only":                 {"{\n  \"a\": 1\n}", `{"a":1}`, true},
+		"reordered object keys":           {`{"a":1,"b":2}`, `{"b":2,"a":1}`, true},
+		"different value":                 {`{"a":1}`, `{"a":2}`, false},
+		"array order is not free":         {`[1,2]`, `[2,1]`, false},
+		"scalar string":                   {`"engineering"`, `  "engineering" `, true},
 		// Neither side parses, so this falls back to byte equality rather than
 		// silently calling two broken values equal.
 		"both unparseable and equal":   {`not json`, `not json`, true},

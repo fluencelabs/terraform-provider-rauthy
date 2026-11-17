@@ -6,7 +6,46 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/fluencelabs/rauthy-go"
 )
+
+func TestConfidentialTriggerRemoval(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f, api := newFakeRauthy(t)
+	c := fullResponse()
+	f.answer("GET /clients/example-app", c)
+	f.answer("PUT /clients/example-app", c)
+	oldSecret := rauthy.NewSecret("old-secret")
+	rotatedSecret := rauthy.NewSecret("rotated-secret")
+	f.answer("POST /clients/example-app/secret", &rauthy.ClientSecretResponse{Secret: &oldSecret})
+	f.answer("PUT /clients/example-app/secret", &rauthy.ClientSecretResponse{Secret: &rotatedSecret})
+	r := &clientResource{api: api}
+	state := clientModelOf(t, c)
+	state.SecretRotationTrigger = types.StringValue("1")
+	plan := state
+	plan.SecretRotationTrigger = types.StringNull()
+	plan.Secret = types.StringUnknown()
+	resp := resource.UpdateResponse{State: emptyState(t, r)}
+	r.Update(ctx, resource.UpdateRequest{Plan: resourcePlan(t, r, &plan), State: resourceState(t, r, &state)}, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatal(resp.Diagnostics)
+	}
+	if n := len(f.bodies("PUT /clients/example-app/secret")); n != 1 {
+		t.Errorf("the rotation was sent %d times, want once", n)
+	}
+	var got clientResourceModel
+	if d := resp.State.Get(ctx, &got); d.HasError() {
+		t.Fatal(d)
+	}
+	if !got.Secret.Equal(types.StringValue("rotated-secret")) {
+		t.Error("the rotated secret was not saved")
+	}
+	if !got.Confidential.ValueBool() || !got.SecretRotationTrigger.IsNull() {
+		t.Error("confidential trigger removal was not saved")
+	}
+}
 
 func TestPublicTriggerRemoval(t *testing.T) {
 	ctx := context.Background()
