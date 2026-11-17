@@ -3,14 +3,65 @@ package provider
 import (
 	"context"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/fluencelabs/rauthy-go"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+func TestUserAttributeReadList(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		present bool
+	}{
+		{name: "route missing", status: http.StatusNotFound},
+		{name: "forbidden", status: http.StatusForbidden},
+		{name: "attribute missing"},
+		{name: "attribute present", present: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, api := newFakeRauthy(t)
+			r := &userAttributeResource{api: api}
+			model := userAttributeResourceModel{
+				ID: types.StringValue("dev"), Name: types.StringValue("dev"), UserEditable: types.BoolValue(false),
+			}
+			state := resourceState(t, r, model)
+			want := emptyState(t, r)
+			if tc.status != 0 {
+				f.handle("GET /users/attr", func(w http.ResponseWriter, _ *http.Request) {
+					http.Error(w, "list unavailable", tc.status)
+				})
+				want = state
+			} else {
+				attrs := []rauthy.UserAttrResponse{{Name: "developer"}}
+				if tc.present {
+					attrs = append(attrs, rauthy.UserAttrResponse{Name: "dev", UserEditable: true})
+					model.UserEditable = types.BoolValue(true)
+					want = resourceState(t, r, model)
+				}
+				f.answer("GET /users/attr", map[string]any{"values": attrs})
+			}
+			resp := resource.ReadResponse{State: state}
+			r.Read(t.Context(), resource.ReadRequest{State: state}, &resp)
+			if !resp.State.Raw.Equal(want.Raw) {
+				t.Errorf("state = %v, want %v", resp.State.Raw, want.Raw)
+			}
+			if resp.Diagnostics.HasError() != (tc.status != 0) {
+				t.Fatalf("unexpected diagnostics for status %d: %v", tc.status, resp.Diagnostics)
+			}
+			if tc.status != 0 && !strings.Contains(resp.Diagnostics[0].Detail(), strconv.Itoa(tc.status)) {
+				t.Errorf("list API error lost status %d: %v", tc.status, resp.Diagnostics)
+			}
+		})
+	}
+}
 
 type attributeGuardCase struct {
 	name, other, failure string
@@ -121,8 +172,12 @@ func checkAttributeGuardPlans(
 		var resp resource.ModifyPlanResponse
 		r.ModifyPlan(context.Background(), resource.ModifyPlanRequest{State: prior, Plan: plan}, &resp)
 		wantError := unsafe && (op == "destroy" || op == "replace")
-		if (len(resp.RequiresReplace) > 0) != (op == "replace") {
-			t.Errorf("%s plan: unexpected replacement paths %v", op, resp.RequiresReplace)
+		var wantReplace path.Paths
+		if op == "replace" {
+			wantReplace = path.Paths{path.Root("name")}
+		}
+		if !slices.EqualFunc(resp.RequiresReplace, wantReplace, path.Path.Equal) {
+			t.Errorf("%s plan: replacement paths %v, want %v", op, resp.RequiresReplace, wantReplace)
 		}
 		if resp.Diagnostics.HasError() != wantError {
 			t.Errorf("%s plan: %v, wantError=%v", op, resp.Diagnostics, wantError)

@@ -216,17 +216,18 @@ func (r *userAttributeResource) Read(ctx context.Context, req resource.ReadReque
 	}
 
 	name := state.Name.ValueString()
-	got, err := r.api.GetUserAttr(ctx, name)
-	if rauthy.IsNotFound(err) {
-		resp.State.RemoveResource(ctx)
-		return
-	}
+	attrs, err := r.api.ListUserAttrs(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Could not read Rauthy user attribute "+name, err.Error())
 		return
 	}
+	index := slices.IndexFunc(attrs, func(a rauthy.UserAttrResponse) bool { return a.Name == name })
+	if index < 0 {
+		resp.State.RemoveResource(ctx)
+		return
+	}
 
-	applyUserAttr(&state, got)
+	applyUserAttr(&state, &attrs[index])
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

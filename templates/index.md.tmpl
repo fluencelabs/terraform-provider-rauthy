@@ -83,6 +83,8 @@ existing setup can run into:
 * A conflicting name created in the same apply may be absent during planning. If it exists when
   the safety check runs, the operation is refused at apply.
 * Refresh removes a user attribute from state if Rauthy omits it from the list, for example after an external rename. An in-flight DELETE may finish after the provider releases its lock if the request is canceled or the proxy connection drops.
+* If an attribute's new name is computed during apply, the replacement is rejected at apply when deleting the old name would corrupt an existing scope mapping. Terraform may already have written dependencies by then.
+* A saved destroy plan fails if the user attribute has already been deleted outside Terraform. Refresh state and create a new plan.
 
 ## Example usage
 
