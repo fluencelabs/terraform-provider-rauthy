@@ -29,7 +29,7 @@ output "backend_client_secret" {
   sensitive = true
 }
 
-# A public single-page app: no secret, and Rauthy requires S256 PKCE from it.
+# A public single-page app: no secret; it must keep S256 among its PKCE challenges.
 resource "rauthy_client" "spa" {
   id            = "example-spa"
   name          = "Example SPA"

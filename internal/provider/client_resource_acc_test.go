@@ -256,3 +256,99 @@ func captureAttr(resourceName, attr string, into *string) resource.TestCheckFunc
 		return nil
 	}
 }
+
+// Rauthy checks the PKCE method against the stored list for public clients
+// too: a public client must keep S256. Left out, the client keeps Rauthy's
+// S256 default.
+func TestAccClient_publicRequiresS256(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(challenges string) string {
+		return `
+resource "rauthy_client" "public" {
+  id            = "tf-acc-public-pkce"
+  confidential  = false
+  redirect_uris = ["https://spa.example.com/callback"]
+  ` + challenges + `
+}
+`
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientDestroyed,
+		Steps: []resource.TestStep{
+			{Config: config(`challenges = ["plain"]`), ExpectError: regexp.MustCompile("Public client without S256")},
+			{Config: config(`challenges = []`), ExpectError: regexp.MustCompile("Public client without S256")},
+			{
+				Config: config(""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("rauthy_client.public", "challenges.#", "1"),
+					resource.TestCheckTypeSetElemAttr("rauthy_client.public", "challenges.*", "S256"),
+				),
+			},
+			{Config: config(`challenges = ["S256", "plain"]`)},
+		},
+	})
+}
+
+// A public client that leaves challenges out is planned with S256 whatever it
+// held before: ["plain"] from its confidential days, or nothing after an
+// import of a client created without challenges.
+func TestAccClient_publicPlansS256(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(confidential bool, challenges string) string {
+		return fmt.Sprintf(`
+resource "rauthy_client" "c" {
+  id            = "tf-acc-flip-pkce"
+  confidential  = %t
+  redirect_uris = ["https://spa.example.com/callback"]
+  %s
+}
+`, confidential, challenges)
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientDestroyed,
+		Steps: []resource.TestStep{
+			{Config: config(true, `challenges = ["plain"]`)},
+			{
+				Config: config(false, ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("rauthy_client.c", "challenges.#", "1"),
+					resource.TestCheckTypeSetElemAttr("rauthy_client.c", "challenges.*", "S256"),
+				),
+			},
+			{Config: config(false, ""), PlanOnly: true},
+		},
+	})
+}
+
+// The same when confidential is only known at apply: the plan leaves
+// challenges open, and the final plan picks S256.
+func TestAccClient_publicPlansS256WhenConfidentialIsUnknown(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(confidential, challenges string) string {
+		return `
+resource "terraform_data" "conf" { input = ` + confidential + ` }
+resource "rauthy_client" "u" {
+  id            = "tf-acc-unknown-conf"
+  confidential  = terraform_data.conf.output
+  redirect_uris = ["https://spa.example.com/callback"]
+  ` + challenges + `
+}
+`
+	}
+	check := resource.TestCheckTypeSetElemAttr("rauthy_client.u", "challenges.*", "S256")
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientDestroyed,
+		Steps: []resource.TestStep{
+			{Config: config("true", `challenges = ["plain"]`)},
+			{Config: config("false", ""), Check: check},
+		},
+	})
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientDestroyed,
+		Steps:                    []resource.TestStep{{Config: config("false", ""), Check: check}},
+	})
+}

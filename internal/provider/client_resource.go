@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	_ resource.Resource                = (*clientResource)(nil)
-	_ resource.ResourceWithConfigure   = (*clientResource)(nil)
-	_ resource.ResourceWithImportState = (*clientResource)(nil)
-	_ resource.ResourceWithModifyPlan  = (*clientResource)(nil)
+	_ resource.Resource                   = (*clientResource)(nil)
+	_ resource.ResourceWithConfigure      = (*clientResource)(nil)
+	_ resource.ResourceWithImportState    = (*clientResource)(nil)
+	_ resource.ResourceWithModifyPlan     = (*clientResource)(nil)
+	_ resource.ResourceWithValidateConfig = (*clientResource)(nil)
 )
 
 // NewClientResource returns the rauthy_client resource.
@@ -283,8 +284,12 @@ func (r *clientResource) ModifyPlan(
 	req resource.ModifyPlanRequest,
 	resp *resource.ModifyPlanResponse,
 ) {
-	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
-		// Create or destroy; nothing to compare against.
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+	r.planPublicS256(ctx, req, resp)
+	if req.State.Raw.IsNull() {
+		// Create; nothing to compare against.
 		return
 	}
 
@@ -383,4 +388,74 @@ func stringsToSet(values []string) types.Set {
 		elems = append(elems, types.StringValue(v))
 	}
 	return types.SetValueMust(types.StringType, elems)
+}
+
+// ValidateConfig refuses a public client whose challenges leave out S256.
+// Rauthy checks the PKCE method against the stored list for public clients
+// too, so ["plain"] forbids S256 and allows the plain method, which is no
+// protection for a client without a secret. Leaving challenges out keeps
+// Rauthy's S256 default.
+func (r *clientResource) ValidateConfig(
+	ctx context.Context,
+	req resource.ValidateConfigRequest,
+	resp *resource.ValidateConfigResponse,
+) {
+	var confidential types.Bool
+	var challenges types.Set
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("confidential"), &confidential)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("challenges"), &challenges)...)
+	if resp.Diagnostics.HasError() || confidential.IsUnknown() || confidential.ValueBool() ||
+		challenges.IsNull() || challenges.IsUnknown() {
+		return
+	}
+	for _, v := range challenges.Elements() {
+		if s, ok := v.(types.String); !ok || s.IsUnknown() {
+			return
+		}
+	}
+	if hasS256(challenges) {
+		return
+	}
+	resp.Diagnostics.AddAttributeError(path.Root("challenges"), "Public client without S256",
+		"A public client must keep S256 among its PKCE challenges: Rauthy checks the method against this "+
+			"list for public clients too. Include \"S256\", or leave challenges out: the provider then plans [\"S256\"].")
+}
+
+// planPublicS256 plans ["S256"] for a public client that leaves challenges
+// out but would otherwise keep a list without S256: one carried over from
+// state (["plain"] while it was confidential, or nothing after an import) or
+// none at all. ValidateConfig refuses a configured list without S256.
+func (r *clientResource) planPublicS256(
+	ctx context.Context,
+	req resource.ModifyPlanRequest,
+	resp *resource.ModifyPlanResponse,
+) {
+	var confidential types.Bool
+	var configured, planned types.Set
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("confidential"), &confidential)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("challenges"), &configured)...)
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("challenges"), &planned)...)
+	if resp.Diagnostics.HasError() || !configured.IsNull() || (!confidential.IsUnknown() && confidential.ValueBool()) {
+		return
+	}
+	if confidential.IsUnknown() {
+		// Known at apply only: leave the choice to the final plan, which
+		// would otherwise contradict a value carried over from state.
+		resp.Diagnostics.Append(
+			resp.Plan.SetAttribute(ctx, path.Root("challenges"), types.SetUnknown(types.StringType))...)
+		return
+	}
+	if !planned.IsUnknown() && !planned.IsNull() && hasS256(planned) {
+		return
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("challenges"), stringsToSet([]string{"S256"}))...)
+}
+
+func hasS256(set types.Set) bool {
+	for _, v := range set.Elements() {
+		if s, ok := v.(types.String); ok && s.ValueString() == "S256" {
+			return true
+		}
+	}
+	return false
 }
