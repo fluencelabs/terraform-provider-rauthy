@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -354,7 +355,7 @@ func decodeUserAttrList(body []byte, name string) (rauthy.UserAttrResponse, bool
 		return rauthy.UserAttrResponse{}, false, errors.New("response is missing the values array")
 	}
 
-	seen := make(map[string]struct{}, len(response.Values))
+	seen := make(map[string]*userAttrListEntry, len(response.Values))
 	var match rauthy.UserAttrResponse
 	for i, entry := range response.Values {
 		if entry == nil || entry.Name == nil || entry.UserEditable == nil {
@@ -366,10 +367,17 @@ func decodeUserAttrList(body []byte, name string) (rauthy.UserAttrResponse, bool
 			return rauthy.UserAttrResponse{}, false, fmt.Errorf("values[%d].typ must be Email or null", i)
 		}
 		key := *entry.Name
-		if _, duplicate := seen[key]; duplicate {
-			return rauthy.UserAttrResponse{}, false, fmt.Errorf("values[%d] repeats an attribute name", i)
+		if previous, duplicate := seen[key]; duplicate {
+			// Rauthy 0.36.2 can cache the same entry twice after an insert.
+			if !reflect.DeepEqual(previous, entry) {
+				return rauthy.UserAttrResponse{}, false, fmt.Errorf(
+					"values[%d] repeats an attribute name with different fields",
+					i,
+				)
+			}
+			continue
 		}
-		seen[key] = struct{}{}
+		seen[key] = entry
 		if key != "" && key == name {
 			match = rauthy.UserAttrResponse{
 				Name: key, Desc: entry.Desc, DefaultValue: entry.DefaultValue, Typ: entry.Typ,

@@ -187,6 +187,21 @@ func TestUserAttributeListAcceptsRustFields(t *testing.T) {
 	}
 }
 
+func TestUserAttributeListCollapsesIdenticalDuplicates(t *testing.T) {
+	body := []byte(`{"values":[
+		{"name":"dev","desc":"department","default_value":{"quota":9007199254740993},"typ":"Email","user_editable":false},
+		{"name":"other","default_value":1e400,"user_editable":true},
+		{"name":"dev","desc":"department","default_value":{"quota":9007199254740993},"typ":"Email","user_editable":false},
+		{"name":"other","default_value":1e400,"user_editable":true}
+	]}`)
+	attr, found, err := decodeUserAttrList(body, "dev")
+	if err != nil || !found || attr.Name != "dev" || attr.UserEditable ||
+		attr.Desc == nil || *attr.Desc != "department" || attr.Typ == nil || *attr.Typ != "Email" ||
+		string(attr.DefaultValue) != `{"quota":9007199254740993}` {
+		t.Fatalf("expected one dev record with all its fields: %+v, found=%v, err=%v", attr, found, err)
+	}
+}
+
 func TestUserAttributeValidListReadback(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -271,6 +286,9 @@ func TestUserAttributeMalformedList(t *testing.T) {
 		{name: "unknown field", body: `{"values":[{"name":"dev","user_editable":true,"extra":0}]}`, status: http.StatusOK},
 		{name: "duplicate names", body: `{"values":[{"name":"other","user_editable":true},{"name":"other","user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate target", body: `{"values":[{"name":"dev","user_editable":true},{"name":"dev","user_editable":false}]}`, status: http.StatusOK},
+		{name: "duplicate with different desc", body: `{"values":[{"name":"dev","desc":"a","user_editable":false},{"name":"dev","desc":"b","user_editable":false}]}`, status: http.StatusOK},
+		{name: "duplicate with different default", body: `{"values":[{"name":"dev","default_value":9007199254740992,"user_editable":false},{"name":"dev","default_value":9007199254740993,"user_editable":false}]}`, status: http.StatusOK},
+		{name: "duplicate with different typ", body: `{"values":[{"name":"dev","typ":"Email","user_editable":false},{"name":"dev","user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate empty names", body: `{"values":[{"name":"","user_editable":true},{"name":"","user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate fields", body: `{"values":[{"name":"dev","name":"other","user_editable":true}]}`, status: http.StatusOK},
 		{name: "truncated 200", detail: "unexpected EOF", body: `{"values":`, status: http.StatusOK, headers: http.Header{"Content-Length": {"100"}}},
