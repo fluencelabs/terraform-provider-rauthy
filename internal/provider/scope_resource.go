@@ -177,6 +177,10 @@ func (r *scopeResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	id := plan.ID.ValueString()
+	r.checkRename(ctx, id, plan.Name.ValueString(), &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	body := buildScopeRequest(ctx, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -212,20 +216,11 @@ func (r *scopeResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	id := state.ID.ValueString()
-	scopes, err := r.api.ListScopes(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError("Could not list Rauthy scopes to check the deletion of "+id, err.Error())
+	r.checkDeletion(ctx, id, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	if other, ok := cutName(state.Name.ValueString(), scopeNames(scopes)); ok {
-		resp.Diagnostics.AddError("Unsafe scope deletion",
-			fmt.Sprintf("Rauthy removes scope %q from clients by substring, so it would also cut %q in "+
-				"their scope lists. Delete %q first; to make Terraform do that, give the resource for %q a "+
-				"depends_on that lists the resource for %q.",
-				state.Name.ValueString(), other, other, other, state.Name.ValueString()))
-		return
-	}
-	if err = r.api.DeleteScope(ctx, id); err != nil && !rauthy.IsNotFound(err) {
+	if err := r.api.DeleteScope(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy scope "+id, err.Error())
 	}
 }
@@ -303,25 +298,52 @@ func (r *scopeResource) ModifyPlan(
 	req resource.ModifyPlanRequest,
 	resp *resource.ModifyPlanResponse,
 ) {
-	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() || r.api == nil {
+	if req.State.Raw.IsNull() || r.api == nil {
 		return
 	}
 	var state, plan scopeResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() || plan.Name.IsUnknown() || plan.Name.Equal(state.Name) {
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	old := state.Name.ValueString()
+	if req.Plan.Raw.IsNull() {
+		r.checkDeletion(ctx, state.ID.ValueString(), &resp.Diagnostics)
+		return
+	}
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() || plan.Name.IsUnknown() {
+		return
+	}
+	r.checkRename(ctx, state.ID.ValueString(), plan.Name.ValueString(), &resp.Diagnostics)
+}
+
+func (r *scopeResource) checkRename(ctx context.Context, id, planned string, diags *diag.Diagnostics) {
 	scopes, err := r.api.ListScopes(ctx)
 	if err != nil {
-		resp.Diagnostics.AddError("Could not list Rauthy scopes to check the rename of "+old, err.Error())
+		diags.AddError("Could not list Rauthy scopes to check the rename of "+id, err.Error())
 		return
 	}
-	if other, ok := containingName(old, scopeNames(scopes)); ok {
-		resp.Diagnostics.AddAttributeError(path.Root("name"), "Unsafe scope rename",
-			fmt.Sprintf("Rauthy renames scope %q by substring in every client's scope lists, so it would "+
-				"also rewrite scope %q there. Remove or rename %q first.", old, other, other))
+	for _, current := range scopes {
+		if current.ID != id || current.Name == planned {
+			continue
+		}
+		if other, ok := containingName(current.Name, scopeNames(scopes)); ok {
+			advice := fmt.Sprintf("Remove or rename %q in a separate apply first.", other)
+			if other == "openid" {
+				advice = "The built-in openid scope cannot be removed or renamed. Keep this scope's current name, or create a separate scope with the desired name and move clients to it."
+			}
+			diags.AddAttributeError(
+				path.Root("name"),
+				"Unsafe scope rename",
+				fmt.Sprintf(
+					"Rauthy renames scope %q by substring in every client's scope lists, so it would also rewrite scope %q there. %s",
+					current.Name,
+					other,
+					advice,
+				),
+			)
+		}
+		return
 	}
 }
 
@@ -331,4 +353,33 @@ func scopeNames(scopes []rauthy.ScopeResponse) []string {
 		names = append(names, s.Name)
 	}
 	return names
+}
+
+func (r *scopeResource) checkDeletion(ctx context.Context, id string, diags *diag.Diagnostics) {
+	scopes, err := r.api.ListScopes(ctx)
+	if err != nil {
+		diags.AddError("Could not list Rauthy scopes to check the deletion of "+id, err.Error())
+		return
+	}
+	name := ""
+	for _, x := range scopes {
+		if x.ID == id {
+			name = x.Name
+			break
+		}
+	}
+	if name == "" {
+		return
+	}
+	if other, ok := cutName(name, scopeNames(scopes)); ok {
+		advice := fmt.Sprintf("Delete %q in a separate apply first, then retry.", other)
+		if other == "openid" {
+			advice = "The built-in openid scope cannot be removed or renamed. Keep this scope managed without deleting it."
+		}
+		diags.AddError("Unsafe scope deletion",
+			fmt.Sprintf("Rauthy removes scope %q from clients by substring, so it would also cut %q in "+
+				"their scope lists. %s",
+				name, other, advice))
+		return
+	}
 }

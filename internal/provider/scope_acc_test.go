@@ -174,6 +174,7 @@ resource "rauthy_scope" "long" {
 			{Config: config("tf-acc-ro")},
 			{Config: config("tf-acc-read"), ExpectError: regexp.MustCompile("Unsafe scope rename")},
 			{Config: config("tf-acc-ro"), PlanOnly: true},
+			{Config: `resource "rauthy_scope" "short" { name = "tf-acc-ro" }`},
 		},
 	})
 }

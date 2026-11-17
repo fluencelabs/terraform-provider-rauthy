@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -148,13 +149,28 @@ func (r *roleResource) ModifyPlan(
 	req resource.ModifyPlanRequest,
 	resp *resource.ModifyPlanResponse,
 ) {
-	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+	if req.State.Raw.IsNull() {
 		return
 	}
 	var state, plan roleResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if req.Plan.Raw.IsNull() {
+		r.checkDeletion(ctx, state.ID.ValueString(), &resp.Diagnostics)
+		return
+	}
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() || plan.Name.IsUnknown() || plan.Name.Equal(state.Name) {
+	if resp.Diagnostics.HasError() || plan.Name.IsUnknown() {
+		return
+	}
+	current, err := r.api.GetRole(ctx, state.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Could not read Rauthy role before checking its rename", err.Error())
+		return
+	}
+	if plan.Name.ValueString() == current.Name {
 		return
 	}
 	resp.Diagnostics.AddAttributeError(path.Root("name"), "Role rename is not supported",
@@ -171,24 +187,40 @@ func (r *roleResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	}
 
 	id := state.ID.ValueString()
+	r.checkDeletion(ctx, id, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if err := r.api.DeleteRole(ctx, id); err != nil && !rauthy.IsNotFound(err) {
+		resp.Diagnostics.AddError("Could not delete Rauthy role "+id, err.Error())
+	}
+}
+
+func (r *roleResource) checkDeletion(ctx context.Context, id string, diags *diag.Diagnostics) {
 	all, err := r.api.ListRoles(ctx)
 	if err != nil {
-		resp.Diagnostics.AddError("Could not list Rauthy roles to check the deletion of "+id, err.Error())
+		diags.AddError("Could not list Rauthy roles to check the deletion of "+id, err.Error())
+		return
+	}
+	name := ""
+	for _, x := range all {
+		if x.ID == id {
+			name = x.Name
+			break
+		}
+	}
+	if name == "" {
 		return
 	}
 	names := make([]string, 0, len(all))
 	for _, x := range all {
 		names = append(names, x.Name)
 	}
-	if other, ok := cutName(state.Name.ValueString(), names); ok {
-		resp.Diagnostics.AddError("Unsafe role deletion",
+	if other, ok := cutName(name, names); ok {
+		diags.AddError("Unsafe role deletion",
 			fmt.Sprintf("Rauthy removes role %q from users by substring, so it would also cut %q in "+
-				"their assignments. Delete %q first; to make Terraform do that, give the resource for %q a "+
-				"depends_on that lists the resource for %q.",
-				state.Name.ValueString(), other, other, other, state.Name.ValueString()))
+				"their assignments. Delete %q in a separate apply first, then retry.",
+				name, other, other))
 		return
-	}
-	if err = r.api.DeleteRole(ctx, id); err != nil && !rauthy.IsNotFound(err) {
-		resp.Diagnostics.AddError("Could not delete Rauthy role "+id, err.Error())
 	}
 }
