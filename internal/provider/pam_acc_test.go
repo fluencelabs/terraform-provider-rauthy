@@ -249,6 +249,7 @@ func TestAccPamUserAndHost_lifecycle(t *testing.T) {
 // destroys: the host moves to the new gid, then the old group goes.
 func TestAccPamGroup_replaceInUse(t *testing.T) {
 	factories := acctest.Setup(t)
+	var oldGID int64
 	config := func(name string) string {
 		return fmt.Sprintf(`
 resource "rauthy_pam_group" "servers" {
@@ -264,12 +265,35 @@ resource "rauthy_pam_host" "test" {
   hostname = "tfaccreplace"
   gid      = rauthy_pam_group.servers.id
 }
+
+resource "rauthy_user" "replacement" {
+  email = "tfacc-replacement@example.com"
+  given_name = "Replacement"
+  family_name = "Tester"
+}
+resource "rauthy_pam_group" "other" {
+  name = "tfaccreplaceother"
+  typ = "generic"
+}
+resource "rauthy_pam_user" "replacement" {
+  username = "tfaccreplace"
+  email = rauthy_user.replacement.email
+  groups = [
+    { gid = rauthy_pam_group.servers.id, wheel = true },
+    { gid = rauthy_pam_group.other.id }
+  ]
+}
 `, name)
 	}
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckPamDestroyed,
 		Steps: []resource.TestStep{
-			{Config: config("tfaccsrvold")},
+			{Config: config("tfaccsrvold"), Check: func(s *terraform.State) error {
+				var err error
+				oldGID, err = strconv.ParseInt(s.RootModule().Resources["rauthy_pam_group.servers"].Primary.ID, 10, 64)
+				return err
+			}},
 			{
 				Config: config("tfaccsrvnew"),
 				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
@@ -278,11 +302,67 @@ resource "rauthy_pam_host" "test" {
 						plancheck.ResourceActionCreateBeforeDestroy,
 					),
 				}},
-				Check: resource.TestCheckResourceAttrPair(
-					"rauthy_pam_host.test", "gid", "rauthy_pam_group.servers", "id"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair("rauthy_pam_host.test", "gid", "rauthy_pam_group.servers", "id"),
+					func(s *terraform.State) error {
+						return testAccCheckPamGroupReplacement(s, oldGID)
+					},
+				),
 			},
 		},
 	})
+}
+
+func testAccCheckPamGroupReplacement(s *terraform.State, oldGID int64) error {
+	c, err := accClient()
+	if err != nil {
+		return err
+	}
+	gid, err := strconv.ParseInt(s.RootModule().Resources["rauthy_pam_group.servers"].Primary.ID, 10, 64)
+	if err != nil {
+		return err
+	}
+	if gid == oldGID {
+		return fmt.Errorf("replacement kept old gid %d", gid)
+	}
+	if _, err = c.GetPamGroup(context.Background(), oldGID); !rauthy.IsNotFound(err) {
+		return fmt.Errorf("old gid %d still exists or lookup failed: %w", oldGID, err)
+	}
+	return testAccCheckPamReplacementMemberships(s, c, gid, oldGID)
+}
+
+func testAccCheckPamReplacementMemberships(s *terraform.State, c *rauthy.Client, gid, oldGID int64) error {
+	uid, err := strconv.ParseInt(s.RootModule().Resources["rauthy_pam_user.replacement"].Primary.ID, 10, 64)
+	if err != nil {
+		return err
+	}
+	user, err := c.GetPamUser(context.Background(), uid)
+	if err != nil {
+		return err
+	}
+	otherGID, err := strconv.ParseInt(s.RootModule().Resources["rauthy_pam_group.other"].Primary.ID, 10, 64)
+	if err != nil {
+		return err
+	}
+	if len(user.Groups) != 2 {
+		return fmt.Errorf("expected two memberships, got %v", user.Groups)
+	}
+	foundNew, foundOther := false, false
+	for _, group := range user.Groups {
+		if group.GID == gid && group.Wheel {
+			foundNew = true
+		}
+		if group.GID == otherGID && !group.Wheel {
+			foundOther = true
+		}
+		if group.GID == oldGID {
+			return fmt.Errorf("old membership remains: %v", user.Groups)
+		}
+	}
+	if !foundNew || !foundOther {
+		return fmt.Errorf("replacement lost memberships or wheel flags: %v", user.Groups)
+	}
+	return nil
 }
 
 // Without create_before_destroy the replacement of a host group in use fails
