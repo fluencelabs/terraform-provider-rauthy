@@ -59,7 +59,7 @@ func (r *groupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Required: true,
 				MarkdownDescription: "Name of the group, for example `developers`. Changing it is refused: Rauthy's rename drops the group from its users on PostgreSQL and " +
 					"rewrites other group names in user assignments on Hiqlite. Create the new group, move the users, " +
-					"then remove the old one. Deleting is refused while another group name starts with this one.",
+					"then remove the old one. Deleting is refused while another group name starts or ends with this one.",
 				Validators: []validator.String{validators.GroupName()},
 			},
 		},
@@ -180,11 +180,12 @@ func (r *groupResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	for _, x := range all {
 		names = append(names, x.Name)
 	}
-	if other, ok := prefixedName(state.Name.ValueString(), names); ok {
+	if other, ok := cutName(state.Name.ValueString(), names); ok {
 		resp.Diagnostics.AddError("Unsafe group deletion",
-			fmt.Sprintf("Rauthy removes group %q from users by substring, so it would also cut the start of %q in "+
-				"their assignments. Delete %q first; to make Terraform do so, add depends_on on this resource to %q.",
-				state.Name.ValueString(), other, other, other))
+			fmt.Sprintf("Rauthy removes group %q from users by substring, so it would also cut %q in "+
+				"their assignments. Delete %q first; to make Terraform do that, give the resource for %q a "+
+				"depends_on that lists the resource for %q.",
+				state.Name.ValueString(), other, other, other, state.Name.ValueString()))
 		return
 	}
 	if err = r.api.DeleteGroup(ctx, id); err != nil && !rauthy.IsNotFound(err) {

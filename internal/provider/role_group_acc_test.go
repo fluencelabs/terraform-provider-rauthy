@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -198,31 +199,29 @@ resource "rauthy_role" "dev" {
 	})
 }
 
-// Deleting a group "ops" while "opsteam" exists is refused; a name that only
-// ends with it, like "devops", does not block the deletion.
-func TestAccGroup_deletePrefixedNameRefused(t *testing.T) {
+// Deleting a group is refused while another group name starts with it
+// ("opsteam") or ends with it ("devops"): Rauthy would cut either out of user
+// assignments. Once those are gone, it can be deleted.
+func TestAccGroup_deleteCutNameRefused(t *testing.T) {
 	factories := acctest.Setup(t)
-	long := `
-resource "rauthy_group" "opsteam" { name = "tf-acc-opsteam" }
-resource "rauthy_group" "devops" {
-  name       = "tf-acc-x-tf-acc-ops"
-  depends_on = [rauthy_group.opsteam]
+	for _, other := range []string{"tf-acc-opsteam", "tf-acc-x-tf-acc-ops"} {
+		short := `resource "rauthy_group" "ops" { name = "tf-acc-ops" }
+`
+		long := `resource "rauthy_group" "other" {
+  name       = "` + other + `"
+  depends_on = [rauthy_group.ops]
 }
 `
-	short := `
-resource "rauthy_group" "ops" {
-  name       = "tf-acc-ops"
-  depends_on = [rauthy_group.devops]
-}
-`
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: factories,
-		Steps: []resource.TestStep{
-			{Config: long + short},
-			{Config: long, ExpectError: regexp.MustCompile("Unsafe group deletion")},
-			{Config: `resource "rauthy_group" "ops" { name = "tf-acc-ops" }
-resource "rauthy_group" "devops" { name = "tf-acc-x-tf-acc-ops" }`},
-			{Config: `resource "rauthy_group" "devops" { name = "tf-acc-x-tf-acc-ops" }`},
-		},
-	})
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: factories,
+			Steps: []resource.TestStep{
+				{Config: short + long},
+				{
+					Config:      strings.Replace(long, "depends_on = [rauthy_group.ops]", "", 1),
+					ExpectError: regexp.MustCompile("Unsafe group deletion"),
+				},
+				{Config: short},
+			},
+		})
+	}
 }

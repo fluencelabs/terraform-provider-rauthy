@@ -27,7 +27,7 @@ resource "rauthy_group" "developers" {
 
 ### Required
 
-- `name` (String) Name of the group, for example `developers`. Changing it is refused: Rauthy's rename drops the group from its users on PostgreSQL and rewrites other group names in user assignments on Hiqlite. Create the new group, move the users, then remove the old one. Deleting is refused while another group name starts with this one.
+- `name` (String) Name of the group, for example `developers`. Changing it is refused: Rauthy's rename drops the group from its users on PostgreSQL and rewrites other group names in user assignments on Hiqlite. Create the new group, move the users, then remove the old one. Deleting is refused while another group name starts or ends with this one.
 
 ### Read-Only
 
