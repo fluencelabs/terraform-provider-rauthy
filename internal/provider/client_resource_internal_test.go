@@ -233,6 +233,18 @@ func TestFillUnknownFromResponse_AdoptsServerDefaults(t *testing.T) {
 	if len(req.FlowsEnabled) == 0 || len(req.Scopes) == 0 || len(req.DefaultScopes) == 0 {
 		t.Errorf("required lists unresolved: %+v", req)
 	}
+	for name, pair := range map[string][2][]string{
+		"flows_enabled":  {req.FlowsEnabled, fullResponse().FlowsEnabled},
+		"scopes":         {req.Scopes, fullResponse().Scopes},
+		"default_scopes": {req.DefaultScopes, fullResponse().DefaultScopes},
+		"challenges":     {req.Challenges, fullResponse().Challenges},
+	} {
+		slices.Sort(pair[0])
+		slices.Sort(pair[1])
+		if !slices.Equal(pair[0], pair[1]) {
+			t.Errorf("%s = %v, want all server defaults %v", name, pair[0], pair[1])
+		}
+	}
 	if !req.Enabled {
 		t.Error("enabled unresolved; a PUT without it is a 400")
 	}
@@ -272,6 +284,9 @@ func TestFillUnknownFromResponse_KeepsConfiguredValues(t *testing.T) {
 	}
 	if m.IDTokenAlg.ValueString() != "RS256" {
 		t.Errorf("id_token_alg = %v, want the server default RS256", m.IDTokenAlg)
+	}
+	if !m.Scopes.Equal(setOf(t, "openid", "email")) {
+		t.Errorf("scopes = %v, want the configured openid and email", m.Scopes)
 	}
 }
 
