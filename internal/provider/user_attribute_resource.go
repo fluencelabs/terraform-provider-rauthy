@@ -187,6 +187,9 @@ func (r *userAttributeResource) Create(
 	req resource.CreateRequest,
 	resp *resource.CreateResponse,
 ) {
+	substringMutationMu.Lock()
+	defer substringMutationMu.Unlock()
+
 	var plan userAttributeResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -231,6 +234,9 @@ func (r *userAttributeResource) Update(
 	req resource.UpdateRequest,
 	resp *resource.UpdateResponse,
 ) {
+	substringMutationMu.Lock()
+	defer substringMutationMu.Unlock()
+
 	var plan userAttributeResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -287,19 +293,19 @@ func (r *userAttributeResource) ModifyPlan(
 	r.checkDeletion(ctx, state.ID.ValueString(), &resp.Diagnostics)
 }
 
-func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) {
+func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) bool {
 	current, err := r.api.GetUserAttr(ctx, key)
 	if rauthy.IsNotFound(err) {
-		return
+		return false
 	}
 	if err != nil {
 		diags.AddError("Could not read Rauthy user attribute before checking its deletion", err.Error())
-		return
+		return false
 	}
 	scopes, err := r.api.ListScopes(ctx)
 	if err != nil {
 		diags.AddError("Could not list Rauthy scopes before checking user attribute deletion", err.Error())
-		return
+		return false
 	}
 	// Unlike role/group deletion, attribute deletion removes every occurrence,
 	// including an interior substring, from both scope mapping lists.
@@ -315,10 +321,11 @@ func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, d
 						scope.Name,
 					),
 				)
-				return
+				return false
 			}
 		}
 	}
+	return true
 }
 
 func (r *userAttributeResource) Delete(
@@ -326,6 +333,9 @@ func (r *userAttributeResource) Delete(
 	req resource.DeleteRequest,
 	resp *resource.DeleteResponse,
 ) {
+	substringMutationMu.Lock()
+	defer substringMutationMu.Unlock()
+
 	var state userAttributeResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -333,8 +343,10 @@ func (r *userAttributeResource) Delete(
 	}
 
 	name := state.ID.ValueString()
-	r.checkDeletion(ctx, name, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	if !r.checkDeletion(ctx, name, &resp.Diagnostics) {
+		if !resp.Diagnostics.HasError() {
+			resp.State.RemoveResource(ctx)
+		}
 		return
 	}
 	if err := r.api.DeleteUserAttr(ctx, name); err != nil && !rauthy.IsNotFound(err) {

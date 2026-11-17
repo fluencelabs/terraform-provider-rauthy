@@ -96,6 +96,9 @@ func (r *groupResource) ImportState(
 }
 
 func (r *groupResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	substringMutationMu.Lock()
+	defer substringMutationMu.Unlock()
+
 	var plan groupResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -182,6 +185,9 @@ func (r *groupResource) ModifyPlan(
 }
 
 func (r *groupResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	substringMutationMu.Lock()
+	defer substringMutationMu.Unlock()
+
 	var state groupResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {

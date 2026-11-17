@@ -66,13 +66,16 @@ func testUserAttributeDeletionGuard(t *testing.T, tc attributeGuardCase, mapping
 		t.Fatal("user attribute must guard deletion during planning")
 	}
 	checkAttributeGuardPlans(t, modifier, model, tc.wantError)
-	var resp resource.DeleteResponse
+	resp := resource.DeleteResponse{State: state}
 	r.Delete(context.Background(), resource.DeleteRequest{State: state}, &resp)
 	if resp.Diagnostics.HasError() != tc.wantError {
 		t.Fatalf("delete: %v", resp.Diagnostics)
 	}
-	if (len(f.bodies("DELETE /users/attr/dev")) == 0) != tc.wantError {
+	if (len(f.bodies("DELETE /users/attr/dev")) == 0) != (tc.wantError || tc.missing) {
 		t.Fatal("unexpected DELETE count")
+	}
+	if tc.missing && !resp.State.Raw.IsNull() {
+		t.Fatal("absent attribute must be removed from state")
 	}
 }
 

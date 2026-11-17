@@ -92,6 +92,9 @@ func (r *clientResource) ImportState(
 }
 
 func (r *clientResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	substringMutationMu.Lock()
+	defer substringMutationMu.Unlock()
+
 	var plan clientResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -202,6 +205,9 @@ func (r *clientResource) Read(ctx context.Context, req resource.ReadRequest, res
 }
 
 func (r *clientResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	substringMutationMu.Lock()
+	defer substringMutationMu.Unlock()
+
 	var plan, state clientResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)

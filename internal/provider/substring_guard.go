@@ -1,6 +1,15 @@
 package provider
 
-import "strings"
+import (
+	"strings"
+	"sync"
+)
+
+// substringMutationMu keeps substring checks and their destructive writes atomic
+// relative to provider writes that can introduce names into the affected lists.
+// It spans all configured clients in this process. External Rauthy writers are
+// outside this lock.
+var substringMutationMu sync.Mutex //nolint:gochecknoglobals // All resource instances must share this mutation lock.
 
 // Rauthy edits the comma-joined scope lists of clients and role and group
 // assignments of users, and user attribute names in scope mappings by substring. A rename replaces every occurrence of the
