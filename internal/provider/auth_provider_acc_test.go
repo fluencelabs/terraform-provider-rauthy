@@ -107,8 +107,7 @@ func testAccCheckAuthProviderSecretInRauthy(resourceName, want string) resource.
 			stored = got.ClientSecret.Reveal()
 		}
 		if stored != want {
-			return fmt.Errorf("Rauthy holds client_secret %q for %s, want %q",
-				stored, rs.Primary.ID, want)
+			return fmt.Errorf("Rauthy holds a different client_secret for %s", rs.Primary.ID)
 		}
 		return nil
 	}
