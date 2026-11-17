@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -134,6 +136,15 @@ func TestPamUserUpdateBody_ExplicitEmptySetClearsMemberships(t *testing.T) {
 	}
 	if len(body.Groups) != 0 {
 		t.Errorf("groups = %+v, want empty", body.Groups)
+	}
+	// An empty list, not null: the PUT replaces the memberships, and Rauthy
+	// must be told to clear them.
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"groups":[]`) {
+		t.Errorf("body = %s, want \"groups\":[]", raw)
 	}
 }
 
