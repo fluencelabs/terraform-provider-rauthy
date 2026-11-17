@@ -3,7 +3,7 @@ page_title: "rauthy_pam_group Resource - rauthy"
 description: |-
     Manages a POSIX group in Rauthy's PAM subsystem, the part of Rauthy that acts as an authentication source for hosts and SSH logins.
   A PAM group is a real group in the host's namespace: its id is the numeric gid handed to rauthy_pam_host.gid and to a rauthy_pam_user membership.
-  Rauthy offers no update endpoint for a PAM group, so changing either the name or the type destroys and recreates the group — which means a new gid. Anything referring to the old gid has to be updated in the same apply, which Terraform does on its own as long as the reference goes through rauthy_pam_group.<name>.id rather than a hardcoded number.
+  Rauthy offers no update endpoint for a PAM group, so changing either the name or the type replaces the group, which means a new gid. Rauthy refuses to delete a group a host still points at, and Terraform deletes before it creates, so a host group in use needs lifecycle { create_before_destroy = true }: Terraform then creates the new group, moves the hosts that refer to rauthy_pam_group.<name>.id, and deletes the old one. Group names are unique, so with create_before_destroy a change of typ alone fails on the name: change the name in the same apply. User memberships do not block a deletion: Rauthy removes them with the group, and Terraform adds the new gid back to users that refer to it.
   Requires these API key rights: Pam read, create, delete.
 ---
 
@@ -13,7 +13,7 @@ Manages a POSIX group in Rauthy's PAM subsystem, the part of Rauthy that acts as
 
 A PAM group is a real group in the host's namespace: its `id` is the numeric gid handed to `rauthy_pam_host.gid` and to a `rauthy_pam_user` membership.
 
-Rauthy offers no update endpoint for a PAM group, so changing either the name or the type destroys and recreates the group — which means a new gid. Anything referring to the old gid has to be updated in the same apply, which Terraform does on its own as long as the reference goes through `rauthy_pam_group.<name>.id` rather than a hardcoded number.
+Rauthy offers no update endpoint for a PAM group, so changing either the name or the type replaces the group, which means a new gid. Rauthy refuses to delete a group a host still points at, and Terraform deletes before it creates, so a host group in use needs `lifecycle { create_before_destroy = true }`: Terraform then creates the new group, moves the hosts that refer to `rauthy_pam_group.<name>.id`, and deletes the old one. Group names are unique, so with create_before_destroy a change of `typ` alone fails on the name: change the name in the same apply. User memberships do not block a deletion: Rauthy removes them with the group, and Terraform adds the new gid back to users that refer to it.
 
 Requires these API key rights: `Pam` read, create, delete.
 
