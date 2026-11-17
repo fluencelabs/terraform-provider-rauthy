@@ -70,21 +70,47 @@ existing setup can run into:
 
 ## Known limits
 
-* PAM user `shell` and `home_dir` lengths are checked only by Rauthy (24 and 128 characters,
-  respectively). An invalid value can fail at apply after the account has been created.
-* Creating a PAM user whose username matches an existing PAM group can return 404. The diagnostic
-  describes an email problem, but choosing another username or resolving the group collision may
-  be necessary.
-* JSON number validation is conservative and rejects some fractions that Rauthy could safely
-  store. See `rauthy_user_attribute.default_value` for the accepted ranges.
-* The substring safety checks for scope, role and group changes are separate from the write.
-  A concurrent Rauthy client can introduce a conflicting name between the check and deletion
-  or rename. Rauthy provides no conditional deletion to close this race.
-* A conflicting name created in the same apply may be absent during planning. If it exists when
-  the safety check runs, the operation is refused at apply.
-* Refresh removes a user attribute from state if Rauthy omits it from the list, for example after an external rename. An in-flight DELETE may finish after the provider releases its lock if the request is canceled or the proxy connection drops.
-* If an attribute's new name is computed during apply, the replacement is rejected at apply when deleting the old name would corrupt an existing scope mapping. Terraform may already have written dependencies by then. Use a name known at plan time or apply the dependency separately before planning the replacement.
-* A saved destroy plan fails if the user attribute has already been deleted outside Terraform. Refresh state and create a new plan.
+* **Conflicts discovered at apply.** A scope, role, group, or user attribute created in the same
+  apply can introduce a substring conflict after planning. A new name that is unknown at plan
+  time can defer a scope rename or user attribute replacement error to apply. The provider
+  refuses the unsafe change before writing it, but other resources may already have changed.
+  Use a name known at plan time or apply the dependency separately and replan.
+  [Scope, role, and group guard test](https://github.com/fluencelabs/terraform-provider-rauthy/blob/1deb3ec515461515c745aa23306132ddef66311c/internal/provider/substring_guard_acc_test.go#L15)
+  and [attribute guard tests](https://github.com/fluencelabs/terraform-provider-rauthy/blob/1deb3ec515461515c745aa23306132ddef66311c/internal/provider/user_attribute_guard_internal_test.go#L135).
+* **Concurrent writes.** Rauthy provides no conditional write for substring checks. An
+  external client or a separate provider instance can add a conflicting name between the
+  check and the write, which can corrupt assignments or mappings. Manage scopes, roles,
+  groups, and user attributes on each Rauthy instance through one provider configuration
+  and avoid concurrent writes through other aliases or clients.
+  [Provider locking tests](https://github.com/fluencelabs/terraform-provider-rauthy/blob/1deb3ec515461515c745aa23306132ddef66311c/internal/provider/substring_atomic_internal_test.go#L100).
+* **External attribute changes.** If you rename a user attribute outside Terraform, refresh
+  drops the old name from state. Update the configuration and import the attribute under its new
+  name. An existing saved destroy plan fails if the attribute was removed or renamed before
+  apply. Refresh state and create a new plan.
+  [External rename and stale destroy test](https://github.com/fluencelabs/terraform-provider-rauthy/blob/1deb3ec515461515c745aa23306132ddef66311c/internal/provider/user_attribute_missing_acc_internal_test.go#L14).
+* **Imported public clients.** Import leaves a public client's PKCE configuration as it
+  was in Rauthy. If it lacks S256, the client cannot use S256 PKCE until the next apply.
+  Run `terraform apply` immediately after import to enable S256.
+  [Public client import test](https://github.com/fluencelabs/terraform-provider-rauthy/blob/1deb3ec515461515c745aa23306132ddef66311c/internal/provider/client_resource_acc_test.go#L356).
+* **SCIM sync errors.** When Rauthy returns HTTP 500 with error code `Scim` after saving a
+  client configuration, the provider reports the error and reads the saved client back into
+  state if the read succeeds. Rauthy retries recorded sync failures. Check the SCIM sync in
+  Rauthy and verify the endpoint and bearer token.
+  [Client state recovery test](https://github.com/fluencelabs/terraform-provider-rauthy/blob/1deb3ec515461515c745aa23306132ddef66311c/internal/provider/client_scim_error_internal_test.go#L35).
+* **PAM user field lengths.** Rauthy checks `shell` and `home_dir` at apply. A value over
+  the limit can fail after the account has been created. Keep `shell` to 24 characters
+  and `home_dir` to 128 characters at most, then apply with the corrected values.
+* **PAM user and group name collisions.** Creating a PAM user with the name of an
+  existing PAM group can fail with a 404 whose diagnostic points to the email. Check
+  for a group with that name, then choose a different username or resolve the group collision.
+* **JSON numbers.** The provider rejects numbers outside its supported ranges at plan time
+  to prevent rounding in Rauthy. This includes some fractions that Rauthy can store safely.
+  If you need one of those values, encode it as a string if its consumers support string values.
+  See `rauthy_user_attribute.default_value` for the accepted ranges.
+  [JSON number validation test](https://github.com/fluencelabs/terraform-provider-rauthy/blob/1deb3ec515461515c745aa23306132ddef66311c/internal/provider/json_numbers_internal_test.go#L13).
+* **Interrupted deletes.** If a DELETE request is canceled or the proxy connection drops,
+  Rauthy may finish the request after the provider releases its lock. Once you have confirmed
+  the outcome in Rauthy, refresh state and create a new plan before making related changes.
 
 ## Example usage
 
