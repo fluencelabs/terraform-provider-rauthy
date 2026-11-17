@@ -102,7 +102,7 @@ output "audit_api_key" {
 
 ### Required
 
-- `access` (Attributes Set) The key's rights, one entry per access group. A group not listed here grants nothing, and an empty set is a key that can do nothing at all — which Rauthy accepts.
+- `access` (Attributes Set) The key's rights, one entry per access group. Combine all rights for a group in one entry. A group not listed here grants nothing, and an empty set is a key that can do nothing at all — which Rauthy accepts.
 
 This is a set rather than a list: Rauthy stores the entries in the order they were sent and makes no promise to keep it, so ordering must not be part of the comparison. (see [below for nested schema](#nestedatt--access))
 - `name` (String) Name of the API key, which is also its identity: the first half of the `<name>$<secret>` credential and the path segment every `/api_keys` call uses. Must match `^[a-zA-Z0-9_-/]{2,24}$`.

@@ -308,16 +308,19 @@ func (r *clientResource) ModifyPlan(
 		return
 	}
 
-	var plan, state clientResourceModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	var plannedTrigger, stateTrigger types.String
+	var plannedConfidential, stateConfidential types.Bool
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("secret_rotation_trigger"), &plannedTrigger)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("secret_rotation_trigger"), &stateTrigger)...)
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("confidential"), &plannedConfidential)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("confidential"), &stateConfidential)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	// A rotation replaces the secret; flipping confidentiality either drops it
 	// or brings a fresh one into being.
-	if rotationRequested(&state, &plan) || !plan.Confidential.Equal(state.Confidential) {
+	if !plannedTrigger.Equal(stateTrigger) || !plannedConfidential.Equal(stateConfidential) {
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("secret"), types.StringUnknown())...)
 	}
 }

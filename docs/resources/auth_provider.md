@@ -57,7 +57,7 @@ resource "rauthy_auth_provider" "corp" {
   client_secret_rotation_trigger = var.corp_client_secret_version
 
   # Everyone in the upstream's rauthy-admins group administers Rauthy too.
-  admin_claim_path  = "$.groups"
+  admin_claim_path  = "$.groups.*"
   admin_claim_value = "rauthy-admins"
 
   # Create the local account on first login, and attach it to an existing one
@@ -107,7 +107,7 @@ Rauthy models this as one string but writes and reads it in two different forms 
 
 > **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
 
-- `admin_claim_path` (String) JSON path into the upstream's claims that decides whether a user is a Rauthy admin, for example `$.roles`. Paired with `admin_claim_value`.
+- `admin_claim_path` (String) JSON path into the upstream's claims that decides whether a user is a Rauthy admin, for example `$.roles.*`. Paired with `admin_claim_value`.
 - `admin_claim_value` (String) Value `admin_claim_path` must yield for the user to be an admin.
 - `auto_link` (Boolean) Link an upstream identity to an existing local account with the same email address without asking. This trusts the upstream's email verification; leave it off for a provider that does not verify addresses.
 - `auto_onboarding` (Boolean) Create a local account automatically the first time someone logs in through this provider, instead of requiring one to exist already.
@@ -129,7 +129,7 @@ Because nothing is stored, changing the value on its own produces no plan. Chang
 Removing it from the configuration removes it from the provider: `PUT /providers/{id}` is a full replacement, so the update that follows carries no secret and Rauthy stores none.
 - `enabled` (Boolean) Whether the provider is offered as a login option.
 - `jwks_endpoint` (String) The upstream's JWKS endpoint. Without one Rauthy cannot verify the upstream's token signatures itself and falls back to the userinfo endpoint.
-- `mfa_claim_path` (String) JSON path into the upstream's claims that says the user authenticated with MFA, for example `$.amr`. Paired with `mfa_claim_value`.
+- `mfa_claim_path` (String) JSON path into the upstream's claims that says the user authenticated with MFA, for example `$.amr.*`. Paired with `mfa_claim_value`.
 - `mfa_claim_value` (String) Value `mfa_claim_path` must yield for the login to count as MFA.
 - `use_pkce` (Boolean) Use PKCE with the upstream. Leave it on unless the upstream rejects it.
 

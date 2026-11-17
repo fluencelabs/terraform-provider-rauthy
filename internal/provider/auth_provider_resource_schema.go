@@ -4,6 +4,8 @@ import (
 	"context"
 	"maps"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -207,30 +209,42 @@ func authProviderCredentialAttributes() map[string]schema.Attribute {
 }
 
 // authProviderClaimAttributes covers the two upstream claims Rauthy can act on.
-// Each is a path/value pair and only takes effect when both halves are set.
+// Each mapping requires both its path and its value.
 func authProviderClaimAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"admin_claim_path": schema.StringAttribute{
 			Optional: true,
 			MarkdownDescription: "JSON path into the upstream's claims that decides whether a user " +
-				"is a Rauthy admin, for example `$.roles`. Paired with `admin_claim_value`.",
-			Validators: []validator.String{validators.AuthProviderURI()},
+				"is a Rauthy admin, for example `$.roles.*`. Paired with `admin_claim_value`.",
+			Validators: []validator.String{
+				validators.AuthProviderURI(),
+				stringvalidator.AlsoRequires(path.MatchRoot("admin_claim_value")),
+			},
 		},
 		"admin_claim_value": schema.StringAttribute{
 			Optional:            true,
 			MarkdownDescription: "Value `admin_claim_path` must yield for the user to be an admin.",
-			Validators:          []validator.String{validators.AuthProviderURI()},
+			Validators: []validator.String{
+				validators.AuthProviderURI(),
+				stringvalidator.AlsoRequires(path.MatchRoot("admin_claim_path")),
+			},
 		},
 		"mfa_claim_path": schema.StringAttribute{
 			Optional: true,
 			MarkdownDescription: "JSON path into the upstream's claims that says the user " +
-				"authenticated with MFA, for example `$.amr`. Paired with `mfa_claim_value`.",
-			Validators: []validator.String{validators.AuthProviderURI()},
+				"authenticated with MFA, for example `$.amr.*`. Paired with `mfa_claim_value`.",
+			Validators: []validator.String{
+				validators.AuthProviderURI(),
+				stringvalidator.AlsoRequires(path.MatchRoot("mfa_claim_value")),
+			},
 		},
 		"mfa_claim_value": schema.StringAttribute{
 			Optional:            true,
 			MarkdownDescription: "Value `mfa_claim_path` must yield for the login to count as MFA.",
-			Validators:          []validator.String{validators.AuthProviderURI()},
+			Validators: []validator.String{
+				validators.AuthProviderURI(),
+				stringvalidator.AlsoRequires(path.MatchRoot("mfa_claim_path")),
+			},
 		},
 	}
 }
