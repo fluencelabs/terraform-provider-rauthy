@@ -22,19 +22,31 @@ func newRauthyClient(url, apiKey string, opts ...rauthy.Option) (*rauthy.Client,
 	return rauthy.New(url, apiKey, append([]rauthy.Option{rauthy.WithHTTPClient(httpClient)}, opts...)...)
 }
 
-type userAttrListBodyKey struct{}
+type userAttrListResponseKey struct{}
+
+type userAttrListResponseCapture struct {
+	body   bytes.Buffer
+	status int
+}
 
 type userAttrListTransport struct{}
 
 func (userAttrListTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := http.DefaultTransport.RoundTrip(req)
-	if body, ok := req.Context().Value(userAttrListBodyKey{}).(*bytes.Buffer); ok && err == nil {
-		// Keep the SDK's last attempt and let it read and close the body as usual.
-		body.Reset()
-		resp.Body = struct {
-			io.Reader
-			io.Closer
-		}{io.TeeReader(resp.Body, body), resp.Body}
+	capture, ok := req.Context().Value(userAttrListResponseKey{}).(*userAttrListResponseCapture)
+	if !ok {
+		return resp, err
 	}
-	return resp, err
+	// Keep the SDK's last attempt and let it read and close the body as usual.
+	capture.body.Reset()
+	capture.status = 0
+	if err != nil {
+		return resp, err
+	}
+	capture.status = resp.StatusCode
+	resp.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.TeeReader(resp.Body, &capture.body), resp.Body}
+	return resp, nil
 }

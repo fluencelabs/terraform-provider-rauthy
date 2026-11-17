@@ -70,13 +70,19 @@ existing setup can run into:
 
 ## Known limits
 
+* **Proxies and gateways.** Any proxy or gateway between the provider and Rauthy must pass through response bodies and HTTP status codes unchanged. The provider only supports responses that Rauthy itself returns.
 * **Conflicts discovered at apply.** A scope, role, group, or user attribute created in the same
   apply can introduce a substring conflict after planning. A new name that is unknown at plan
-  time can defer a scope rename or user attribute replacement error to apply. The provider
+  time can defer a scope rename error to apply. The provider
   refuses the unsafe change before writing it, but other resources may already have changed.
   Use a name known at plan time or apply the dependency separately and replan.
   [Scope, role, and group guard test](https://github.com/fluencelabs/terraform-provider-rauthy/blob/1deb3ec515461515c745aa23306132ddef66311c/internal/provider/substring_guard_acc_test.go#L15)
   and [attribute guard tests](https://github.com/fluencelabs/terraform-provider-rauthy/blob/1deb3ec515461515c745aa23306132ddef66311c/internal/provider/user_attribute_guard_internal_test.go#L135).
+* **User attribute names unknown at plan time.** When the name of an existing attribute is
+  unknown at plan time and resolves to a different name during apply, the apply fails even
+  if no scope uses the attribute. Terraform could not plan the replacement. The attribute
+  keeps its old name, and its dependencies may already have changed. Use a name known at
+  plan time or apply the dependency separately and replan.
 * **Concurrent writes.** Rauthy provides no conditional write for substring checks. An
   external client or a separate provider instance can add a conflicting name between the
   check and the write, which can corrupt assignments or mappings. Manage scopes, roles,
