@@ -232,6 +232,12 @@ func TestLifetimeBounds(t *testing.T) {
 		{"auth_code_lifetime", validators.AuthCodeLifetime(), 10, 300},
 		{"access_token_lifetime", validators.AccessTokenLifetime(), 10, 86400},
 		{"cache_current_hours", validators.CacheCurrentHours(), 1, 24},
+		// PasswordPolicyRequest in src/api_types/src/generic.rs, the same in
+		// 0.36.2 and 0.37.2.
+		{"password length", validators.PasswordLength(), 8, 128},
+		{"password include_* count", validators.PasswordCharClassCount(), 1, 32},
+		{"password valid_days", validators.PasswordValidDays(), 1, 3650},
+		{"password not_recently_used", validators.PasswordNotRecentlyUsed(), 1, 10},
 	}
 	for _, tc := range cases {
 		for _, in := range []int64{tc.min, tc.max} {

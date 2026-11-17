@@ -148,6 +148,37 @@ func TestPamUserUpdateBody_ExplicitEmptySetClearsMemberships(t *testing.T) {
 	}
 }
 
+// With groups left to the server and no current memberships, the body still
+// carries "groups":[]: Rauthy's field is a Vec, not an Option, so null is
+// refused.
+func TestPamUserUpdateBody_UnsetPlanWithNoMembershipsSendsEmptyList(t *testing.T) {
+	t.Parallel()
+
+	setType := types.ObjectType{AttrTypes: pamUserGroupAttrTypes}
+	for name, groups := range map[string]types.Set{
+		"null":    types.SetNull(setType),
+		"unknown": types.SetUnknown(setType),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			current := &rauthy.PamUserDetailsResponse{ID: 100000, Shell: "/bin/bash", HomeDir: "/home/alice"}
+			plan := &pamUserResourceModel{Shell: types.StringNull(), HomeDir: types.StringNull(), Groups: groups}
+
+			body, diags := pamUserUpdateBody(context.Background(), plan, current)
+			if diags.HasError() {
+				t.Fatalf("diags: %v", diags)
+			}
+			raw, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if !strings.Contains(string(raw), `"groups":[]`) {
+				t.Errorf("body = %s, want \"groups\":[]", raw)
+			}
+		})
+	}
+}
+
 // pamUserNeedsUpdate decides whether the create needs a follow-up PUT at all.
 // Unknown must count as "not set": on the first apply every computed attribute
 // is unknown, and treating that as a request would rewrite the account with
