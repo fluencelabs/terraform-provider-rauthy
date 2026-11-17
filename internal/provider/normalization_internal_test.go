@@ -114,3 +114,24 @@ func TestNormalization_IPv6(t *testing.T) {
 		t.Fatal("real IP drift hidden")
 	}
 }
+
+// Rauthy lowercases emails with Rust's to_lowercase; the expectations are
+// Rust's output.
+func TestRustLowercase(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]string{
+		"Cold@Example.COM": "cold@example.com",
+		"cold@İ.example":   "cold@i̇.example",
+		"ΟΔΟΣ@example.com": "οδος@example.com",
+		"ΣΑ@example.com":   "σα@example.com",
+		"Σ@example.com":    "σ@example.com",
+	} {
+		if got := rustLowercase(in); got != want {
+			t.Errorf("rustLowercase(%q) = %q, want %q", in, got, want)
+		}
+	}
+	known := types.StringValue("cold@İ.example")
+	if got := emailValue(known, "cold@i̇.example"); !got.Equal(known) {
+		t.Errorf("emailValue dropped the configured value: %v", got)
+	}
+}

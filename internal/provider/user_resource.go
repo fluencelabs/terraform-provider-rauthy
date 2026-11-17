@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -312,8 +313,53 @@ func setToStringsNonNil(ctx context.Context, set types.Set, diags *diag.Diagnost
 // the configuration gave survives a read; any other difference is drift. Every
 // email attribute goes through it: users, PAM users and the user lookup.
 func emailValue(known types.String, stored string) types.String {
-	if !known.IsNull() && !known.IsUnknown() && strings.ToLower(known.ValueString()) == stored {
+	if !known.IsNull() && !known.IsUnknown() && rustLowercase(known.ValueString()) == stored {
 		return known
 	}
 	return types.StringValue(stored)
+}
+
+// rustLowercase is Rust's str::to_lowercase, which Rauthy applies to emails.
+// It differs from strings.ToLower in two places: U+0130 lowercases to "i"
+// with a combining dot above, and a capital sigma at the end of a word becomes
+// a final sigma.
+func rustLowercase(s string) string {
+	runes := []rune(s)
+	var b strings.Builder
+	for i, r := range runes {
+		switch {
+		case r == '\u0130':
+			b.WriteString("i\u0307")
+		case r == 'Σ' && finalSigma(runes, i):
+			b.WriteRune('ς')
+		default:
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
+}
+
+// finalSigma reports whether the sigma at i ends a word: a cased letter comes
+// before it and none follows, skipping case-ignorable runes both ways.
+func finalSigma(runes []rune, i int) bool {
+	cased := func(r rune) bool { return unicode.IsUpper(r) || unicode.IsLower(r) || unicode.IsTitle(r) }
+	ignorable := func(r rune) bool {
+		return unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf, unicode.Lm, unicode.Sk) ||
+			r == '\'' || r == '.' || r == ':'
+	}
+	before := false
+	for j := i - 1; j >= 0; j-- {
+		if ignorable(runes[j]) {
+			continue
+		}
+		before = cased(runes[j])
+		break
+	}
+	for j := i + 1; j < len(runes); j++ {
+		if ignorable(runes[j]) {
+			continue
+		}
+		return before && !cased(runes[j])
+	}
+	return before
 }
