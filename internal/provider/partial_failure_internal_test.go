@@ -126,16 +126,15 @@ func TestPartialFollowups(t *testing.T) {
 			Name:         types.StringValue("attr"),
 			DefaultValue: newJSONString(`42`),
 		}
-		resp := resource.UpdateResponse{State: emptyState(t, r)}
 		prior := plan
 		prior.DefaultValue = nullJSONString()
+		state := resourceState(t, r, &prior)
+		resp := resource.UpdateResponse{State: state}
 		r.Update(ctx, resource.UpdateRequest{
-			Plan: resourcePlan(t, r, &plan), State: resourceState(t, r, &prior),
+			Plan: resourcePlan(t, r, &plan), State: state,
 		}, &resp)
-		var got userAttributeResourceModel
-		d := resp.State.Get(ctx, &got)
-		if !resp.Diagnostics.HasError() || d.HasError() || !got.DefaultValue.Equal(plan.DefaultValue) {
-			t.Fatalf("updated attribute lost: %v %v", resp.Diagnostics, d)
+		if !resp.Diagnostics.HasError() || !resp.State.Raw.Equal(state.Raw) {
+			t.Fatalf("failed readback must preserve prior state: %v, %v", resp.Diagnostics, resp.State.Raw)
 		}
 		var body rauthy.UserAttrRequest
 		f.lastBody(t, "PUT /users/attr/attr", &body)

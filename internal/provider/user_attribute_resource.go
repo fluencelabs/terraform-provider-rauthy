@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -264,8 +266,6 @@ func (r *userAttributeResource) Update(
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
-
 	// The PUT response is not to be trusted (the spec declares none at all), so
 	// the stored attribute is read back to learn what Rauthy actually kept.
 	updated, found, err := findUserAttr(ctx, r.api, name)
@@ -276,10 +276,9 @@ func (r *userAttributeResource) Update(
 	if !found {
 		resp.Diagnostics.AddError("Could not read back Rauthy user attribute "+name,
 			"Rauthy did not list the attribute after the update.")
-		return
+	} else {
+		applyUserAttr(&plan, &updated)
 	}
-
-	applyUserAttr(&plan, &updated)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -298,7 +297,8 @@ func (r *userAttributeResource) ModifyPlan(
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if !req.Plan.Raw.IsNull() {
+	replace := !req.Plan.Raw.IsNull()
+	if replace {
 		var plan userAttributeResourceModel
 		resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 		if resp.Diagnostics.HasError() {
@@ -307,63 +307,85 @@ func (r *userAttributeResource) ModifyPlan(
 		if plan.Name.IsUnknown() || plan.Name.Equal(state.ID) {
 			return
 		}
+	}
+	if r.checkDeletion(ctx, state.ID.ValueString(), &resp.Diagnostics) && replace {
 		resp.RequiresReplace = append(resp.RequiresReplace, path.Root("name"))
 	}
-	r.checkDeletion(ctx, state.ID.ValueString(), &resp.Diagnostics)
+}
+
+type userAttrListEntry struct {
+	Name         *string         `json:"name"`
+	Desc         *string         `json:"desc"`
+	DefaultValue json.RawMessage `json:"default_value"`
+	Typ          *string         `json:"typ"`
+	UserEditable *bool           `json:"user_editable"`
 }
 
 func findUserAttr(ctx context.Context, api *rauthy.Client, name string) (rauthy.UserAttrResponse, bool, error) {
 	var capture userAttrListResponseCapture
-	attrs, err := api.ListUserAttrs(context.WithValue(ctx, userAttrListResponseKey{}, &capture))
-	const invalidList = "GET /users/attr returned HTTP %d: "
+	_, err := api.ListUserAttrs(context.WithValue(ctx, userAttrListResponseKey{}, &capture))
+	const listError = "GET /users/attr returned HTTP %d: %w"
 	if err != nil {
-		if capture.status >= http.StatusOK && capture.status < http.StatusMultipleChoices {
-			return rauthy.UserAttrResponse{}, false, fmt.Errorf(invalidList+"%w", capture.status, err)
+		if _, apiError := errors.AsType[*rauthy.APIError](err); apiError || capture.status == 0 {
+			return rauthy.UserAttrResponse{}, false, err
 		}
-		return rauthy.UserAttrResponse{}, false, err
+		return rauthy.UserAttrResponse{}, false, fmt.Errorf(listError, capture.status, err)
 	}
-	// The SDK decodes null entries and entries with an empty name into the
-	// same Go value. Check the original array before filtering empty names.
-	var response struct {
-		Values []*json.RawMessage `json:"values"`
-	}
-	if capture.body.Len() != 0 {
-		if decodeErr := json.Unmarshal(capture.body.Bytes(), &response); decodeErr != nil {
-			return rauthy.UserAttrResponse{}, false, fmt.Errorf(
-				invalidList+"decode response values: %w",
-				capture.status,
-				decodeErr,
-			)
-		}
-	}
-	if response.Values == nil {
+	if capture.status != http.StatusOK {
 		return rauthy.UserAttrResponse{}, false, fmt.Errorf(
-			invalidList+"response is missing the values array",
-			capture.status,
+			"GET /users/attr returned HTTP %d: expected HTTP 200 for the values array", capture.status,
 		)
 	}
-	for i, entry := range response.Values {
-		if entry == nil {
-			return rauthy.UserAttrResponse{}, false, fmt.Errorf(
-				invalidList+"response has a null entry at values[%d]",
-				capture.status,
-				i,
-			)
-		}
+	attr, found, err := decodeUserAttrList(capture.body.Bytes(), name)
+	if err != nil {
+		return rauthy.UserAttrResponse{}, false, fmt.Errorf(listError, capture.status, err)
 	}
-	for _, attr := range attrs {
-		if attr.Name != "" && attr.Name == name {
-			return attr, true, nil
-		}
-	}
-	return rauthy.UserAttrResponse{}, false, nil
+	return attr, found, nil
 }
 
-func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) {
+func decodeUserAttrList(body []byte, name string) (rauthy.UserAttrResponse, bool, error) {
+	var response struct {
+		Values []*userAttrListEntry `json:"values"`
+	}
+	if err := jsonv2.Unmarshal(body, &response, jsonv2.RejectUnknownMembers(true)); err != nil {
+		return rauthy.UserAttrResponse{}, false, fmt.Errorf("decode values: %w", err)
+	}
+	if response.Values == nil {
+		return rauthy.UserAttrResponse{}, false, errors.New("response is missing the values array")
+	}
+
+	seen := make(map[string]struct{}, len(response.Values))
+	var match rauthy.UserAttrResponse
+	for i, entry := range response.Values {
+		if entry == nil || entry.Name == nil || entry.UserEditable == nil {
+			return rauthy.UserAttrResponse{}, false, fmt.Errorf(
+				"values[%d] must be an object with a string name and a boolean user_editable", i,
+			)
+		}
+		if entry.Typ != nil && *entry.Typ != "Email" {
+			return rauthy.UserAttrResponse{}, false, fmt.Errorf("values[%d].typ must be Email or null", i)
+		}
+		key := *entry.Name
+		if _, duplicate := seen[key]; duplicate {
+			return rauthy.UserAttrResponse{}, false, fmt.Errorf("values[%d] repeats an attribute name", i)
+		}
+		seen[key] = struct{}{}
+		if key != "" && key == name {
+			match = rauthy.UserAttrResponse{
+				Name: key, Desc: entry.Desc, DefaultValue: entry.DefaultValue, Typ: entry.Typ,
+				UserEditable: *entry.UserEditable,
+			}
+		}
+	}
+	return match, match.Name != "", nil
+}
+
+// checkDeletion reports whether the attribute list was valid and adds any guard diagnostics.
+func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) bool {
 	_, found, err := findUserAttr(ctx, r.api, key)
 	if err != nil {
 		diags.AddError("Could not list Rauthy user attributes before checking deletion", err.Error())
-		return
+		return false
 	}
 	if !found {
 		diags.AddError(
@@ -371,12 +393,12 @@ func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, d
 			fmt.Sprintf("Rauthy did not list attribute %q. Retry if the list is stale. "+
 				"If it was renamed outside Terraform, refresh state and import the attribute under its new name.", key),
 		)
-		return
+		return true
 	}
 	scopes, err := r.api.ListScopes(ctx)
 	if err != nil {
 		diags.AddError("Could not list Rauthy scopes before checking user attribute deletion", err.Error())
-		return
+		return true
 	}
 	// Unlike role/group deletion, attribute deletion removes every occurrence,
 	// including an interior substring, from both scope mapping lists.
@@ -392,10 +414,11 @@ func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, d
 						scope.Name,
 					),
 				)
-				return
+				return true
 			}
 		}
 	}
+	return true
 }
 
 func (r *userAttributeResource) Delete(
