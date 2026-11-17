@@ -159,7 +159,7 @@ func (r *userAttributeResource) ValidateConfig(
 			path.Root("default_value"),
 			"Unsupported JSON number",
 			fmt.Sprintf(
-				"Number %s may change during Rauthy's JSON storage round trip. Use an integer literal in the i64/u64 range, or a decimal with at most 15 significant mantissa digits and decimal scale (exponent minus fractional digit count) between -15 and 15.",
+				"Number %s may change during Rauthy's JSON storage round trip. Use an integer literal in the i64/u64 range, or a decimal with at most 15 significant mantissa digits and decimal scale (exponent minus fractional digit count) between -15 and 15 and a magnitude below 1e14.",
 				number,
 			),
 		)
