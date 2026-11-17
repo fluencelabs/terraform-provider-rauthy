@@ -26,7 +26,7 @@ resource "rauthy_auth_provider" "corp" {
   client_secret_rotation_trigger = var.corp_client_secret_version
 
   # Everyone in the upstream's rauthy-admins group administers Rauthy too.
-  admin_claim_path  = "$.groups"
+  admin_claim_path  = "$.groups.*"
   admin_claim_value = "rauthy-admins"
 
   # Create the local account on first login, and attach it to an existing one

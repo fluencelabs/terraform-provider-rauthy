@@ -97,8 +97,9 @@ func apiKeyIdentityAttributes() map[string]schema.Attribute {
 func apiKeyAccessAttributes() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"access": schema.SetNestedAttribute{
-			Required: true,
-			MarkdownDescription: "The key's rights, one entry per access group. A group not listed here " +
+			Required:   true,
+			Validators: []validator.Set{apiKeyUniqueGroups{}},
+			MarkdownDescription: "The key's rights, one entry per access group. Combine all rights for a group in one entry. A group not listed here " +
 				"grants nothing, and an empty set is a key that can do nothing at all — which Rauthy " +
 				"accepts.\n\n" +
 				"This is a set rather than a list: Rauthy stores the entries in the order they were " +
