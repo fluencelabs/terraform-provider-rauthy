@@ -350,3 +350,21 @@ func TestPamHostnameLength(t *testing.T) {
 		t.Fatal("hostname length does not match Rauthy")
 	}
 }
+
+// Rauthy stores these values comma-separated: a comma never converges.
+func TestCommaRefused(t *testing.T) {
+	t.Parallel()
+	for name, ok := range map[string]bool{
+		"redirect": acceptsSet([]validator.Set{validators.URISet()}, "https://example.com/a,b"),
+		"scopes":   acceptsSet([]validator.Set{validators.ScopeSet()}, "team,read"),
+		"roles":    acceptsSet([]validator.Set{validators.RoleNameSet()}, "cold,role"),
+		"groups":   acceptsSet([]validator.Set{validators.GroupNameSet()}, "cold,group"),
+		"role":     acceptsString(validators.RoleName(), "cold,role"),
+		"group":    acceptsString(validators.GroupName(), "cold,group"),
+		"scope":    acceptsString(validators.ScopeName(), "cold,scope"),
+	} {
+		if ok {
+			t.Errorf("%s: a value with a comma was accepted", name)
+		}
+	}
+}

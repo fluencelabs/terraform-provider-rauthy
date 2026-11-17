@@ -69,9 +69,20 @@ func URI() validator.String {
 	return stringvalidator.RegexMatches(rauthy.URIPattern(), "must match "+rauthy.URIPattern().String())
 }
 
-// URISet validates every element of a set against RE_URI.
+// URISet validates every element of a set against RE_URI. Rauthy stores these
+// sets comma-separated, so an element with a comma is refused too.
 func URISet() validator.Set {
-	return setvalidator.ValueStringsAre(URI())
+	return setvalidator.ValueStringsAre(URI(), noComma())
+}
+
+// noComma refuses a value Rauthy would split: it stores redirect URIs, scope
+// lists and role and group memberships as one comma-separated string, so a
+// value with a comma comes back as several and never converges. A role, group
+// or scope name with a comma breaks every membership that names it, so names
+// are refused too.
+func noComma() validator.String {
+	return stringvalidator.RegexMatches(regexp.MustCompile(`^[^,]*$`),
+		"must not contain a comma: Rauthy stores it in a comma-separated list")
 }
 
 // OriginSet validates every element of a set as an allowed origin.
@@ -94,6 +105,7 @@ func ContactSet() validator.Set {
 func ScopeSet() validator.Set {
 	return setvalidator.ValueStringsAre(
 		stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String()),
+		noComma(),
 	)
 }
 
@@ -143,12 +155,18 @@ func CacheCurrentHours() validator.Int64 {
 // RoleName validates a role name against RE_ROLES_SCOPES, the same pattern
 // Rauthy applies to scopes.
 func RoleName() validator.String {
-	return stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String())
+	return stringvalidator.All(
+		stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String()),
+		noComma(),
+	)
 }
 
 // GroupName validates a group name against RE_GROUPS.
 func GroupName() validator.String {
-	return stringvalidator.RegexMatches(rauthy.GroupPattern(), "must match "+rauthy.GroupPattern().String())
+	return stringvalidator.All(
+		stringvalidator.RegexMatches(rauthy.GroupPattern(), "must match "+rauthy.GroupPattern().String()),
+		noComma(),
+	)
 }
 
 // PasswordLength validates length_min and length_max.
@@ -173,7 +191,10 @@ func PasswordNotRecentlyUsed() validator.Int64 {
 
 // ScopeName validates a scope name against RE_ROLES_SCOPES.
 func ScopeName() validator.String {
-	return stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String())
+	return stringvalidator.All(
+		stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String()),
+		noComma(),
+	)
 }
 
 // UserAttrNameSet validates every element of a set as a user-attribute name,
