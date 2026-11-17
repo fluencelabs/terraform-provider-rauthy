@@ -225,24 +225,24 @@ func TestLifetimeBounds(t *testing.T) {
 	// The bounds are Rauthy's, written out here rather than read from the
 	// code under test, and each edge is probed on both sides.
 	cases := []struct {
-		name     string
-		v        validator.Int64
-		min, max int64
+		name               string
+		v                  validator.Int64
+		min, max, interior int64
 	}{
-		{"auth_code_lifetime", validators.AuthCodeLifetime(), 10, 300},
-		{"access_token_lifetime", validators.AccessTokenLifetime(), 10, 86400},
-		{"cache_current_hours", validators.CacheCurrentHours(), 1, 24},
+		{"auth_code_lifetime", validators.AuthCodeLifetime(), 10, 300, 60},
+		{"access_token_lifetime", validators.AccessTokenLifetime(), 10, 86400, 600},
+		{"cache_current_hours", validators.CacheCurrentHours(), 1, 24, 12},
 		// PasswordPolicyRequest in src/api_types/src/generic.rs, the same in
 		// 0.36.2 and 0.37.2.
-		{"password length", validators.PasswordLength(), 8, 128},
-		{"password include_* count", validators.PasswordCharClassCount(), 1, 32},
-		{"password valid_days", validators.PasswordValidDays(), 1, 3650},
-		{"password not_recently_used", validators.PasswordNotRecentlyUsed(), 1, 10},
+		{"password length", validators.PasswordLength(), 8, 128, 16},
+		{"password include_* count", validators.PasswordCharClassCount(), 1, 32, 4},
+		{"password valid_days", validators.PasswordValidDays(), 1, 3650, 90},
+		{"password not_recently_used", validators.PasswordNotRecentlyUsed(), 1, 10, 5},
 	}
 	for _, tc := range cases {
-		for _, in := range []int64{tc.min, tc.max} {
+		for _, in := range []int64{tc.min, tc.interior, tc.max} {
 			if !acceptsInt(tc.v, in) {
-				t.Errorf("%s rejected %d, a bound of [%d, %d]", tc.name, in, tc.min, tc.max)
+				t.Errorf("%s rejected %d, inside [%d, %d]", tc.name, in, tc.min, tc.max)
 			}
 		}
 		for _, in := range []int64{tc.min - 1, tc.max + 1} {

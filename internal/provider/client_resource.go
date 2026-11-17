@@ -138,16 +138,19 @@ func (r *clientResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	updated, err := r.api.UpdateClient(ctx, id, update)
 	if err != nil {
+		if scimSyncFailed(err) {
+			if r.refreshAfterScimFailure(ctx, &saved, &resp.Diagnostics) {
+				resp.Diagnostics.Append(resp.State.Set(ctx, &saved)...)
+			}
+			resp.Diagnostics.AddError("Rauthy client "+id+": SCIM sync failed", scimSyncDetail(err))
+			return
+		}
 		// The client exists but carries only what POST accepted. Saving it to
 		// state is the lesser evil: dropping it here would leave an object in
 		// Rauthy that Terraform no longer knows about.
 		applyResponse(ctx, &plan, created, &resp.Diagnostics)
 		plan.Secret = types.StringNull()
 		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
-		if scimSyncFailed(err) {
-			resp.Diagnostics.AddError("Rauthy client "+id+": SCIM sync failed", scimSyncDetail(err))
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Rauthy client created but not configured",
 			fmt.Sprintf(
@@ -221,6 +224,9 @@ func (r *clientResource) Update(ctx context.Context, req resource.UpdateRequest,
 
 	updated, err := r.api.UpdateClient(ctx, id, update)
 	if scimSyncFailed(err) {
+		if r.refreshAfterScimFailure(ctx, &state, &resp.Diagnostics) {
+			resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+		}
 		resp.Diagnostics.AddError("Rauthy client "+id+": SCIM sync failed", scimSyncDetail(err))
 		return
 	}
@@ -481,4 +487,21 @@ func scimSyncDetail(err error) string {
 		"to the SCIM endpoint. Check the endpoint and its bearer token. Re-running apply does not retry " +
 		"the sync: Rauthy runs a full sync only when the SCIM settings change, and retries failed group " +
 		"syncs on its own.\n\nError: " + err.Error()
+}
+
+// refreshAfterScimFailure reads the configuration that Rauthy committed before
+// syncing. Keep the previous rotation trigger because rotation has not run.
+func (r *clientResource) refreshAfterScimFailure(
+	ctx context.Context,
+	m *clientResourceModel,
+	diags *diag.Diagnostics,
+) bool {
+	got, err := r.api.GetClient(ctx, m.ID.ValueString())
+	if err != nil {
+		diags.AddError("Could not read saved Rauthy client "+m.ID.ValueString(), err.Error())
+		return false
+	}
+	applyResponse(ctx, m, got, diags)
+	r.readSecretInto(ctx, m, diags)
+	return true
 }
