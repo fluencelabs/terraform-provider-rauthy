@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"slices"
 	"strconv"
@@ -19,12 +20,18 @@ func TestUserAttributeReadList(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		status  int
+		attrs   []rauthy.UserAttrResponse
 		present bool
 	}{
 		{name: "route missing", status: http.StatusNotFound},
 		{name: "forbidden", status: http.StatusForbidden},
-		{name: "attribute missing"},
-		{name: "attribute present", present: true},
+		{name: "attribute missing", attrs: []rauthy.UserAttrResponse{{Name: "developer"}}},
+		{name: "empty list", attrs: []rauthy.UserAttrResponse{}},
+		{
+			name:    "attribute present",
+			attrs:   []rauthy.UserAttrResponse{{Name: "developer"}, {Name: "dev", UserEditable: true}},
+			present: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, api := newFakeRauthy(t)
@@ -40,13 +47,11 @@ func TestUserAttributeReadList(t *testing.T) {
 				})
 				want = state
 			} else {
-				attrs := []rauthy.UserAttrResponse{{Name: "developer"}}
 				if tc.present {
-					attrs = append(attrs, rauthy.UserAttrResponse{Name: "dev", UserEditable: true})
 					model.UserEditable = types.BoolValue(true)
 					want = resourceState(t, r, model)
 				}
-				f.answer("GET /users/attr", map[string]any{"values": attrs})
+				f.answer("GET /users/attr", map[string]any{"values": tc.attrs})
 			}
 			resp := resource.ReadResponse{State: state}
 			r.Read(t.Context(), resource.ReadRequest{State: state}, &resp)
@@ -58,6 +63,52 @@ func TestUserAttributeReadList(t *testing.T) {
 			}
 			if tc.status != 0 && !strings.Contains(resp.Diagnostics[0].Detail(), strconv.Itoa(tc.status)) {
 				t.Errorf("list API error lost status %d: %v", tc.status, resp.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestUserAttributeMalformedList(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		status     int
+	}{
+		{"missing values", `{}`, http.StatusOK},
+		{"null values", `{"values":null}`, http.StatusOK},
+		{"null entry", `{"values":[null]}`, http.StatusOK},
+		{"no content", "", http.StatusNoContent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, api := newFakeRauthy(t)
+			f.handle("GET /users/attr", func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, tc.body)
+			})
+			r := &userAttributeResource{api: api}
+			ctx := t.Context()
+			state := resourceState(t, r, userAttributeResourceModel{
+				ID: types.StringValue("dev"), Name: types.StringValue("dev"),
+			})
+
+			read := resource.ReadResponse{State: state}
+			r.Read(ctx, resource.ReadRequest{State: state}, &read)
+			if !read.Diagnostics.HasError() || !strings.Contains(read.Diagnostics[0].Detail(), "values") ||
+				!read.State.Raw.Equal(state.Raw) {
+				t.Errorf(
+					"Read must report an invalid list and preserve state: %v, %v",
+					read.Diagnostics,
+					read.State.Raw,
+				)
+			}
+
+			deletion := resource.DeleteResponse{State: state}
+			r.Delete(ctx, resource.DeleteRequest{State: state}, &deletion)
+			if !deletion.Diagnostics.HasError() || !strings.Contains(deletion.Diagnostics[0].Detail(), "values") ||
+				!deletion.State.Raw.Equal(state.Raw) || len(f.bodies("DELETE /users/attr/dev")) != 0 {
+				t.Errorf(
+					"Delete must report an invalid list, preserve state, and skip DELETE: %v",
+					deletion.Diagnostics,
+				)
 			}
 		})
 	}

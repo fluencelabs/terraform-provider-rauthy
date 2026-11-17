@@ -76,8 +76,12 @@ func waitForMutation(t *testing.T, frame string, done, reached <-chan struct{}) 
 		stack := make([]byte, 1<<20)
 		stack = stack[:runtime.Stack(stack, true)]
 		for goroutine := range strings.SplitSeq(string(stack), "\n\n") {
-			if strings.Contains(goroutine, frame) &&
-				strings.Contains(goroutine, "lockSubstringMutation") {
+			header, trace, _ := strings.Cut(goroutine, "\n")
+			top, _, _ := strings.Cut(trace, "\n")
+			// The contender must be parked in the lock's select.
+			if strings.HasSuffix(header, " [select]:") &&
+				strings.Contains(top, "/provider.lockSubstringMutation(") &&
+				strings.Contains(trace, frame+"(") {
 				return true
 			}
 		}

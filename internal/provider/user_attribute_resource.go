@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -216,7 +217,7 @@ func (r *userAttributeResource) Read(ctx context.Context, req resource.ReadReque
 	}
 
 	name := state.Name.ValueString()
-	attrs, err := r.api.ListUserAttrs(ctx)
+	attrs, err := r.listUserAttrs(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Could not read Rauthy user attribute "+name, err.Error())
 		return
@@ -308,8 +309,26 @@ func (r *userAttributeResource) ModifyPlan(
 	r.checkDeletion(ctx, state.ID.ValueString(), &resp.Diagnostics)
 }
 
-func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) {
+func (r *userAttributeResource) listUserAttrs(ctx context.Context) ([]rauthy.UserAttrResponse, error) {
 	attrs, err := r.api.ListUserAttrs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// The SDK leaves values nil for an absent array and decodes null entries
+	// into structs with empty names.
+	if attrs == nil {
+		return nil, errors.New("response is missing the values array")
+	}
+	for i, attr := range attrs {
+		if attr.Name == "" {
+			return nil, fmt.Errorf("response has an unnamed entry at values[%d]", i)
+		}
+	}
+	return attrs, nil
+}
+
+func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) {
+	attrs, err := r.listUserAttrs(ctx)
 	if err != nil {
 		diags.AddError("Could not list Rauthy user attributes before checking deletion", err.Error())
 		return
