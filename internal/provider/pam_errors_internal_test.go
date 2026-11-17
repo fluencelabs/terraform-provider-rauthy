@@ -90,12 +90,17 @@ func TestPamGroupCreateHints(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f, api := newFakeRauthy(t)
 			f.handle("POST /pam/groups", func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(tc.status)
 				if tc.plain {
-					_, _ = w.Write([]byte(tc.message))
-				} else {
-					_ = json.NewEncoder(w).Encode(map[string]string{"error": tc.code, "message": tc.message})
+					http.Error(w, tc.message, tc.status)
+					return
 				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"timestamp": 1700000000,
+					"error":     tc.code,
+					"message":   tc.message,
+				})
 			})
 			r := &pamGroupResource{api: api}
 			plan := pamGroupResourceModel{Name: types.StringValue("test"), Typ: types.StringValue("generic")}

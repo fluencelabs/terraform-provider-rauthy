@@ -43,7 +43,7 @@ func newFakeRauthy(t *testing.T) (*fakeRauthy, *rauthy.Client) {
 
 		if !ok {
 			t.Errorf("unexpected request %s", key)
-			http.Error(w, `{"error":"NotFound","message":"no route"}`, http.StatusNotFound)
+			http.NotFound(w, r)
 			return
 		}
 		h(w, r)
