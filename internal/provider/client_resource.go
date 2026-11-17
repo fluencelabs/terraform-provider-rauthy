@@ -284,8 +284,12 @@ func (r *clientResource) ModifyPlan(
 	req resource.ModifyPlanRequest,
 	resp *resource.ModifyPlanResponse,
 ) {
-	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
-		// Create or destroy; nothing to compare against.
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+	r.planPublicS256(ctx, req, resp)
+	if req.State.Raw.IsNull() {
+		// Create; nothing to compare against.
 		return
 	}
 
@@ -405,12 +409,46 @@ func (r *clientResource) ValidateConfig(
 		return
 	}
 	for _, v := range challenges.Elements() {
-		s, ok := v.(types.String)
-		if !ok || s.IsUnknown() || s.ValueString() == "S256" {
+		if s, ok := v.(types.String); !ok || s.IsUnknown() {
 			return
 		}
 	}
+	if hasS256(challenges) {
+		return
+	}
 	resp.Diagnostics.AddAttributeError(path.Root("challenges"), "Public client without S256",
 		"A public client must keep S256 among its PKCE challenges: Rauthy checks the method against this "+
-			"list for public clients too. Include \"S256\", or leave challenges out to keep Rauthy's S256 default.")
+			"list for public clients too. Include \"S256\", or leave challenges out: the provider then plans [\"S256\"].")
+}
+
+// planPublicS256 plans ["S256"] for a public client that leaves challenges
+// out but would otherwise keep a list without S256: one carried over from
+// state (["plain"] while it was confidential, or nothing after an import) or
+// none at all. ValidateConfig refuses a configured list without S256.
+func (r *clientResource) planPublicS256(
+	ctx context.Context,
+	req resource.ModifyPlanRequest,
+	resp *resource.ModifyPlanResponse,
+) {
+	var confidential types.Bool
+	var configured, planned types.Set
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("confidential"), &confidential)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("challenges"), &configured)...)
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("challenges"), &planned)...)
+	if resp.Diagnostics.HasError() || confidential.IsUnknown() || confidential.ValueBool() || !configured.IsNull() {
+		return
+	}
+	if !planned.IsUnknown() && !planned.IsNull() && hasS256(planned) {
+		return
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("challenges"), stringsToSet([]string{"S256"}))...)
+}
+
+func hasS256(set types.Set) bool {
+	for _, v := range set.Elements() {
+		if s, ok := v.(types.String); ok && s.ValueString() == "S256" {
+			return true
+		}
+	}
+	return false
 }

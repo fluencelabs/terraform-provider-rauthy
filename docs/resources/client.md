@@ -66,7 +66,7 @@ output "backend_client_secret" {
   sensitive = true
 }
 
-# A public single-page app: no secret, and Rauthy requires S256 PKCE from it.
+# A public single-page app: no secret; it must keep S256 among its PKCE challenges.
 resource "rauthy_client" "spa" {
   id            = "example-spa"
   name          = "Example SPA"
@@ -85,7 +85,7 @@ resource "rauthy_client" "spa" {
 
 ### Required
 
-- `confidential` (Boolean) Whether the client authenticates with a secret. A public client (`false`) has no secret and Rauthy requires S256 PKCE from it.
+- `confidential` (Boolean) Whether the client authenticates with a secret. A public client (`false`) has no secret and must keep `S256` among its `challenges`.
 - `id` (String) The client id, as used in OIDC requests. Changing it replaces the client.
 - `redirect_uris` (Set of String) Allowed redirect URIs.
 
@@ -102,7 +102,7 @@ Optional and computed: leaving this out adopts whatever Rauthy has, and removing
 
 Optional and computed: leaving this out adopts whatever Rauthy has, and removing it from the configuration later keeps the last applied value rather than reverting it. To change it, set it explicitly.
 - `backchannel_logout_uri` (String) OIDC back-channel logout endpoint of the application.
-- `challenges` (Set of String) Accepted PKCE challenge methods: `plain`, `S256`. Rauthy checks the method a login uses against this list, for public clients too, so a public client must include `S256`; the provider refuses one that does not. Left out, a new client gets Rauthy's default, `S256`.
+- `challenges` (Set of String) Accepted PKCE challenge methods: `plain`, `S256`. Rauthy checks the method a login uses against this list, for public clients too, so a public client must include `S256`; the provider refuses one that does not. Left out on a public client, it is planned as `["S256"]`.
 
 Optional and computed: leaving this out adopts whatever Rauthy has, and removing it from the configuration later keeps the last applied value rather than reverting it. To change it, set it explicitly.
 - `client_uri` (String) Informational URI of the application.

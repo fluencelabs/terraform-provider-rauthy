@@ -289,3 +289,35 @@ resource "rauthy_client" "public" {
 		},
 	})
 }
+
+// A public client that leaves challenges out is planned with S256 whatever it
+// held before: ["plain"] from its confidential days, or nothing after an
+// import of a client created without challenges.
+func TestAccClient_publicPlansS256(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(confidential bool, challenges string) string {
+		return fmt.Sprintf(`
+resource "rauthy_client" "c" {
+  id            = "tf-acc-flip-pkce"
+  confidential  = %t
+  redirect_uris = ["https://spa.example.com/callback"]
+  %s
+}
+`, confidential, challenges)
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientDestroyed,
+		Steps: []resource.TestStep{
+			{Config: config(true, `challenges = ["plain"]`)},
+			{
+				Config: config(false, ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("rauthy_client.c", "challenges.#", "1"),
+					resource.TestCheckTypeSetElemAttr("rauthy_client.c", "challenges.*", "S256"),
+				),
+			},
+			{Config: config(false, ""), PlanOnly: true},
+		},
+	})
+}

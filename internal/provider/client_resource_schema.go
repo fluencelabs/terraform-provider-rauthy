@@ -103,7 +103,7 @@ func clientIdentityAttributes() map[string]schema.Attribute {
 		"confidential": schema.BoolAttribute{
 			Required: true,
 			MarkdownDescription: "Whether the client authenticates with a secret. A public client " +
-				"(`false`) has no secret and Rauthy requires S256 PKCE from it.",
+				"(`false`) has no secret and must keep `S256` among its `challenges`.",
 		},
 		"enabled": schema.BoolAttribute{
 			Optional:            true,
@@ -219,8 +219,8 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 				rauthy.ChallengeMethods(),
 				"`, `",
 			) + "`. Rauthy checks the method a login uses against this list, for public clients too, so " +
-				"a public client must include `S256`; the provider refuses one that does not. Left out, a new " +
-				"client gets Rauthy's default, `S256`." + optionalComputedNote,
+				"a public client must include `S256`; the provider refuses one that does not. Left out on a " +
+				"public client, it is planned as `[\"S256\"]`." + optionalComputedNote,
 			Validators: validators.ChallengeSet(),
 			PlanModifiers: []planmodifier.Set{
 				setplanmodifier.UseStateForUnknown(),

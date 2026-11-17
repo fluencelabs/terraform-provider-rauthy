@@ -109,7 +109,7 @@ func clientDataSourceCoreAttributes() map[string]schema.Attribute {
 		"confidential": schema.BoolAttribute{
 			Computed: true,
 			MarkdownDescription: "Whether the client authenticates with a secret. A public client " +
-				"(`false`) has no secret and Rauthy requires S256 PKCE from it.",
+				"(`false`) has no secret; Rauthy checks its PKCE method against `challenges`.",
 		},
 		"enabled": schema.BoolAttribute{
 			Computed:            true,
@@ -173,8 +173,8 @@ func clientDataSourceCoreAttributes() map[string]schema.Attribute {
 			MarkdownDescription: "Accepted PKCE challenge methods: `" + strings.Join(
 				rauthy.ChallengeMethods(),
 				"`, `",
-			) + "`. Rauthy requires " +
-				"`S256` from public clients regardless of this setting.",
+			) + "`. Rauthy checks " +
+				"the method a login uses against this list, for public clients too.",
 		},
 		"force_mfa": schema.BoolAttribute{
 			Computed:            true,
