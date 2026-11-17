@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -68,9 +67,9 @@ func (r *scopeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"name": schema.StringAttribute{
 				Required: true,
 				MarkdownDescription: "Name of the scope, for example `read:billing`. This is the value clients " +
-					"request. Renaming in place is supported, except when the old name is part of another scope's " +
-					"name: Rauthy renames by substring in every client's scope list and would also rewrite that " +
-					"other scope there, so the plan is refused.",
+					"request. Renaming in place is supported. Renaming or deleting is refused while another scope's " +
+					"name contains this one: Rauthy edits clients' scope lists by substring and would rewrite that " +
+					"other scope too.",
 				Validators: []validator.String{validators.ScopeName()},
 			},
 			"attr_include_access": schema.SetAttribute{
@@ -214,7 +213,18 @@ func (r *scopeResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	id := state.ID.ValueString()
-	if err := r.api.DeleteScope(ctx, id); err != nil && !rauthy.IsNotFound(err) {
+	scopes, err := r.api.ListScopes(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Could not list Rauthy scopes to check the deletion of "+id, err.Error())
+		return
+	}
+	if other, ok := containingName(state.Name.ValueString(), scopeNames(scopes)); ok {
+		resp.Diagnostics.AddError("Unsafe scope deletion",
+			fmt.Sprintf("Rauthy removes scope %q from clients by substring, so it would also cut %q out of "+
+				"their scope lists. Delete %q first.", state.Name.ValueString(), other, other))
+		return
+	}
+	if err = r.api.DeleteScope(ctx, id); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy scope "+id, err.Error())
 	}
 }
@@ -307,13 +317,17 @@ func (r *scopeResource) ModifyPlan(
 		resp.Diagnostics.AddError("Could not list Rauthy scopes to check the rename of "+old, err.Error())
 		return
 	}
-	for _, s := range scopes {
-		if s.Name != old && strings.Contains(s.Name, old) {
-			resp.Diagnostics.AddAttributeError(path.Root("name"), "Unsafe scope rename",
-				fmt.Sprintf("Rauthy renames scope %q by substring in every client's scope lists, so it would "+
-					"also rewrite scope %q there. Create the new scope, move the clients to it, then remove %q.",
-					old, s.Name, old))
-			return
-		}
+	if other, ok := containingName(old, scopeNames(scopes)); ok {
+		resp.Diagnostics.AddAttributeError(path.Root("name"), "Unsafe scope rename",
+			fmt.Sprintf("Rauthy renames scope %q by substring in every client's scope lists, so it would "+
+				"also rewrite scope %q there. Remove or rename %q first.", old, other, other))
 	}
+}
+
+func scopeNames(scopes []rauthy.ScopeResponse) []string {
+	names := make([]string, 0, len(scopes))
+	for _, s := range scopes {
+		names = append(names, s.Name)
+	}
+	return names
 }

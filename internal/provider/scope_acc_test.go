@@ -177,3 +177,64 @@ resource "rauthy_scope" "long" {
 		},
 	})
 }
+
+// Deleting a scope whose name is part of another scope's name is refused, so a
+// client holding only the longer scope keeps it unchanged.
+func TestAccScope_deleteContainedNameRefused(t *testing.T) {
+	factories := acctest.Setup(t)
+	base := `
+resource "rauthy_scope" "long" { name = "tf-acc-del-extra" }
+resource "rauthy_client" "c" {
+  id             = "tf-acc-del-client"
+  confidential   = true
+  redirect_uris  = ["https://app.example.com/cb"]
+  scopes         = ["openid", rauthy_scope.long.name]
+  default_scopes = ["openid"]
+}
+`
+	short := `
+resource "rauthy_scope" "short" {
+  name       = "tf-acc-del"
+  depends_on = [rauthy_scope.long]
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{Config: base + short},
+			{Config: base, ExpectError: regexp.MustCompile("Unsafe scope deletion")},
+			{
+				Config: base + short,
+				Check:  resource.TestCheckTypeSetElemAttr("rauthy_client.c", "scopes.*", "tf-acc-del-extra"),
+			},
+			// The longer name goes first; then the shorter one can go too.
+			{Config: `resource "rauthy_scope" "short" { name = "tf-acc-del" }`},
+		},
+	})
+}
+
+// A rename no other scope name contains stays in place and leaves an
+// unrelated client's scopes alone.
+func TestAccScope_safeRenameKeepsOtherClients(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(name string) string {
+		return `
+resource "rauthy_scope" "s" { name = "` + name + `" }
+resource "rauthy_client" "c" {
+  id             = "tf-acc-safe-client"
+  confidential   = true
+  redirect_uris  = ["https://app.example.com/cb"]
+  scopes         = ["openid", "profile"]
+  default_scopes = ["openid"]
+}
+`
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{Config: config("tf-acc-zzq")},
+			{Config: config("tf-acc-zzw")},
+			{Config: config("tf-acc-zzw"), PlanOnly: true},
+		},
+	})
+}

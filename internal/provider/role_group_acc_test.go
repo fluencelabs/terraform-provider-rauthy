@@ -3,10 +3,10 @@ package provider_test
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -76,14 +76,9 @@ func TestAccRole_lifecycle(t *testing.T) {
 				),
 			},
 			{
-				// A rename replaces the role: Rauthy's in-place rename drops or
-				// rewrites user assignments.
-				Config: testAccRoleConfig("tf-acc-role-renamed"),
-				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
-					plancheck.ExpectResourceAction("rauthy_role.test", plancheck.ResourceActionReplace),
-				}},
-				Check: resource.TestCheckResourceAttr(
-					"rauthy_role.test", "name", "tf-acc-role-renamed"),
+				// Rauthy's rename drops or rewrites user assignments.
+				Config:      testAccRoleConfig("tf-acc-role-renamed"),
+				ExpectError: regexp.MustCompile("Role rename is not supported"),
 			},
 			{
 				ResourceName:      "rauthy_role.test",
@@ -109,13 +104,8 @@ func TestAccGroup_lifecycle(t *testing.T) {
 				),
 			},
 			{
-				// A rename replaces the group, as for roles.
-				Config: testAccGroupConfig("tf-acc-group-renamed"),
-				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
-					plancheck.ExpectResourceAction("rauthy_group.test", plancheck.ResourceActionReplace),
-				}},
-				Check: resource.TestCheckResourceAttr(
-					"rauthy_group.test", "name", "tf-acc-group-renamed"),
+				Config:      testAccGroupConfig("tf-acc-group-renamed"),
+				ExpectError: regexp.MustCompile("Group rename is not supported"),
 			},
 			{
 				ResourceName:      "rauthy_group.test",
@@ -163,6 +153,47 @@ data "rauthy_group" "test" {
 						"data.rauthy_group.test", "id", "rauthy_group.test", "id"),
 				),
 			},
+		},
+	})
+}
+
+// Rauthy removes a role from users by substring. Deleting "dev" while
+// "developer" exists would cut it out of a user's "a,developer"; it is refused
+// until the longer name goes first, and the user keeps both roles meanwhile.
+func TestAccRole_deleteContainedNameRefused(t *testing.T) {
+	factories := acctest.Setup(t)
+	roles := `
+resource "rauthy_role" "a" { name = "tf-acc-a" }
+resource "rauthy_role" "developer" {
+  name       = "tf-acc-developer"
+  depends_on = [rauthy_role.a]
+}
+resource "rauthy_user" "u" {
+  email      = "tf-acc-substring@example.com"
+  given_name = "Ada"
+  roles      = [rauthy_role.a.name, rauthy_role.developer.name]
+}
+`
+	dev := `
+resource "rauthy_role" "dev" {
+  name       = "tf-acc-dev"
+  depends_on = [rauthy_role.developer]
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{Config: roles + dev},
+			{Config: roles, ExpectError: regexp.MustCompile("Unsafe role deletion")},
+			{
+				Config: roles + dev,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckTypeSetElemAttr("rauthy_user.u", "roles.*", "tf-acc-a"),
+					resource.TestCheckTypeSetElemAttr("rauthy_user.u", "roles.*", "tf-acc-developer"),
+				),
+			},
+			// The longer name goes first; then the shorter one can go too.
+			{Config: `resource "rauthy_role" "dev" { name = "tf-acc-dev" }`},
 		},
 	})
 }
