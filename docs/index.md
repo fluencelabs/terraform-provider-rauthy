@@ -70,7 +70,12 @@ existing setup can run into:
 
 ## Known limits
 
-* **Proxies and gateways.** Any proxy or gateway between the provider and Rauthy must pass through response bodies and HTTP status codes unchanged. The provider only supports responses that Rauthy itself returns.
+* **Proxies and gateways.** Preserve Rauthy's response bodies, content types, and HTTP
+  status codes. A route 404 with an empty or plain-text response reports an error and
+  preserves state. Client image reads treat a 404 with an empty body and no
+  `Content-Type` header as a missing image, so a missing proxy route can drop a logo
+  or favicon from state.
+  Verify that the proxy forwards both image routes before refreshing state.
 * **Conflicts discovered at apply.** A scope, role, group, or user attribute created in the same
   apply can introduce a substring conflict after planning. A new name that is unknown at plan
   time can defer a scope rename error to apply. The provider
