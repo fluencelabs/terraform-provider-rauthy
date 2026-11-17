@@ -325,19 +325,20 @@ func PamGroupType() validator.String {
 	return stringvalidator.OneOf(pamGroupTypes...)
 }
 
-// PamHostname validates a PAM host's hostname. The bound is implicit in the
-// pattern rather than stated: the two anchored character classes make two
-// characters the shortest legal hostname, which a live 0.36.2 confirms by
-// rejecting a one-character alias.
+// PamHostname validates the hostname pattern and the 61-character request limit.
 func PamHostname() validator.String {
-	return stringvalidator.RegexMatches(pamHostname,
-		`must match ^[a-zA-Z0-9][a-zA-Z0-9-.]*[a-zA-Z0-9]$ (at least two characters)`)
+	const maxHostnameLength = 61
+	return stringvalidator.All(
+		stringvalidator.LengthAtMost(maxHostnameLength),
+		stringvalidator.RegexMatches(pamHostname,
+			`must match ^[a-zA-Z0-9][a-zA-Z0-9-.]*[a-zA-Z0-9]$ (at least two characters)`),
+	)
 }
 
 // PamHostAliasSet validates every alias of a PAM host. Aliases carry the same
 // pattern as the hostname itself.
 func PamHostAliasSet() validator.Set {
-	return setvalidator.ValueStringsAre(PamHostname())
+	return setvalidator.ValueStringsAre(stringvalidator.RegexMatches(pamHostname, "must be a Linux hostname"))
 }
 
 // PamHostIPSet validates every element of a PAM host's address list as an IP

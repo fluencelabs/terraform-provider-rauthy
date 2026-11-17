@@ -33,7 +33,7 @@ func (r *clientImageResource) Schema(_ context.Context, _ resource.SchemaRequest
 					"[`filebase64`](https://developer.hashicorp.com/terraform/language/functions/filebase64) " +
 					"function, for example `filebase64(\"${path.module}/logo.png\")`.\n\n" +
 					"This attribute is the sole source of truth for the resource: the image is re-uploaded " +
-					"whenever it changes, and never otherwise. It is stored in the Terraform state in full, so " +
+					"whenever it changes or disappears. A logo is also restored when its served bytes change. It is stored in the Terraform state in full, so " +
 					"prefer a modestly sized image.",
 				Validators: []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
@@ -53,7 +53,7 @@ func (r *clientImageResource) Schema(_ context.Context, _ resource.SchemaRequest
 				MarkdownDescription: "SHA-256, hex encoded, of the image bytes Rauthy serves back. This is not " +
 					"the hash of `content_base64`: Rauthy re-encodes every raster upload to WebP and runs SVGs " +
 					"through a sanitiser, so what is stored never matches what was sent. The value exists to " +
-					"make out-of-band changes visible on a refresh; it does not by itself trigger a re-upload.",
+					"detect out-of-band changes on a refresh. A changed logo hash triggers a re-upload.",
 			},
 		},
 	}
@@ -64,9 +64,8 @@ func (r *clientImageResource) Schema(_ context.Context, _ resource.SchemaRequest
 func (r *clientImageResource) description() string {
 	const shared = "\n\nRauthy stores the image re-encoded rather than verbatim, and exposes no metadata about " +
 		"it — no id, no timestamp, no checksum on any response — so this resource treats `content_base64` as " +
-		"authoritative and reconciles only when that changes or when the image has disappeared from the server " +
-		"entirely. An image replaced out of band through the Admin UI shows up as a changed `stored_hash` on the " +
-		"next refresh, but is left alone until the configuration changes.\n\n" +
+		"authoritative and restores a missing image. A logo replaced out of band, including a global fallback served after deletion, is restored " +
+		"from configuration on the next apply.\n\n" +
 		"Requires the `Clients:update` API key right. Note that the OpenAPI document claims the logo upload " +
 		"needs full `rauthy_admin` rights; on a live 0.36.2 an API key with `Clients:update` uploads both images."
 

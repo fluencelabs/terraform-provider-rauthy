@@ -340,3 +340,10 @@ func TestUserAttrNameAndZip(t *testing.T) {
 		[]string{"", strings.Repeat("9", 25), "12 34"},
 	)
 }
+
+func TestRound2PamHostnameLength(t *testing.T) {
+	if !acceptsString(validators.PamHostname(), strings.Repeat("a", 61)) ||
+		acceptsString(validators.PamHostname(), strings.Repeat("a", 62)) {
+		t.Fatal("hostname length does not match Rauthy")
+	}
+}

@@ -67,8 +67,8 @@ func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 					"` environment variable.\n\n" +
 					"The key needs the access rights of the resources it manages: `Clients` read, create, " +
 					"update, delete and `Secrets` read and update for `rauthy_client`; `Clients:update` for " +
-					"`rauthy_client_logo` and `rauthy_client_favicon`; `Roles` and `Groups` " +
-					"read, create, update, delete for `rauthy_role`, `rauthy_group` and `rauthy_scope`; " +
+					"`rauthy_client_logo` and `rauthy_client_favicon`; `Scopes` read, create, update, delete for `rauthy_scope`; `Roles` and `Groups` " +
+					"read, create, update, delete for `rauthy_role` and `rauthy_group`; " +
 					"`Users` read, create, update, delete for `rauthy_user`; " +
 					"`UserAttributes` read, create, update, delete for `rauthy_user_attribute`; " +
 					"`AuthProviders` read, create, update, delete for `rauthy_auth_provider` " +

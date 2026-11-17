@@ -146,7 +146,13 @@ func (r *clientImageResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	state.StoredHash = types.StringValue(hashBytes(got.Data))
+	hash := types.StringValue(hashBytes(got.Data))
+	if r.kind == rauthy.ImageLogo && !state.StoredHash.IsNull() && !state.StoredHash.IsUnknown() &&
+		!state.StoredHash.Equal(hash) {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+	state.StoredHash = hash
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
