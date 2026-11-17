@@ -42,7 +42,7 @@ resource "rauthy_client" "billing_app" {
 
 ### Required
 
-- `name` (String) Name of the scope, for example `read:billing`. This is the value clients request. Renaming in place is supported. Renaming or deleting is refused while another scope's name contains this one: Rauthy edits clients' scope lists by substring and would rewrite that other scope too.
+- `name` (String) Name of the scope, for example `read:billing`. This is the value clients request. Rauthy edits clients' scope lists by substring, so renaming is refused while another scope's name contains this one, and deleting while another scope's name starts with it.
 
 ### Optional
 

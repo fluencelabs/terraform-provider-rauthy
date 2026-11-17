@@ -67,9 +67,8 @@ func (r *scopeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"name": schema.StringAttribute{
 				Required: true,
 				MarkdownDescription: "Name of the scope, for example `read:billing`. This is the value clients " +
-					"request. Renaming in place is supported. Renaming or deleting is refused while another scope's " +
-					"name contains this one: Rauthy edits clients' scope lists by substring and would rewrite that " +
-					"other scope too.",
+					"request. Rauthy edits clients' scope lists by substring, so renaming is refused while another " +
+					"scope's name contains this one, and deleting while another scope's name starts with it.",
 				Validators: []validator.String{validators.ScopeName()},
 			},
 			"attr_include_access": schema.SetAttribute{
@@ -218,10 +217,11 @@ func (r *scopeResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 		resp.Diagnostics.AddError("Could not list Rauthy scopes to check the deletion of "+id, err.Error())
 		return
 	}
-	if other, ok := containingName(state.Name.ValueString(), scopeNames(scopes)); ok {
+	if other, ok := prefixedName(state.Name.ValueString(), scopeNames(scopes)); ok {
 		resp.Diagnostics.AddError("Unsafe scope deletion",
-			fmt.Sprintf("Rauthy removes scope %q from clients by substring, so it would also cut %q out of "+
-				"their scope lists. Delete %q first.", state.Name.ValueString(), other, other))
+			fmt.Sprintf("Rauthy removes scope %q from clients by substring, so it would also cut the start of %q in "+
+				"their scope lists. Delete %q first; to make Terraform do so, add depends_on on this resource to %q.",
+				state.Name.ValueString(), other, other, other))
 		return
 	}
 	if err = r.api.DeleteScope(ctx, id); err != nil && !rauthy.IsNotFound(err) {

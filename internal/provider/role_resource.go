@@ -59,7 +59,7 @@ func (r *roleResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				Required: true,
 				MarkdownDescription: "Name of the role, for example `admin`. Changing it is refused: Rauthy's rename drops the role from its users on PostgreSQL and " +
 					"rewrites other role names in user assignments on Hiqlite. Create the new role, move the users, " +
-					"then remove the old one. Deleting is refused while another role name contains this one.",
+					"then remove the old one. Deleting is refused while another role name starts with this one.",
 				Validators: []validator.String{validators.RoleName()},
 			},
 		},
@@ -180,10 +180,11 @@ func (r *roleResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	for _, x := range all {
 		names = append(names, x.Name)
 	}
-	if other, ok := containingName(state.Name.ValueString(), names); ok {
+	if other, ok := prefixedName(state.Name.ValueString(), names); ok {
 		resp.Diagnostics.AddError("Unsafe role deletion",
-			fmt.Sprintf("Rauthy removes role %q from users by substring, so it would also cut %q out of "+
-				"their assignments. Delete %q first.", state.Name.ValueString(), other, other))
+			fmt.Sprintf("Rauthy removes role %q from users by substring, so it would also cut the start of %q in "+
+				"their assignments. Delete %q first; to make Terraform do so, add depends_on on this resource to %q.",
+				state.Name.ValueString(), other, other, other))
 		return
 	}
 	if err = r.api.DeleteRole(ctx, id); err != nil && !rauthy.IsNotFound(err) {

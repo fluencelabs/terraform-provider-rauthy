@@ -197,3 +197,32 @@ resource "rauthy_role" "dev" {
 		},
 	})
 }
+
+// Deleting a group "ops" while "opsteam" exists is refused; a name that only
+// ends with it, like "devops", does not block the deletion.
+func TestAccGroup_deletePrefixedNameRefused(t *testing.T) {
+	factories := acctest.Setup(t)
+	long := `
+resource "rauthy_group" "opsteam" { name = "tf-acc-opsteam" }
+resource "rauthy_group" "devops" {
+  name       = "tf-acc-x-tf-acc-ops"
+  depends_on = [rauthy_group.opsteam]
+}
+`
+	short := `
+resource "rauthy_group" "ops" {
+  name       = "tf-acc-ops"
+  depends_on = [rauthy_group.devops]
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{Config: long + short},
+			{Config: long, ExpectError: regexp.MustCompile("Unsafe group deletion")},
+			{Config: `resource "rauthy_group" "ops" { name = "tf-acc-ops" }
+resource "rauthy_group" "devops" { name = "tf-acc-x-tf-acc-ops" }`},
+			{Config: `resource "rauthy_group" "devops" { name = "tf-acc-x-tf-acc-ops" }`},
+		},
+	})
+}
