@@ -99,6 +99,14 @@ func (r *pamHostResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
+	plan.ID = types.StringValue(created.ID)
+	plan.Secret = types.StringNull()
+	saved := plan
+	saved.IPs = stringsToSet([]string{})
+	saved.Aliases = stringsToSet([]string{})
+	saved.Notes = types.StringNull()
+	resp.Diagnostics.Append(resp.State.Set(ctx, &saved)...)
+
 	if isSet(plan.IPs) || isSet(plan.Aliases) || isSet(plan.Notes) {
 		r.applyPlan(ctx, created.ID, &plan, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
@@ -140,11 +148,18 @@ func (r *pamHostResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
+	var prior pamHostResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &prior)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	plan.Secret = prior.Secret
 	id := plan.ID.ValueString()
 	r.applyPlan(ctx, id, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	r.refresh(ctx, id, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return

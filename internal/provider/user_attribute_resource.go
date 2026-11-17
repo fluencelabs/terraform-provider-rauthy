@@ -229,6 +229,8 @@ func (r *userAttributeResource) Update(
 		return
 	}
 
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+
 	// The PUT response is not to be trusted (the spec declares none at all), so
 	// the stored attribute is read back to learn what Rauthy actually kept.
 	updated, err := r.api.GetUserAttr(ctx, name)

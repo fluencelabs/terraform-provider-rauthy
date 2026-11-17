@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -97,7 +98,7 @@ func (r *clientImageResource) Create(
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.put(ctx, &plan, &resp.Diagnostics)
+	r.put(ctx, &plan, &resp.State, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -116,7 +117,7 @@ func (r *clientImageResource) Update(
 	}
 	// The upload is a wholesale replacement, so there is nothing to clean up
 	// first: a PUT over an existing image discards the old one.
-	r.put(ctx, &plan, &resp.Diagnostics)
+	r.put(ctx, &plan, &resp.State, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -166,7 +167,12 @@ func (r *clientImageResource) Delete(ctx context.Context, req resource.DeleteReq
 // reads the image back afterwards because the only durable fact Rauthy exposes
 // about a stored image is its bytes — there is no id, timestamp or checksum on
 // any response — so the hash has to be computed from a download.
-func (r *clientImageResource) put(ctx context.Context, plan *clientImageResourceModel, diags *diag.Diagnostics) {
+func (r *clientImageResource) put(
+	ctx context.Context,
+	plan *clientImageResourceModel,
+	state *tfsdk.State,
+	diags *diag.Diagnostics,
+) {
 	id := plan.ClientID.ValueString()
 
 	data, err := base64.StdEncoding.DecodeString(plan.ContentBase64.ValueString())
@@ -198,6 +204,10 @@ func (r *clientImageResource) put(ctx context.Context, plan *clientImageResource
 		diags.AddError("Could not upload the "+string(r.kind)+" of Rauthy client "+id, putErr.Error())
 		return
 	}
+
+	plan.ContentType = types.StringValue(contentType)
+	plan.StoredHash = types.StringNull()
+	diags.Append(state.Set(ctx, plan)...)
 
 	stored, err := r.api.GetClientImage(ctx, id, r.kind)
 	if err != nil {

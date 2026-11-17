@@ -104,6 +104,14 @@ func (r *pamUserResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
+	plan.ID = types.Int64Value(created.ID)
+	saved := plan
+	saved.GID = types.Int64Value(created.GID)
+	saved.Shell = types.StringValue(created.Shell)
+	saved.HomeDir = types.StringValue(created.HomeDir)
+	saved.Groups = types.SetNull(types.ObjectType{AttrTypes: pamUserGroupAttrTypes})
+	resp.Diagnostics.Append(resp.State.Set(ctx, &saved)...)
+
 	if pamUserNeedsUpdate(&plan) {
 		r.applyPlan(ctx, created.ID, &plan, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
@@ -157,6 +165,7 @@ func (r *pamUserResource) Update(ctx context.Context, req resource.UpdateRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	r.refresh(ctx, uid, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return

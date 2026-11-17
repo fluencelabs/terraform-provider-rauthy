@@ -116,7 +116,9 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	// PUT that follows fails; otherwise the next apply tries to create the
 	// same email again and Rauthy rejects it as a duplicate.
 	plan.ID = types.StringValue(created.ID)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), created.ID)...)
+	saved := plan
+	applyUser(&saved, created)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &saved)...)
 
 	password := writeOnlyString(ctx, req.Config, path.Root("password_wo"), &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {

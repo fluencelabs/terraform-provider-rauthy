@@ -116,6 +116,11 @@ func (r *clientResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	saved := plan
+	applyResponse(ctx, &saved, created, &resp.Diagnostics)
+	saved.Secret = types.StringNull()
+	resp.Diagnostics.Append(resp.State.Set(ctx, &saved)...)
+
 	// Attributes the practitioner left unset are unknown in the plan; Rauthy
 	// picked defaults for them during the POST, so take those.
 	fillUnknownFromResponse(ctx, &plan, created, &resp.Diagnostics)
@@ -150,6 +155,8 @@ func (r *clientResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	applyResponse(ctx, &plan, updated, &resp.Diagnostics)
+	plan.Secret = types.StringNull()
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	r.readSecretInto(ctx, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -212,6 +219,13 @@ func (r *clientResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 	applyResponse(ctx, &plan, updated, &resp.Diagnostics)
+	plan.Secret = state.Secret
+	if !plan.Confidential.ValueBool() {
+		plan.Secret = types.StringNull()
+	}
+	saved := plan
+	saved.SecretRotationTrigger = state.SecretRotationTrigger
+	resp.Diagnostics.Append(resp.State.Set(ctx, &saved)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
