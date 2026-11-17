@@ -101,6 +101,9 @@ func testClientScimFailure(t *testing.T, create, readFails, confidential bool) {
 		state, diags = resp.State, resp.Diagnostics
 	}
 	checkScimDiagnostic(t, diags)
+	if got := len(f.bodies("PUT /clients/example-app")); got != 1 {
+		t.Errorf("PUT attempts = %d, want 1 after a stored configuration fails SCIM sync", got)
+	}
 	var got clientResourceModel
 	if d := state.Get(ctx, &got); d.HasError() {
 		t.Fatal(d)
