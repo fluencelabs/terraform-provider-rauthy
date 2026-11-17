@@ -149,8 +149,9 @@ func (r *clientImageResource) Read(ctx context.Context, req resource.ReadRequest
 	hash := types.StringValue(hashBytes(got.Data))
 	if r.kind == rauthy.ImageLogo && !state.StoredHash.IsNull() && !state.StoredHash.IsUnknown() &&
 		!state.StoredHash.Equal(hash) {
-		resp.State.RemoveResource(ctx)
-		return
+		// Keep ownership so destroy can still delete a replacement logo.
+		// Clearing the upload makes a managed logo converge on the next apply.
+		state.ContentBase64 = types.StringNull()
 	}
 	state.StoredHash = hash
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

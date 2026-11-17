@@ -209,6 +209,15 @@ func (r *pamHostResource) applyPlan(
 		return
 	}
 
+	// These are the concrete values sent by the full-replacement PUT.
+	// Retain them even if the follow-up refresh cannot read the host.
+	if plan.IPs.IsUnknown() || plan.IPs.IsNull() {
+		plan.IPs = stringsToSet(body.IPs)
+	}
+	if plan.Aliases.IsUnknown() || plan.Aliases.IsNull() {
+		plan.Aliases = stringsToSet(body.Aliases)
+	}
+
 	if updateErr := r.api.UpdatePamHost(ctx, id, body); updateErr != nil {
 		diags.AddError("Could not update Rauthy PAM host "+id, updateErr.Error())
 	}

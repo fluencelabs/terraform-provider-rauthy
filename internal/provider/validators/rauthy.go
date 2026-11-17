@@ -103,10 +103,7 @@ func ContactSet() validator.Set {
 
 // ScopeSet validates every element of a set as a scope name.
 func ScopeSet() validator.Set {
-	return setvalidator.ValueStringsAre(
-		stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String()),
-		noComma(),
-	)
+	return setvalidator.ValueStringsAre(ScopeName())
 }
 
 // GroupPrefix validates a group prefix against RE_GROUPS.
@@ -155,10 +152,7 @@ func CacheCurrentHours() validator.Int64 {
 // RoleName validates a role name against RE_ROLES_SCOPES, the same pattern
 // Rauthy applies to scopes.
 func RoleName() validator.String {
-	return stringvalidator.All(
-		stringvalidator.RegexMatches(rauthy.ScopePattern(), "must match "+rauthy.ScopePattern().String()),
-		noComma(),
-	)
+	return ScopeName()
 }
 
 // GroupName validates a group name against RE_GROUPS.

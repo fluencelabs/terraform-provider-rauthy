@@ -31,6 +31,13 @@ func TestJSONString_SemanticEquals(t *testing.T) {
 		"different value":                 {`{"a":1}`, `{"a":2}`, false},
 		"array order is not free":         {`[1,2]`, `[2,1]`, false},
 		"scalar string":                   {`"engineering"`, `  "engineering" `, true},
+		"rounded fraction":                {`1.0000000000000001`, `1.0`, false},
+		"nested rounded fraction":         {`{"n":[0.10000000000000001]}`, `{"n":[0.1]}`, false},
+		"different fractions":             {`1.0000000000000001`, `1.0000000000000002`, false},
+		"serde scaling":                   {`1.2345678901234567`, `1.2345678901234567`, true},
+		"integer and exponent":            {`100`, `1e2`, true},
+		"u64 preserved":                   {`18446744073709551615`, `18446744073709551614`, false},
+		"i64 preserved":                   {`-9223372036854775808`, `-9223372036854775807`, false},
 		// Neither side parses, so this falls back to byte equality rather than
 		// silently calling two broken values equal.
 		"both unparseable and equal":   {`not json`, `not json`, true},
