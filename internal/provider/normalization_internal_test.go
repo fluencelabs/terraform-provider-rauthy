@@ -116,15 +116,21 @@ func TestNormalization_IPv6(t *testing.T) {
 }
 
 // Rauthy lowercases emails with Rust's to_lowercase; the expectations are
-// Rust's output.
+// the output of rustc 1.98.1.
 func TestRustLowercase(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]string{
-		"Cold@Example.COM": "cold@example.com",
-		"cold@İ.example":   "cold@i̇.example",
-		"ΟΔΟΣ@example.com": "οδος@example.com",
-		"ΣΑ@example.com":   "σα@example.com",
-		"Σ@example.com":    "σ@example.com",
+		"Cold@Example.COM":  "cold@example.com",
+		"cold@İ.example":    "cold@i̇.example",
+		"ΟΔΟΣ@example.com":  "οδος@example.com",
+		"ΣΑ@example.com":    "σα@example.com",
+		"Σ@example.com":     "σ@example.com",
+		"cold@ⅠΣ.example":   "cold@ⅰσ.example",
+		"cold@ΑΣ·Α.example": "cold@ασ·α.example",
+		"cold@ªΣ.example":   "cold@ªσ.example",
+		"cold@ΑΣ’Α.example": "cold@ασ’α.example",
+		"cold@ⅠΣ-x.example": "cold@ⅰς-x.example",
+		"cold@ªΣ-x.example": "cold@ªς-x.example",
 	} {
 		if got := rustLowercase(in); got != want {
 			t.Errorf("rustLowercase(%q) = %q, want %q", in, got, want)
