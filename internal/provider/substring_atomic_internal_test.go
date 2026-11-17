@@ -227,14 +227,26 @@ func TestUserAttributeConcurrentScopeCreation(t *testing.T) {
 	}
 	f.answer("GET /users/attr", map[string]any{"values": []rauthy.UserAttrResponse{{Name: "dev"}}})
 	f.answer("DELETE /users/attr/dev", nil)
-	scope := rauthy.ScopeResponse{ID: "s", Name: "mapped", AttrIncludeAccess: []string{"developer"}}
+	var scope rauthy.ScopeResponse
 	postStarted := make(chan struct{})
 	releasePost := make(chan struct{})
 	created := make(chan struct{})
 	listed := make(chan struct{})
-	f.handle("POST /scopes", func(w http.ResponseWriter, _ *http.Request) {
+	f.handle("POST /scopes", func(w http.ResponseWriter, r *http.Request) {
+		var req rauthy.ScopeRequest
+		if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
+			http.Error(w, decodeErr.Error(), http.StatusBadRequest)
+			return
+		}
 		close(postStarted)
 		<-releasePost
+		scope = rauthy.ScopeResponse{
+			ID:                "s",
+			Name:              req.Scope,
+			AttrIncludeAccess: req.AttrIncludeAccess,
+			AttrIncludeID:     req.AttrIncludeID,
+			ClaimsAtRoot:      req.ClaimsAtRoot,
+		}
 		close(created)
 		_ = json.NewEncoder(w).Encode(scope)
 	})
@@ -284,5 +296,9 @@ func TestUserAttributeConcurrentScopeCreation(t *testing.T) {
 	}
 	if !deleteResp.Diagnostics.HasError() || len(f.bodies("DELETE /users/attr/dev")) != 0 {
 		t.Fatalf("deletion missed the new scope mapping: %v", deleteResp.Diagnostics)
+	}
+	<-created
+	if len(scope.AttrIncludeAccess) != 1 || scope.AttrIncludeAccess[0] != "developer" {
+		t.Fatalf("scope creation sent unexpected access mappings: %v", scope.AttrIncludeAccess)
 	}
 }
