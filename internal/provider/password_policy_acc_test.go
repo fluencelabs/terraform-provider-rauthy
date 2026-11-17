@@ -98,6 +98,7 @@ resource "rauthy_password_policy" "test" {
 				Config: strict,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkPassword(true),
+					checkPasswordReuse(ctx, c, user, true),
 					resource.TestCheckResourceAttr("rauthy_password_policy.test", "length_min", "12"),
 					resource.TestCheckResourceAttr("rauthy_password_policy.test", "length_max", "128"),
 					resource.TestCheckResourceAttr("rauthy_password_policy.test", "include_special", "1"),
@@ -113,6 +114,7 @@ resource "rauthy_password_policy" "test" {
 				Config: relaxed,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkPassword(false),
+					checkPasswordReuse(ctx, c, user, false),
 					resource.TestCheckResourceAttr("rauthy_password_policy.test", "length_min", "8"),
 					resource.TestCheckResourceAttr("rauthy_password_policy.test", "length_max", "64"),
 					resource.TestCheckNoResourceAttr("rauthy_password_policy.test", "include_special"),
@@ -136,4 +138,44 @@ resource "rauthy_password_policy" "test" {
 			},
 		},
 	})
+}
+
+// checkPasswordReuse reads not_recently_used back from Rauthy through its
+// effect, since GET /password_policy takes only a session: setting the first
+// password again after a second one is refused while the rule of 3 holds and
+// accepted once the rule is gone.
+func checkPasswordReuse(
+	ctx context.Context,
+	c *rauthy.Client,
+	user *rauthy.UserResponse,
+	rejected bool,
+) resource.TestCheckFunc {
+	setPassword := func(password string) error {
+		_, err := c.UpdateUser(ctx, user.ID, rauthy.UpdateUserRequest{
+			Email: user.Email, GivenName: user.GivenName, Roles: user.Roles, Enabled: true,
+			Password: new(rauthy.NewSecret(password)),
+		})
+		return err
+	}
+	return func(_ *terraform.State) error {
+		const first, second = "Reused-Pass-1a!", "Fresher-Pass-2b!"
+		for _, p := range []string{first, second} {
+			if err := setPassword(p); err != nil {
+				return fmt.Errorf("set a fresh password: %w", err)
+			}
+		}
+		err := setPassword(first)
+		if !rejected {
+			return err
+		}
+		if err == nil {
+			return errors.New("recently used password accepted, want not_recently_used = 3 to refuse it")
+		}
+		var apiErr *rauthy.APIError
+		if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusBadRequest ||
+			!strings.Contains(apiErr.Message, "last 3 used passwords") {
+			return fmt.Errorf("recently used password: want a not_recently_used = 3 rejection: %w", err)
+		}
+		return nil
+	}
 }
