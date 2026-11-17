@@ -4,7 +4,8 @@ description: |-
     Manages a custom user attribute definition in Rauthy.
   An attribute has to be defined on the instance before anything can reference it: rauthy_scope.attr_include_access and rauthy_scope.attr_include_id are filtered against the known definitions and unknown names are dropped silently, so a scope that maps an attribute should depend on the rauthy_user_attribute that defines it.
   Rauthy has no identifier for an attribute other than its name, so id mirrors name, and changing the name replaces the attribute rather than renaming it in place.
-  Requires these API key rights: UserAttributes read, create, update, delete.
+  Deletion and name replacement are refused when Rauthy would corrupt another attribute name in a scope mapping by substring. Remove the conflicting mapping in a separate apply first.
+  Requires these API key rights: UserAttributes read, create, update, delete; Scopes read.
 ---
 
 # rauthy_user_attribute (Resource)
@@ -15,7 +16,9 @@ An attribute has to be defined on the instance before anything can reference it:
 
 Rauthy has no identifier for an attribute other than its name, so `id` mirrors `name`, and changing the name replaces the attribute rather than renaming it in place.
 
-Requires these API key rights: `UserAttributes` read, create, update, delete.
+Deletion and name replacement are refused when Rauthy would corrupt another attribute name in a scope mapping by substring. Remove the conflicting mapping in a separate apply first.
+
+Requires these API key rights: `UserAttributes` read, create, update, delete; `Scopes` read.
 
 ## Example Usage
 

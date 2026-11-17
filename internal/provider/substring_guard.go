@@ -3,7 +3,7 @@ package provider
 import "strings"
 
 // Rauthy edits the comma-joined scope lists of clients and role and group
-// assignments of users by substring. A rename replaces every occurrence of the
+// assignments of users, and user attribute names in scope mappings by substring. A rename replaces every occurrence of the
 // old name, so renaming "ro" also rewrites "profile". A deletion cuts ",name" out of
 // the string, so deleting "dev" also cuts the start of a later "developer";
 // when the string starts with the name, it cuts "name," instead, so deleting
