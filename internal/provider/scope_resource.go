@@ -127,8 +127,10 @@ func (r *scopeResource) ImportState(
 }
 
 func (r *scopeResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	substringMutationMu.Lock()
-	defer substringMutationMu.Unlock()
+	if !lockSubstringMutation(ctx, &resp.Diagnostics) {
+		return
+	}
+	defer unlockSubstringMutation()
 
 	var plan scopeResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -175,8 +177,10 @@ func (r *scopeResource) Read(ctx context.Context, req resource.ReadRequest, resp
 }
 
 func (r *scopeResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	substringMutationMu.Lock()
-	defer substringMutationMu.Unlock()
+	if !lockSubstringMutation(ctx, &resp.Diagnostics) {
+		return
+	}
+	defer unlockSubstringMutation()
 
 	var plan scopeResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -217,8 +221,10 @@ func (r *scopeResource) Update(ctx context.Context, req resource.UpdateRequest, 
 }
 
 func (r *scopeResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	substringMutationMu.Lock()
-	defer substringMutationMu.Unlock()
+	if !lockSubstringMutation(ctx, &resp.Diagnostics) {
+		return
+	}
+	defer unlockSubstringMutation()
 
 	var state scopeResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)

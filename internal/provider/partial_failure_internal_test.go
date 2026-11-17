@@ -127,7 +127,11 @@ func TestPartialFollowups(t *testing.T) {
 			DefaultValue: newJSONString(`42`),
 		}
 		resp := resource.UpdateResponse{State: emptyState(t, r)}
-		r.Update(ctx, resource.UpdateRequest{Plan: resourcePlan(t, r, &plan)}, &resp)
+		prior := plan
+		prior.DefaultValue = nullJSONString()
+		r.Update(ctx, resource.UpdateRequest{
+			Plan: resourcePlan(t, r, &plan), State: resourceState(t, r, &prior),
+		}, &resp)
 		var got userAttributeResourceModel
 		d := resp.State.Get(ctx, &got)
 		if !resp.Diagnostics.HasError() || d.HasError() || !got.DefaultValue.Equal(plan.DefaultValue) {

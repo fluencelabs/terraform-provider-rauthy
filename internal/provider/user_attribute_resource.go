@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -12,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -84,8 +84,7 @@ func (r *userAttributeResource) Schema(
 					"appears under in a user's `attributes` and in the tokens a mapping scope issues. " +
 					"Changing it replaces the attribute, because Rauthy's in-place rename leaks the old " +
 					"name — see the note on UpdateUserAttr in the client.",
-				Validators:    []validator.String{validators.UserAttrConfigName()},
-				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				Validators: []validator.String{validators.UserAttrConfigName()},
 			},
 			"desc": schema.StringAttribute{
 				Optional: true,
@@ -187,8 +186,10 @@ func (r *userAttributeResource) Create(
 	req resource.CreateRequest,
 	resp *resource.CreateResponse,
 ) {
-	substringMutationMu.Lock()
-	defer substringMutationMu.Unlock()
+	if !lockSubstringMutation(ctx, &resp.Diagnostics) {
+		return
+	}
+	defer unlockSubstringMutation()
 
 	var plan userAttributeResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -234,8 +235,10 @@ func (r *userAttributeResource) Update(
 	req resource.UpdateRequest,
 	resp *resource.UpdateResponse,
 ) {
-	substringMutationMu.Lock()
-	defer substringMutationMu.Unlock()
+	if !lockSubstringMutation(ctx, &resp.Diagnostics) {
+		return
+	}
+	defer unlockSubstringMutation()
 
 	var plan userAttributeResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -243,9 +246,19 @@ func (r *userAttributeResource) Update(
 		return
 	}
 
-	// The name never changes here — it forces a replacement — so the attribute
-	// is addressed by the same name the body carries.
-	name := plan.Name.ValueString()
+	var priorID types.String
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("id"), &priorID)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	// A name unknown at plan time must resolve to the existing key for an update.
+	if plan.Name.IsUnknown() || plan.Name.IsNull() || !plan.Name.Equal(priorID) {
+		resp.Diagnostics.AddAttributeError(path.Root("name"), "User attribute name requires replacement",
+			"Use a name known during planning so Terraform can plan the replacement.")
+		return
+	}
+
+	name := priorID.ValueString()
 	if err := r.api.UpdateUserAttr(ctx, name, buildUserAttrRequest(&plan)); err != nil {
 		resp.Diagnostics.AddError("Could not update Rauthy user attribute "+name, err.Error())
 		return
@@ -286,46 +299,51 @@ func (r *userAttributeResource) ModifyPlan(
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		if !plan.Name.IsUnknown() && plan.Name.Equal(state.ID) {
+		if plan.Name.IsUnknown() || plan.Name.Equal(state.ID) {
 			return
 		}
+		resp.RequiresReplace = append(resp.RequiresReplace, path.Root("name"))
 	}
 	r.checkDeletion(ctx, state.ID.ValueString(), &resp.Diagnostics)
 }
 
-func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) bool {
-	current, err := r.api.GetUserAttr(ctx, key)
-	if rauthy.IsNotFound(err) {
-		return false
-	}
+func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) {
+	attrs, err := r.api.ListUserAttrs(ctx)
 	if err != nil {
-		diags.AddError("Could not read Rauthy user attribute before checking its deletion", err.Error())
-		return false
+		diags.AddError("Could not list Rauthy user attributes before checking deletion", err.Error())
+		return
+	}
+	if !slices.ContainsFunc(attrs, func(a rauthy.UserAttrResponse) bool { return a.Name == key }) {
+		diags.AddError(
+			"User attribute not found in Rauthy's list",
+			fmt.Sprintf("Rauthy did not list attribute %q. Retry if the list is stale. "+
+				"If it was renamed outside Terraform, refresh state and import the attribute under its new name.", key),
+		)
+		return
 	}
 	scopes, err := r.api.ListScopes(ctx)
 	if err != nil {
 		diags.AddError("Could not list Rauthy scopes before checking user attribute deletion", err.Error())
-		return false
+		return
 	}
 	// Unlike role/group deletion, attribute deletion removes every occurrence,
 	// including an interior substring, from both scope mapping lists.
 	for _, scope := range scopes {
 		for _, names := range [][]string{scope.AttrIncludeAccess, scope.AttrIncludeID} {
-			if other, ok := containingName(current.Name, names); ok {
+			if other, ok := containingName(key, names); ok {
 				diags.AddError(
 					"Unsafe user attribute deletion",
 					fmt.Sprintf(
 						"Rauthy removes attribute %q from scope mappings by substring, so it would also corrupt %q in scope %q. Remove that mapping in a separate apply first, then retry.",
-						current.Name,
+						key,
 						other,
 						scope.Name,
 					),
 				)
-				return false
+				return
 			}
 		}
 	}
-	return true
 }
 
 func (r *userAttributeResource) Delete(
@@ -333,8 +351,10 @@ func (r *userAttributeResource) Delete(
 	req resource.DeleteRequest,
 	resp *resource.DeleteResponse,
 ) {
-	substringMutationMu.Lock()
-	defer substringMutationMu.Unlock()
+	if !lockSubstringMutation(ctx, &resp.Diagnostics) {
+		return
+	}
+	defer unlockSubstringMutation()
 
 	var state userAttributeResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -343,10 +363,8 @@ func (r *userAttributeResource) Delete(
 	}
 
 	name := state.ID.ValueString()
-	if !r.checkDeletion(ctx, name, &resp.Diagnostics) {
-		if !resp.Diagnostics.HasError() {
-			resp.State.RemoveResource(ctx)
-		}
+	r.checkDeletion(ctx, name, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	if err := r.api.DeleteUserAttr(ctx, name); err != nil && !rauthy.IsNotFound(err) {

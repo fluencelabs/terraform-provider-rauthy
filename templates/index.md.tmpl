@@ -120,6 +120,7 @@ It needs exactly these access rights:
 | `Clients` | read, create, update, delete | the whole `rauthy_client` lifecycle                           |
 | `Secrets` | read                         | reading a confidential client's secret on every refresh       |
 | `Secrets` | update                       | rotating a client secret                                      |
+| `Scopes`  | read                         | checking scope mappings before deleting or replacing a user attribute by name |
 
 A key missing `Secrets:read` fails on every read of a confidential client; the provider names the
 missing right rather than reporting a bare 403.

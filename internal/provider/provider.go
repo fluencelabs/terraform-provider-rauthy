@@ -70,7 +70,8 @@ func (p *rauthyProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 					"`rauthy_client_logo` and `rauthy_client_favicon`; `Scopes` read, create, update, delete for `rauthy_scope`; `Roles` and `Groups` " +
 					"read, create, update, delete for `rauthy_role` and `rauthy_group`; " +
 					"`Users` read, create, update, delete for `rauthy_user`; " +
-					"`UserAttributes` read, create, update, delete for `rauthy_user_attribute`; " +
+					"`UserAttributes` read, create, update, delete for `rauthy_user_attribute`, " +
+					"plus `Scopes:read` for deletion and name replacement; " +
 					"`AuthProviders` read, create, update, delete for `rauthy_auth_provider` " +
 					"(that access group exists only from Rauthy 0.36 onwards); " +
 					"`ApiKeys` read, create, update, delete for `rauthy_api_key` " +
