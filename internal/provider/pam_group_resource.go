@@ -2,8 +2,11 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -196,10 +199,12 @@ func (r *pamGroupResource) Delete(ctx context.Context, req resource.DeleteReques
 	// back as a 400 carrying the raw SQLite message ("FOREIGN KEY constraint
 	// failed"). That is unhelpful enough to be worth translating.
 	if err := r.api.DeletePamGroup(ctx, gid); err != nil && !rauthy.IsNotFound(err) {
-		resp.Diagnostics.AddError(
-			"Could not delete Rauthy PAM group "+strconv.FormatInt(gid, 10),
-			err.Error()+"\n\nRauthy refuses to delete a group that a host still points at or that a user is "+
-				"still a member of; the error above is the database's own. Remove those references first.",
-		)
+		detail := err.Error()
+		var apiErr *rauthy.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest &&
+			strings.Contains(detail, "FOREIGN KEY constraint failed") {
+			detail += "\n\nRauthy refuses to delete a group that a host still points at or that a user is still a member of. Remove those references first."
+		}
+		resp.Diagnostics.AddError("Could not delete Rauthy PAM group "+strconv.FormatInt(gid, 10), detail)
 	}
 }

@@ -129,12 +129,22 @@ func (r *pamHostResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	id := state.ID.ValueString()
-	if _, err := r.api.GetPamHost(ctx, id); rauthy.IsNotFound(err) {
+	got, err := r.api.GetPamHost(ctx, id)
+	if rauthy.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	r.refresh(ctx, id, &state, &resp.Diagnostics)
+	if err != nil {
+		resp.Diagnostics.AddError("Could not read Rauthy PAM host "+id, err.Error())
+		return
+	}
+	secret, err := r.api.GetPamHostSecret(ctx, id)
+	if err != nil {
+		resp.Diagnostics.AddError("Could not read the secret of Rauthy PAM host "+id, err.Error())
+		return
+	}
+	resp.Diagnostics.Append(applyPamHostDetails(ctx, &state, got, secret.Secret)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
