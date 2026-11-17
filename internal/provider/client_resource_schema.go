@@ -220,7 +220,8 @@ func clientBehaviourAttributes() map[string]schema.Attribute {
 				"`, `",
 			) + "`. Rauthy checks the method a login uses against this list, for public clients too, so " +
 				"a public client must include `S256`; the provider refuses one that does not. Left out on a " +
-				"public client, it is planned as `[\"S256\"]`." + optionalComputedNote,
+				"public client, it is planned as `[\"S256\"]` unless the last applied value already includes " +
+				"`S256`." + optionalComputedNote,
 			Validators: validators.ChallengeSet(),
 			PlanModifiers: []planmodifier.Set{
 				setplanmodifier.UseStateForUnknown(),

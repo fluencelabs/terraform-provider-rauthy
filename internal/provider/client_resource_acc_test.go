@@ -321,3 +321,34 @@ resource "rauthy_client" "c" {
 		},
 	})
 }
+
+// The same when confidential is only known at apply: the plan leaves
+// challenges open, and the final plan picks S256.
+func TestAccClient_publicPlansS256WhenConfidentialIsUnknown(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(confidential, challenges string) string {
+		return `
+resource "terraform_data" "conf" { input = ` + confidential + ` }
+resource "rauthy_client" "u" {
+  id            = "tf-acc-unknown-conf"
+  confidential  = terraform_data.conf.output
+  redirect_uris = ["https://spa.example.com/callback"]
+  ` + challenges + `
+}
+`
+	}
+	check := resource.TestCheckTypeSetElemAttr("rauthy_client.u", "challenges.*", "S256")
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientDestroyed,
+		Steps: []resource.TestStep{
+			{Config: config("true", `challenges = ["plain"]`)},
+			{Config: config("false", ""), Check: check},
+		},
+	})
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		CheckDestroy:             testAccCheckClientDestroyed,
+		Steps:                    []resource.TestStep{{Config: config("false", ""), Check: check}},
+	})
+}

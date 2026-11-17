@@ -43,7 +43,7 @@ data "rauthy_client" "billing" {
 - `allowed_origins` (Set of String) Additional CORS origins, as `scheme://host[:port]` with no path.
 - `auth_code_lifetime` (Number) Lifetime of an authorization code in seconds.
 - `backchannel_logout_uri` (String) OIDC back-channel logout endpoint of the application.
-- `challenges` (Set of String) Accepted PKCE challenge methods: `plain`, `S256`. Rauthy checks the method a login uses against this list, for public clients too.
+- `challenges` (Set of String) Accepted PKCE challenge methods: `plain`, `S256`. Rauthy checks the method a login uses against this list, for public clients too; with no list, it requires no PKCE at all.
 - `client_uri` (String) Informational URI of the application.
 - `confidential` (Boolean) Whether the client authenticates with a secret. A public client (`false`) has no secret; Rauthy checks its PKCE method against `challenges`.
 - `contacts` (Set of String) Contact addresses for the application's maintainers.

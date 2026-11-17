@@ -435,7 +435,14 @@ func (r *clientResource) planPublicS256(
 	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("confidential"), &confidential)...)
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("challenges"), &configured)...)
 	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("challenges"), &planned)...)
-	if resp.Diagnostics.HasError() || confidential.IsUnknown() || confidential.ValueBool() || !configured.IsNull() {
+	if resp.Diagnostics.HasError() || !configured.IsNull() || (!confidential.IsUnknown() && confidential.ValueBool()) {
+		return
+	}
+	if confidential.IsUnknown() {
+		// Known at apply only: leave the choice to the final plan, which
+		// would otherwise contradict a value carried over from state.
+		resp.Diagnostics.Append(
+			resp.Plan.SetAttribute(ctx, path.Root("challenges"), types.SetUnknown(types.StringType))...)
 		return
 	}
 	if !planned.IsUnknown() && !planned.IsNull() && hasS256(planned) {

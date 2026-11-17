@@ -174,7 +174,8 @@ func clientDataSourceCoreAttributes() map[string]schema.Attribute {
 				rauthy.ChallengeMethods(),
 				"`, `",
 			) + "`. Rauthy checks " +
-				"the method a login uses against this list, for public clients too.",
+				"the method a login uses against this list, for public clients too; with no list, it " +
+				"requires no PKCE at all.",
 		},
 		"force_mfa": schema.BoolAttribute{
 			Computed:            true,
