@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -145,7 +146,14 @@ func (r *pamGroupResource) Create(ctx context.Context, req resource.CreateReques
 		Typ:  plan.Typ.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Could not create Rauthy PAM group "+plan.Name.ValueString(), err.Error())
+		detail := err.Error()
+		// Rauthy inserts with ON CONFLICT (name) DO NOTHING, so a taken name
+		// comes back as a 404 "no rows returned".
+		if rauthy.IsNotFound(err) {
+			detail += "\n\nA PAM group with this name already exists. Group names are unique: when replacing a " +
+				"group with create_before_destroy, change its name in the same apply."
+		}
+		resp.Diagnostics.AddError("Could not create Rauthy PAM group "+plan.Name.ValueString(), detail)
 		return
 	}
 
@@ -204,7 +212,8 @@ func (r *pamGroupResource) Delete(ctx context.Context, req resource.DeleteReques
 	if err := r.api.DeletePamGroup(ctx, gid); err != nil && !rauthy.IsNotFound(err) {
 		detail := err.Error()
 		var apiErr *rauthy.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest {
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest &&
+			(strings.Contains(detail, "assigned hosts") || strings.Contains(detail, "FOREIGN KEY constraint failed")) {
 			detail += "\n\nRauthy refuses to delete a group a host still points at. Move the host to another " +
 				"group first, or, when the group is being replaced, set lifecycle { create_before_destroy = true } on it."
 		}

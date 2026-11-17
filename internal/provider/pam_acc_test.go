@@ -310,3 +310,29 @@ resource "rauthy_pam_host" "test" {
 		},
 	})
 }
+
+// A change of typ alone with create_before_destroy meets the unique name; the
+// error says so, and changing the name too works.
+func TestAccPamGroup_typeChangeNeedsNewName(t *testing.T) {
+	factories := acctest.Setup(t)
+	config := func(name, typ string) string {
+		return fmt.Sprintf(`
+resource "rauthy_pam_group" "g" {
+  name = %q
+  typ  = %q
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+`, name, typ)
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{Config: config("tfacctyp", "host")},
+			{Config: config("tfacctyp", "generic"), ExpectError: regexp.MustCompile("already exists")},
+			{Config: config("tfacctyp2", "generic")},
+		},
+	})
+}
