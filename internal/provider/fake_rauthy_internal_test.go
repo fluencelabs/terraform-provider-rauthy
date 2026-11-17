@@ -50,7 +50,7 @@ func newFakeRauthy(t *testing.T) (*fakeRauthy, *rauthy.Client) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c, err := rauthy.New(srv.URL, "test$key", rauthy.WithRetryPolicy(4, 0, 0))
+	c, err := newRauthyClient(srv.URL, "test$key", rauthy.WithRetryPolicy(4, 0, 0))
 	if err != nil {
 		t.Fatalf("rauthy.New: %v", err)
 	}

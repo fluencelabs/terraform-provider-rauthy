@@ -15,7 +15,7 @@ func TestAccUserAttribute_externalRename(t *testing.T) {
 	if os.Getenv("TF_ACC") != "1" {
 		t.Skip("set TF_ACC=1 to run acceptance tests")
 	}
-	api, err := rauthy.New(os.Getenv("RAUTHY_URL"), os.Getenv("RAUTHY_API_KEY"))
+	api, err := newRauthyClient(os.Getenv("RAUTHY_URL"), os.Getenv("RAUTHY_API_KEY"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,8 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-
-	"github.com/fluencelabs/rauthy-go"
 )
 
 // Environment variables used as fallbacks for the provider configuration.
@@ -146,7 +144,7 @@ func (p *rauthyProvider) Configure(
 		return
 	}
 
-	c, err := rauthy.New(url, apiKey)
+	c, err := newRauthyClient(url, apiKey)
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid Rauthy provider configuration", err.Error())
 		return

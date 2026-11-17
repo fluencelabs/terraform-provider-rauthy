@@ -310,21 +310,30 @@ func (r *userAttributeResource) ModifyPlan(
 }
 
 func (r *userAttributeResource) listUserAttrs(ctx context.Context) ([]rauthy.UserAttrResponse, error) {
-	attrs, err := r.api.ListUserAttrs(ctx)
+	var body bytes.Buffer
+	attrs, err := r.api.ListUserAttrs(context.WithValue(ctx, userAttrListBodyKey{}, &body))
 	if err != nil {
 		return nil, err
 	}
-	// The SDK leaves values nil for an absent array and decodes null entries
-	// into structs with empty names.
-	if attrs == nil {
-		return nil, errors.New("response is missing the values array")
+	// The SDK decodes null entries and entries with an empty name into the
+	// same Go value. Check the original array before filtering empty names.
+	var response struct {
+		Values []*json.RawMessage `json:"values"`
 	}
-	for i, attr := range attrs {
-		if attr.Name == "" {
-			return nil, fmt.Errorf("response has an unnamed entry at values[%d]", i)
+	if body.Len() != 0 {
+		if decodeErr := json.Unmarshal(body.Bytes(), &response); decodeErr != nil {
+			return nil, fmt.Errorf("decode response values: %w", decodeErr)
 		}
 	}
-	return attrs, nil
+	if response.Values == nil {
+		return nil, errors.New("response is missing the values array")
+	}
+	for i, entry := range response.Values {
+		if entry == nil {
+			return nil, fmt.Errorf("response has a null entry at values[%d]", i)
+		}
+	}
+	return slices.DeleteFunc(attrs, func(attr rauthy.UserAttrResponse) bool { return attr.Name == "" }), nil
 }
 
 func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) {

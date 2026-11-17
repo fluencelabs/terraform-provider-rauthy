@@ -32,6 +32,17 @@ func TestUserAttributeReadList(t *testing.T) {
 			attrs:   []rauthy.UserAttrResponse{{Name: "developer"}, {Name: "dev", UserEditable: true}},
 			present: true,
 		},
+		{
+			name:    "unnamed entry before target",
+			attrs:   []rauthy.UserAttrResponse{{Name: ""}, {Name: "dev", UserEditable: true}},
+			present: true,
+		},
+		{
+			name:    "unnamed entry after target",
+			attrs:   []rauthy.UserAttrResponse{{Name: "dev", UserEditable: true}, {Name: ""}},
+			present: true,
+		},
+		{name: "only unnamed entry", attrs: []rauthy.UserAttrResponse{{Name: ""}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, api := newFakeRauthy(t)
@@ -76,6 +87,7 @@ func TestUserAttributeMalformedList(t *testing.T) {
 		{"missing values", `{}`, http.StatusOK},
 		{"null values", `{"values":null}`, http.StatusOK},
 		{"null entry", `{"values":[null]}`, http.StatusOK},
+		{"null entry with target", `{"values":[{"name":"dev"},null]}`, http.StatusOK},
 		{"no content", "", http.StatusNoContent},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

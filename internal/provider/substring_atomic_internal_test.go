@@ -99,7 +99,14 @@ func waitForMutation(t *testing.T, frame string, done, reached <-chan struct{}) 
 
 func TestRoleDeleteHoldsSubstringLock(t *testing.T) {
 	f, api := newFakeRauthy(t)
-	f.answer("GET /roles", []rauthy.RoleResponse{{ID: "r", Name: "dev"}})
+	listStarted := make(chan struct{})
+	completeList := make(chan struct{})
+	f.handle("GET /roles", func(w http.ResponseWriter, _ *http.Request) {
+		snapshot := []rauthy.RoleResponse{{ID: "r", Name: "dev"}}
+		close(listStarted)
+		<-completeList
+		_ = json.NewEncoder(w).Encode(snapshot)
+	})
 	deleteStarted := make(chan struct{})
 	completeDelete := make(chan struct{})
 	f.handle("DELETE /roles/r", func(w http.ResponseWriter, _ *http.Request) {
@@ -124,9 +131,9 @@ func TestRoleDeleteHoldsSubstringLock(t *testing.T) {
 		r.Delete(ctx, resource.DeleteRequest{State: state}, &deletion)
 	}()
 	select {
-	case <-deleteStarted:
+	case <-listStarted:
 	case <-deleteDone:
-		t.Fatalf("role deletion failed before DELETE: %v", deletion.Diagnostics)
+		t.Fatalf("role deletion failed before listing roles: %v", deletion.Diagnostics)
 	}
 
 	creation := resource.CreateResponse{State: emptyState(t, r)}
@@ -135,6 +142,18 @@ func TestRoleDeleteHoldsSubstringLock(t *testing.T) {
 		defer close(createDone)
 		r.Create(ctx, resource.CreateRequest{Plan: plan}, &creation)
 	}()
+	observedAtList := waitForMutation(t, "roleResource).Create", createDone, postStarted)
+	if !observedAtList || len(f.bodies("POST /roles")) != 0 {
+		t.Error("role creation did not wait for the guard's GET")
+	}
+	close(completeList)
+	select {
+	case <-deleteStarted:
+	case <-deleteDone:
+		<-createDone
+		t.Fatalf("role deletion failed before DELETE: %v", deletion.Diagnostics)
+	}
+
 	observed := waitForMutation(t, "roleResource).Create", createDone, postStarted)
 	earlyPost := len(f.bodies("POST /roles")) != 0
 	close(completeDelete)
