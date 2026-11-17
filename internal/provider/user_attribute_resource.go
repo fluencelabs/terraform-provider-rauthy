@@ -98,7 +98,7 @@ func (r *userAttributeResource) Schema(
 					"JSON rather than as text, so reformatting or reordering object keys is not a change. " +
 					"Numbers must be integer literals in the i64/u64 range, or decimals with at most 15 " +
 					"significant mantissa digits and decimal scale (exponent minus fractional digit count) " +
-					"between -15 and 15. Other numbers are rejected before apply because Rauthy may round them during storage.",
+					"between -15 and 15, and a magnitude below 1e14. Other numbers are rejected before apply because Rauthy may round them during storage.",
 			},
 			"user_editable": schema.BoolAttribute{
 				Optional: true,
