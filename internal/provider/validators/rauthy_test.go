@@ -172,6 +172,9 @@ func TestContactSet(t *testing.T) {
 	if acceptsSet([]validator.Set{validators.ContactSet()}, "ops example") {
 		t.Error("ContactSet accepted a value with a space")
 	}
+	if acceptsSet([]validator.Set{validators.ContactSet()}, "") {
+		t.Error("ContactSet accepted an empty contact, which Rauthy drops on write")
+	}
 }
 
 // Rauthy rejects flows_enabled and challenges when they are present but empty,

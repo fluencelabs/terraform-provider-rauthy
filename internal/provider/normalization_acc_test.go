@@ -46,7 +46,7 @@ resource "rauthy_pam_group" "normalization" {
 }
 resource "rauthy_pam_host" "normalization" {
  hostname = "normhost"
- gid = rauthy_pam_group.id
+ gid = rauthy_pam_group.normalization.id
  ips = ["2001:0DB8:0000:0000:0000:0000:0000:0002"]
 }
 `

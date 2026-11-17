@@ -81,9 +81,11 @@ func OriginSet() validator.Set {
 	)
 }
 
-// ContactSet validates every element of a set as a contact.
+// ContactSet validates every element of a set as a contact. Rauthy drops an
+// empty contact on write, so one could never converge: it is refused here.
 func ContactSet() validator.Set {
 	return setvalidator.ValueStringsAre(
+		stringvalidator.LengthAtLeast(1),
 		stringvalidator.RegexMatches(rauthy.ContactPattern(), "must match "+rauthy.ContactPattern().String()),
 	)
 }
