@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -24,6 +25,7 @@ var (
 	_ resource.ResourceWithConfigure      = (*userAttributeResource)(nil)
 	_ resource.ResourceWithImportState    = (*userAttributeResource)(nil)
 	_ resource.ResourceWithValidateConfig = (*userAttributeResource)(nil)
+	_ resource.ResourceWithModifyPlan     = (*userAttributeResource)(nil)
 )
 
 // NewUserAttributeResource returns the rauthy_user_attribute resource.
@@ -62,7 +64,9 @@ func (r *userAttributeResource) Schema(
 			"attribute should depend on the `rauthy_user_attribute` that defines it.\n\n" +
 			"Rauthy has no identifier for an attribute other than its name, so `id` mirrors `name`, and " +
 			"changing the name replaces the attribute rather than renaming it in place.\n\n" +
-			"Requires these API key rights: `UserAttributes` read, create, update, delete.",
+			"Deletion and name replacement are refused when Rauthy would corrupt another attribute name " +
+			"in a scope mapping by substring. Remove the conflicting mapping in a separate apply first.\n\n" +
+			"Requires these API key rights: `UserAttributes` read, create, update, delete; `Scopes` read.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -183,6 +187,9 @@ func (r *userAttributeResource) Create(
 	req resource.CreateRequest,
 	resp *resource.CreateResponse,
 ) {
+	substringMutationMu.Lock()
+	defer substringMutationMu.Unlock()
+
 	var plan userAttributeResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -227,6 +234,9 @@ func (r *userAttributeResource) Update(
 	req resource.UpdateRequest,
 	resp *resource.UpdateResponse,
 ) {
+	substringMutationMu.Lock()
+	defer substringMutationMu.Unlock()
+
 	var plan userAttributeResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -255,18 +265,90 @@ func (r *userAttributeResource) Update(
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
+// ModifyPlan checks both explicit destruction and the deletion half of a name
+// replacement. Attribute names are their keys, so read the current key from Rauthy.
+func (r *userAttributeResource) ModifyPlan(
+	ctx context.Context,
+	req resource.ModifyPlanRequest,
+	resp *resource.ModifyPlanResponse,
+) {
+	if req.State.Raw.IsNull() {
+		return
+	}
+	var state userAttributeResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !req.Plan.Raw.IsNull() {
+		var plan userAttributeResourceModel
+		resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if !plan.Name.IsUnknown() && plan.Name.Equal(state.ID) {
+			return
+		}
+	}
+	r.checkDeletion(ctx, state.ID.ValueString(), &resp.Diagnostics)
+}
+
+func (r *userAttributeResource) checkDeletion(ctx context.Context, key string, diags *diag.Diagnostics) bool {
+	current, err := r.api.GetUserAttr(ctx, key)
+	if rauthy.IsNotFound(err) {
+		return false
+	}
+	if err != nil {
+		diags.AddError("Could not read Rauthy user attribute before checking its deletion", err.Error())
+		return false
+	}
+	scopes, err := r.api.ListScopes(ctx)
+	if err != nil {
+		diags.AddError("Could not list Rauthy scopes before checking user attribute deletion", err.Error())
+		return false
+	}
+	// Unlike role/group deletion, attribute deletion removes every occurrence,
+	// including an interior substring, from both scope mapping lists.
+	for _, scope := range scopes {
+		for _, names := range [][]string{scope.AttrIncludeAccess, scope.AttrIncludeID} {
+			if other, ok := containingName(current.Name, names); ok {
+				diags.AddError(
+					"Unsafe user attribute deletion",
+					fmt.Sprintf(
+						"Rauthy removes attribute %q from scope mappings by substring, so it would also corrupt %q in scope %q. Remove that mapping in a separate apply first, then retry.",
+						current.Name,
+						other,
+						scope.Name,
+					),
+				)
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (r *userAttributeResource) Delete(
 	ctx context.Context,
 	req resource.DeleteRequest,
 	resp *resource.DeleteResponse,
 ) {
+	substringMutationMu.Lock()
+	defer substringMutationMu.Unlock()
+
 	var state userAttributeResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	name := state.Name.ValueString()
+	name := state.ID.ValueString()
+	if !r.checkDeletion(ctx, name, &resp.Diagnostics) {
+		if !resp.Diagnostics.HasError() {
+			resp.State.RemoveResource(ctx)
+		}
+		return
+	}
 	if err := r.api.DeleteUserAttr(ctx, name); err != nil && !rauthy.IsNotFound(err) {
 		resp.Diagnostics.AddError("Could not delete Rauthy user attribute "+name, err.Error())
 	}

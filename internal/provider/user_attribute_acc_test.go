@@ -217,3 +217,82 @@ func TestAccUserAttribute_numericValidation(t *testing.T) {
 		},
 	})
 }
+
+func TestAccUserAttribute_scopeMappingGuard(t *testing.T) {
+	acctest.Setup(t)
+	for _, other := range []string{"tp4-dev-extra", "xtp4-dev", "xtp4-devx"} {
+		t.Run(other, func(t *testing.T) {
+			testAccUserAttributeScopeMappingGuard(t, other)
+		})
+	}
+}
+
+func testAccUserAttributeScopeMappingGuard(t *testing.T, other string) {
+	t.Helper()
+	factories := acctest.Setup(t)
+	api := acctest.RealClient(t)
+	ctx := context.Background()
+	// Keep the mappings outside Terraform so refresh cannot conceal corruption.
+	if _, err := api.CreateUserAttr(ctx, rauthy.UserAttrRequest{Name: other}); err != nil {
+		t.Fatal(err)
+	}
+	scope, createErr := api.CreateScope(ctx, rauthy.ScopeRequest{
+		Scope: "tp4-mapped", AttrIncludeAccess: []string{other}, AttrIncludeID: []string{other},
+	})
+	if createErr != nil {
+		t.Fatal(createErr)
+	}
+	defer func() {
+		if err := api.DeleteScope(ctx, scope.ID); err != nil {
+			t.Error(err)
+		}
+		if err := api.DeleteUserAttr(ctx, other); err != nil {
+			t.Error(err)
+		}
+	}()
+	initial := testAccUserAttributeConfig("tp4-dev", "")
+	replacement := testAccUserAttributeConfig("tp4-new", "")
+	independent := `
+resource "rauthy_role" "independent" { name = "tp4-independent" }
+`
+	checkUnchanged := func() {
+		got, readErr := api.GetScope(ctx, scope.ID)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if len(got.AttrIncludeAccess) != 1 || got.AttrIncludeAccess[0] != other ||
+			len(got.AttrIncludeID) != 1 || got.AttrIncludeID[0] != other {
+			t.Fatalf("foreign mapping changed: %+v", got)
+		}
+		if _, err := api.GetRoleByName(ctx, "tp4-independent"); !rauthy.IsNotFound(err) {
+			t.Fatalf("independent role created: %v", err)
+		}
+		if _, err := api.GetUserAttr(ctx, "tp4-new"); !rauthy.IsNotFound(err) {
+			t.Fatalf("replacement created: %v", err)
+		}
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: factories,
+		Steps: []resource.TestStep{
+			{Config: initial},
+			{
+				Config:      replacement + independent,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("Unsafe user attribute deletion"),
+			},
+			{Config: replacement + independent, ExpectError: regexp.MustCompile("Unsafe user attribute deletion")},
+			{Config: independent, PlanOnly: true, ExpectError: regexp.MustCompile("Unsafe user attribute deletion")},
+			{Config: independent, ExpectError: regexp.MustCompile("Unsafe user attribute deletion")},
+			{Config: initial, PreConfig: checkUnchanged},
+			// Clear the conflicting mapping before test cleanup destroys the attribute.
+			{Config: initial, PreConfig: func() {
+				req := scope.UpdateRequest()
+				req.AttrIncludeAccess = nil
+				req.AttrIncludeID = nil
+				if _, err := api.UpdateScope(ctx, scope.ID, req); err != nil {
+					t.Fatal(err)
+				}
+			}},
+		},
+	})
+}
