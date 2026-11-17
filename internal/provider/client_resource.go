@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -143,6 +144,10 @@ func (r *clientResource) Create(ctx context.Context, req resource.CreateRequest,
 		applyResponse(ctx, &plan, created, &resp.Diagnostics)
 		plan.Secret = types.StringNull()
 		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+		if scimSyncFailed(err) {
+			resp.Diagnostics.AddError("Rauthy client "+id+": SCIM sync failed", scimSyncDetail(err))
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Rauthy client created but not configured",
 			fmt.Sprintf(
@@ -215,6 +220,10 @@ func (r *clientResource) Update(ctx context.Context, req resource.UpdateRequest,
 	keepUnmodelled(&update, current)
 
 	updated, err := r.api.UpdateClient(ctx, id, update)
+	if scimSyncFailed(err) {
+		resp.Diagnostics.AddError("Rauthy client "+id+": SCIM sync failed", scimSyncDetail(err))
+		return
+	}
 	if err != nil {
 		resp.Diagnostics.AddError("Could not update Rauthy client "+id, err.Error())
 		return
@@ -458,4 +467,18 @@ func hasS256(set types.Set) bool {
 		}
 	}
 	return false
+}
+
+// scimSyncFailed reports Rauthy's answer to a client update it stored before
+// the SCIM sync that follows failed: a 500 with error "Scim".
+func scimSyncFailed(err error) bool {
+	var apiErr *rauthy.APIError
+	return errors.As(err, &apiErr) && apiErr.ErrorCode == "Scim"
+}
+
+func scimSyncDetail(err error) string {
+	return "Rauthy stored the client's configuration, SCIM settings included, and then failed to sync " +
+		"to the SCIM endpoint. Check the endpoint and its bearer token. Re-running apply does not retry " +
+		"the sync: Rauthy runs a full sync only when the SCIM settings change, and retries failed group " +
+		"syncs on its own.\n\nError: " + err.Error()
 }

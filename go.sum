@@ -46,8 +46,8 @@ github.com/emirpasic/gods v1.18.1/go.mod h1:8tpGGwCnJ5H4r6BWwaV6OrWmMoPhUl5jm/FM
 github.com/fatih/color v1.13.0/go.mod h1:kLAiJbzzSOZDVNGyDpeOxJ47H46qBXwg5ILebYFFOfk=
 github.com/fatih/color v1.18.0 h1:S8gINlzdQ840/4pfAwic/ZE0djQEH3wM94VfqLTZcOM=
 github.com/fatih/color v1.18.0/go.mod h1:4FelSpRwEGDpQ12mAdzqdOukCy4u8WUtOY6lkT/6HfU=
-github.com/fluencelabs/rauthy-go v0.3.0 h1:csinHYl+aKtyWroUBtlLyzeZ5tW7tVVdwLlD7hfLhvE=
-github.com/fluencelabs/rauthy-go v0.3.0/go.mod h1:ae3RKkyp67LFmLTPKh2RY6ydDBH4zCUP5su/8/hLexs=
+github.com/fluencelabs/rauthy-go v0.3.1 h1:IfwHFeTpfTd8mpPnCg32Isf8MhDBleMF0mvEYd+cKOE=
+github.com/fluencelabs/rauthy-go v0.3.1/go.mod h1:ae3RKkyp67LFmLTPKh2RY6ydDBH4zCUP5su/8/hLexs=
 github.com/frankban/quicktest v1.14.3 h1:FJKSZTDHjyhriyC81FLQ0LY93eSai0ZyR/ZIkd3ZUKE=
 github.com/frankban/quicktest v1.14.3/go.mod h1:mgiwOwqx65TmIk1wJ6Q7wvnVMocbUorkibMOrVTHZps=
 github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 h1:+zs/tPmkDkHx3U66DAb0lQFJrpS6731Oaa12ikc+DiI=
