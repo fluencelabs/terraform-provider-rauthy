@@ -47,6 +47,8 @@ func (r *roleResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			"Renaming a role replaces it wholesale in Rauthy, which drops any `meta` payload another tool " +
 			"may have attached to it. This provider does not manage `meta`, so it should own the roles it " +
 			"declares.\n\n" +
+			"If a conflicting name is created in the same apply or a planned name is unknown, refusal may occur " +
+			"during apply after other resources have been written, but the refused operation does not corrupt user assignments.\n\n" +
 			"Requires these API key rights: `Roles` read, create, update, delete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -217,10 +219,14 @@ func (r *roleResource) checkDeletion(ctx context.Context, id string, diags *diag
 		names = append(names, x.Name)
 	}
 	if other, ok := cutName(name, names); ok {
+		advice := fmt.Sprintf("Delete %q in a separate apply first, then retry.", other)
+		if other == "rauthy_admin" {
+			advice = "The built-in rauthy_admin role cannot be deleted. Keep this role managed without deleting it."
+		}
 		diags.AddError("Unsafe role deletion",
 			fmt.Sprintf("Rauthy removes role %q from users by substring, so it would also cut %q in "+
-				"their assignments. Delete %q in a separate apply first, then retry.",
-				name, other, other))
+				"their assignments. %s",
+				name, other, advice))
 		return
 	}
 }

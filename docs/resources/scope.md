@@ -3,6 +3,7 @@ page_title: "rauthy_scope Resource - rauthy"
 description: |-
     Manages a custom OIDC scope in Rauthy. A scope created here can be referenced by name from rauthy_client.scopes and rauthy_client.default_scopes.
   The two attr_include_* sets map custom user attributes into the issued tokens. Every name listed there must already exist as a user attribute on the instance: Rauthy filters the mapping against the attributes it knows and discards the rest silently, so the provider turns such a drop into an error rather than writing state that does not match the configuration. Define them with rauthy_user_attribute and reference that resource, so Terraform orders the two correctly. Rauthy stores the mapping as one comma-joined string, so an attribute name containing a comma is not representable.
+  If a conflicting name is created in the same apply or a planned name is unknown, refusal may occur during apply after other resources have been written, but the refused operation does not corrupt clients' scope lists.
   Requires these API key rights: Scopes read, create, update, delete.
 ---
 
@@ -11,6 +12,8 @@ description: |-
 Manages a custom OIDC scope in Rauthy. A scope created here can be referenced by name from `rauthy_client.scopes` and `rauthy_client.default_scopes`.
 
 The two `attr_include_*` sets map custom user attributes into the issued tokens. Every name listed there must **already exist as a user attribute** on the instance: Rauthy filters the mapping against the attributes it knows and discards the rest silently, so the provider turns such a drop into an error rather than writing state that does not match the configuration. Define them with `rauthy_user_attribute` and reference that resource, so Terraform orders the two correctly. Rauthy stores the mapping as one comma-joined string, so an attribute name containing a comma is not representable.
+
+If a conflicting name is created in the same apply or a planned name is unknown, refusal may occur during apply after other resources have been written, but the refused operation does not corrupt clients' scope lists.
 
 Requires these API key rights: `Scopes` read, create, update, delete.
 

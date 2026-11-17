@@ -47,6 +47,8 @@ func (r *groupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"Renaming a group replaces it wholesale in Rauthy, which drops any `meta` payload another tool " +
 			"may have attached to it. This provider does not manage `meta`, so it should own the groups it " +
 			"declares.\n\n" +
+			"If a conflicting name is created in the same apply or a planned name is unknown, refusal may occur " +
+			"during apply after other resources have been written, but the refused operation does not corrupt user assignments.\n\n" +
 			"Requires these API key rights: `Groups` read, create, update, delete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{

@@ -55,6 +55,8 @@ func (r *scopeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"configuration. Define them with `rauthy_user_attribute` and reference that resource, so " +
 			"Terraform orders the two correctly. Rauthy stores the mapping as one comma-joined string, " +
 			"so an attribute name containing a comma is not representable.\n\n" +
+			"If a conflicting name is created in the same apply or a planned name is unknown, refusal may occur " +
+			"during apply after other resources have been written, but the refused operation does not corrupt clients' scope lists.\n\n" +
 			"Requires these API key rights: `Scopes` read, create, update, delete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{

@@ -3,6 +3,7 @@ page_title: "rauthy_role Resource - rauthy"
 description: |-
     Manages a role in Rauthy. Roles are assigned to users and can be requested by clients through the roles scope.
   Renaming a role replaces it wholesale in Rauthy, which drops any meta payload another tool may have attached to it. This provider does not manage meta, so it should own the roles it declares.
+  If a conflicting name is created in the same apply or a planned name is unknown, refusal may occur during apply after other resources have been written, but the refused operation does not corrupt user assignments.
   Requires these API key rights: Roles read, create, update, delete.
 ---
 
@@ -11,6 +12,8 @@ description: |-
 Manages a role in Rauthy. Roles are assigned to users and can be requested by clients through the `roles` scope.
 
 Renaming a role replaces it wholesale in Rauthy, which drops any `meta` payload another tool may have attached to it. This provider does not manage `meta`, so it should own the roles it declares.
+
+If a conflicting name is created in the same apply or a planned name is unknown, refusal may occur during apply after other resources have been written, but the refused operation does not corrupt user assignments.
 
 Requires these API key rights: `Roles` read, create, update, delete.
 
