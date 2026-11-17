@@ -49,6 +49,7 @@ func TestScopeUpdate_SendsClaimsAtRoot(t *testing.T) {
 	ctx := context.Background()
 
 	fake, api := newFakeRauthy(t)
+	fake.answer("GET /scopes", []rauthy.ScopeResponse{{ID: "scope-1", Name: "read:billing"}})
 	fake.handle("PUT /scopes/scope-1", echoScope("scope-1"))
 	r := &scopeResource{api: api}
 

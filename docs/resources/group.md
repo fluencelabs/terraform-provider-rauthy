@@ -3,6 +3,7 @@ page_title: "rauthy_group Resource - rauthy"
 description: |-
     Manages a group in Rauthy. Groups are assigned to users and can be requested by clients through the groups scope.
   Renaming a group replaces it wholesale in Rauthy, which drops any meta payload another tool may have attached to it. This provider does not manage meta, so it should own the groups it declares.
+  If a conflicting name is created in the same apply or a planned name is unknown, refusal may occur during apply after other resources have been written, but the refused operation does not corrupt user assignments.
   Requires these API key rights: Groups read, create, update, delete.
 ---
 
@@ -11,6 +12,8 @@ description: |-
 Manages a group in Rauthy. Groups are assigned to users and can be requested by clients through the `groups` scope.
 
 Renaming a group replaces it wholesale in Rauthy, which drops any `meta` payload another tool may have attached to it. This provider does not manage `meta`, so it should own the groups it declares.
+
+If a conflicting name is created in the same apply or a planned name is unknown, refusal may occur during apply after other resources have been written, but the refused operation does not corrupt user assignments.
 
 Requires these API key rights: `Groups` read, create, update, delete.
 
