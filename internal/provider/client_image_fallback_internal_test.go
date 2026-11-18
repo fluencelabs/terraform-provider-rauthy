@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -42,5 +43,24 @@ func TestLogoFallback(t *testing.T) {
 		if deleted.Diagnostics.HasError() || len(f.bodies("DELETE /clients/example-app/logo")) != 1 {
 			t.Fatalf("lost logo ownership: %v", deleted.Diagnostics)
 		}
+	}
+}
+
+func TestLogoReadPreservesStateOnProxy404(t *testing.T) {
+	f, api := newFakeRauthy(t)
+	f.handle("GET /clients/example-app/logo", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "route missing", http.StatusNotFound)
+	})
+	r := &clientImageResource{api: api, kind: rauthy.ImageLogo}
+	prior := resourceState(t, r, &clientImageResourceModel{
+		ClientID:      types.StringValue("example-app"),
+		StoredHash:    types.StringValue(hashBytes([]byte("custom"))),
+		ContentBase64: types.StringValue("Y3VzdG9t"),
+	})
+	resp := resource.ReadResponse{State: prior}
+	r.Read(t.Context(), resource.ReadRequest{State: prior}, &resp)
+	if !resp.Diagnostics.HasError() || !strings.Contains(resp.Diagnostics.Errors()[0].Detail(), "HTTP 404") ||
+		!resp.State.Raw.Equal(prior.Raw) {
+		t.Fatalf("proxy 404 must report an error and retain the managed logo: %v, %v", resp.Diagnostics, resp.State.Raw)
 	}
 }

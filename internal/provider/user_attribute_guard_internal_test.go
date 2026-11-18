@@ -37,6 +37,13 @@ func TestUserAttributeReadList(t *testing.T) {
 			present: true,
 		},
 		{
+			name: "unrelated conflicting duplicates",
+			attrs: []rauthy.UserAttrResponse{
+				{Name: "other"}, {Name: "dev", UserEditable: true}, {Name: "other", UserEditable: true},
+			},
+			present: true,
+		},
+		{
 			name:    "unnamed entry before target",
 			attrs:   []rauthy.UserAttrResponse{{Name: ""}, {Name: "dev", UserEditable: true}},
 			present: true,
@@ -202,6 +209,23 @@ func TestUserAttributeListCollapsesIdenticalDuplicates(t *testing.T) {
 	}
 }
 
+func TestUserAttributeListIgnoresUnrelatedConflicts(t *testing.T) {
+	body := []byte(`{"values":[
+		{"name":"other","user_editable":true},
+		{"name":"","user_editable":true},
+		{"name":"dev","default_value":42,"user_editable":true},
+		{"name":"other","user_editable":false},
+		{"name":"","user_editable":false}
+	]}`)
+	attr, found, err := decodeUserAttrList(body, "dev")
+	if err != nil || !found || attr.Name != "dev" || !attr.UserEditable || string(attr.DefaultValue) != "42" {
+		t.Fatalf("expected dev despite unrelated conflicts: %+v, found=%v, err=%v", attr, found, err)
+	}
+	if _, absentFound, absentErr := decodeUserAttrList(body, "absent"); absentErr != nil || absentFound {
+		t.Errorf("expected an ordinary miss despite unrelated conflicts: found=%v, err=%v", absentFound, absentErr)
+	}
+}
+
 func TestUserAttributeValidListReadback(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -210,6 +234,13 @@ func TestUserAttributeValidListReadback(t *testing.T) {
 		{name: "false", attrs: []rauthy.UserAttrResponse{{Name: "dev", DefaultValue: []byte("42")}}},
 		{name: "true", attrs: []rauthy.UserAttrResponse{{Name: "dev", DefaultValue: []byte("42"), UserEditable: true}}},
 		{name: "omitted", attrs: []rauthy.UserAttrResponse{}},
+		{
+			name: "unrelated conflicting duplicates",
+			attrs: []rauthy.UserAttrResponse{
+				{Name: "dev", DefaultValue: []byte("42"), UserEditable: true},
+				{Name: "other"}, {Name: "other", UserEditable: true},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, api := newFakeRauthy(t)
@@ -284,12 +315,10 @@ func TestUserAttributeMalformedList(t *testing.T) {
 		{name: "invalid typ", body: `{"values":[{"name":"dev","user_editable":true,"typ":false}]}`, status: http.StatusOK},
 		{name: "unknown typ", body: `{"values":[{"name":"dev","user_editable":true,"typ":"email"}]}`, status: http.StatusOK},
 		{name: "unknown field", body: `{"values":[{"name":"dev","user_editable":true,"extra":0}]}`, status: http.StatusOK},
-		{name: "duplicate names", body: `{"values":[{"name":"other","user_editable":true},{"name":"other","user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate target", body: `{"values":[{"name":"dev","user_editable":true},{"name":"dev","user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate with different desc", body: `{"values":[{"name":"dev","desc":"a","user_editable":false},{"name":"dev","desc":"b","user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate with different default", body: `{"values":[{"name":"dev","default_value":9007199254740992,"user_editable":false},{"name":"dev","default_value":9007199254740993,"user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate with different typ", body: `{"values":[{"name":"dev","typ":"Email","user_editable":false},{"name":"dev","user_editable":false}]}`, status: http.StatusOK},
-		{name: "duplicate empty names", body: `{"values":[{"name":"","user_editable":true},{"name":"","user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate fields", body: `{"values":[{"name":"dev","name":"other","user_editable":true}]}`, status: http.StatusOK},
 		{name: "truncated 200", detail: "unexpected EOF", body: `{"values":`, status: http.StatusOK, headers: http.Header{"Content-Length": {"100"}}},
 		{name: "truncated 404", detail: "unexpected EOF", body: `{"error":`, status: http.StatusNotFound, headers: http.Header{"Content-Length": {"100"}}},
@@ -349,7 +378,7 @@ func checkMalformedUserAttributeList(t *testing.T, status int, body string, head
 	model.UserEditable = types.BoolValue(true)
 	update := resource.UpdateResponse{State: state}
 	r.Update(ctx, resource.UpdateRequest{State: state, Plan: resourcePlan(t, r, model)}, &update)
-	check("update readback", update.Diagnostics, update.State, state)
+	check("update readback", update.Diagnostics, update.State, resourceState(t, r, model))
 	if len(f.bodies("PUT /users/attr/dev")) != 1 {
 		t.Error("expected readback after a successful PUT")
 	}
@@ -365,6 +394,7 @@ func checkMalformedUserAttributeList(t *testing.T, status int, body string, head
 type attributeGuardCase struct {
 	name, other, failure string
 	missing, wantError   bool
+	unrelatedDuplicates  bool
 	status               int
 }
 
@@ -375,6 +405,8 @@ func TestUserAttributeDeletionGuard(t *testing.T) {
 		{name: "interior", other: "xdevx", wantError: true},
 		{name: "exact mapping", other: "dev"},
 		{name: "unrelated", other: "department"},
+		{name: "unrelated conflicting duplicates", other: "dev", unrelatedDuplicates: true},
+		{name: "unsafe mapping with unrelated conflicting duplicates", other: "xdevx", unrelatedDuplicates: true, wantError: true},
 		{name: "missing", other: "developer", missing: true, wantError: true},
 		{name: "attribute list 404", failure: "/users/attr", status: http.StatusNotFound, wantError: true},
 		{name: "attribute read error", failure: "/users/attr", wantError: true},
@@ -394,6 +426,12 @@ func testUserAttributeDeletionGuard(t *testing.T, tc attributeGuardCase, mapping
 	attrs := []rauthy.UserAttrResponse{}
 	if !tc.missing {
 		attrs = append(attrs, rauthy.UserAttrResponse{Name: "dev"})
+	}
+	if tc.unrelatedDuplicates {
+		attrs = append(attrs,
+			rauthy.UserAttrResponse{Name: "other"},
+			rauthy.UserAttrResponse{Name: "other", UserEditable: true},
+		)
 	}
 	f.answer("GET /users/attr", map[string]any{"values": attrs})
 	scope := rauthy.ScopeResponse{ID: "scope", Name: "mapped"}

@@ -99,6 +99,10 @@ existing setup can run into:
   name. An existing saved destroy plan fails if the attribute was removed or renamed before
   apply. Refresh state and create a new plan.
   [External rename and stale destroy test](https://github.com/fluencelabs/terraform-provider-rauthy/blob/1deb3ec515461515c745aa23306132ddef66311c/internal/provider/user_attribute_missing_acc_internal_test.go#L14).
+* **User attribute list cache.** A concurrent Rauthy request can cache a stale list after a
+  write. The provider uses that list as returned, so refresh can drop an attribute from state
+  or readback after PUT can record an older value. Refresh again after the cache expires or
+  Rauthy restarts. A database row with an invalid `typ` can make Rauthy fail to list attributes.
 * **Imported public clients.** Import leaves a public client's PKCE configuration as it
   was in Rauthy. If it lacks S256, the client cannot use S256 PKCE until the next apply.
   Run `terraform apply` immediately after import to enable S256.

@@ -267,17 +267,16 @@ func (r *userAttributeResource) Update(
 		return
 	}
 
-	// The PUT response is not to be trusted (the spec declares none at all), so
-	// the stored attribute is read back to learn what Rauthy actually kept.
+	// The client discards the PUT body. Use the stored value when readback
+	// succeeds and retain the applied plan when it fails.
 	updated, found, err := findUserAttr(ctx, r.api, name)
-	if err != nil {
+	switch {
+	case err != nil:
 		resp.Diagnostics.AddError("Could not read back Rauthy user attribute "+name, err.Error())
-		return
-	}
-	if !found {
+	case !found:
 		resp.Diagnostics.AddError("Could not read back Rauthy user attribute "+name,
 			"Rauthy did not list the attribute after the update.")
-	} else {
+	default:
 		applyUserAttr(&plan, &updated)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -355,8 +354,7 @@ func decodeUserAttrList(body []byte, name string) (rauthy.UserAttrResponse, bool
 		return rauthy.UserAttrResponse{}, false, errors.New("response is missing the values array")
 	}
 
-	seen := make(map[string]*userAttrListEntry, len(response.Values))
-	var match rauthy.UserAttrResponse
+	var match *userAttrListEntry
 	for i, entry := range response.Values {
 		if entry == nil || entry.Name == nil || entry.UserEditable == nil {
 			return rauthy.UserAttrResponse{}, false, fmt.Errorf(
@@ -366,26 +364,25 @@ func decodeUserAttrList(body []byte, name string) (rauthy.UserAttrResponse, bool
 		if entry.Typ != nil && *entry.Typ != "Email" {
 			return rauthy.UserAttrResponse{}, false, fmt.Errorf("values[%d].typ must be Email or null", i)
 		}
-		key := *entry.Name
-		if previous, duplicate := seen[key]; duplicate {
-			// Rauthy 0.36.2 can cache the same entry twice after an insert.
-			if !reflect.DeepEqual(previous, entry) {
-				return rauthy.UserAttrResponse{}, false, fmt.Errorf(
-					"values[%d] repeats an attribute name with different fields",
-					i,
-				)
-			}
+		if name == "" || *entry.Name != name {
 			continue
 		}
-		seen[key] = entry
-		if key != "" && key == name {
-			match = rauthy.UserAttrResponse{
-				Name: key, Desc: entry.Desc, DefaultValue: entry.DefaultValue, Typ: entry.Typ,
-				UserEditable: *entry.UserEditable,
-			}
+		// Rauthy 0.36.2 can cache multiple entries for the same name.
+		if match != nil && !reflect.DeepEqual(match, entry) {
+			return rauthy.UserAttrResponse{}, false, fmt.Errorf(
+				"values[%d] repeats an attribute name with different fields",
+				i,
+			)
 		}
+		match = entry
 	}
-	return match, match.Name != "", nil
+	if match == nil {
+		return rauthy.UserAttrResponse{}, false, nil
+	}
+	return rauthy.UserAttrResponse{
+		Name: name, Desc: match.Desc, DefaultValue: match.DefaultValue, Typ: match.Typ,
+		UserEditable: *match.UserEditable,
+	}, true, nil
 }
 
 // checkDeletion reports whether the attribute list was valid and adds any guard diagnostics.
