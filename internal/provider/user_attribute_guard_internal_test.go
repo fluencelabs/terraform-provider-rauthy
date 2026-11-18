@@ -90,6 +90,57 @@ func TestUserAttributeReadList(t *testing.T) {
 	}
 }
 
+func TestUserAttributeReadListConflictOrder(t *testing.T) {
+	first := rauthy.UserAttrResponse{Name: "other", UserEditable: true}
+	second := rauthy.UserAttrResponse{Name: "other", UserEditable: false}
+	for _, tc := range []struct {
+		name    string
+		row     rauthy.UserAttrResponse
+		present bool
+	}{
+		{name: "target present", row: rauthy.UserAttrResponse{Name: "dev", UserEditable: true}, present: true},
+		{name: "target absent", row: rauthy.UserAttrResponse{Name: "extra"}},
+	} {
+		for _, order := range []struct {
+			name string
+			rows []rauthy.UserAttrResponse
+		}{
+			{"ordinary-first-second", []rauthy.UserAttrResponse{tc.row, first, second}},
+			{"ordinary-second-first", []rauthy.UserAttrResponse{tc.row, second, first}},
+			{"first-ordinary-second", []rauthy.UserAttrResponse{first, tc.row, second}},
+			{"second-ordinary-first", []rauthy.UserAttrResponse{second, tc.row, first}},
+			{"first-second-ordinary", []rauthy.UserAttrResponse{first, second, tc.row}},
+			{"second-first-ordinary", []rauthy.UserAttrResponse{second, first, tc.row}},
+		} {
+			t.Run(tc.name+"/"+order.name, func(t *testing.T) {
+				f, api := newFakeRauthy(t)
+				f.answer("GET /users/attr", map[string]any{"values": order.rows})
+				r := &userAttributeResource{api: api}
+				model := userAttributeResourceModel{
+					ID: types.StringValue("dev"), Name: types.StringValue("dev"), UserEditable: types.BoolValue(false),
+				}
+				state := resourceState(t, r, model)
+				want := state
+				if tc.present {
+					model.UserEditable = types.BoolValue(true)
+					want = resourceState(t, r, model)
+				}
+				resp := resource.ReadResponse{State: state}
+				r.Read(t.Context(), resource.ReadRequest{State: state}, &resp)
+				if !resp.State.Raw.Equal(want.Raw) {
+					t.Errorf("state = %v, want %v", resp.State.Raw, want.Raw)
+				}
+				if resp.Diagnostics.HasError() == tc.present {
+					t.Fatalf("expected a list error only when the target is absent: %v", resp.Diagnostics)
+				}
+				if !tc.present && !strings.Contains(resp.Diagnostics[0].Detail(), "stale Rauthy cache") {
+					t.Errorf("expected a cache conflict diagnostic: %v", resp.Diagnostics)
+				}
+			})
+		}
+	}
+}
+
 func TestUserAttributeReadUsesSuccessfulRetry(t *testing.T) {
 	f, api := newFakeRauthy(t)
 	const route = "GET /users/attr"
