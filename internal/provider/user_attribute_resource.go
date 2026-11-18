@@ -354,7 +354,8 @@ func decodeUserAttrList(body []byte, name string) (rauthy.UserAttrResponse, bool
 		return rauthy.UserAttrResponse{}, false, errors.New("response is missing the values array")
 	}
 
-	var match *userAttrListEntry
+	entries := make(map[string]*userAttrListEntry, len(response.Values))
+	var conflictingName *string
 	for i, entry := range response.Values {
 		if entry == nil || entry.Name == nil || entry.UserEditable == nil {
 			return rauthy.UserAttrResponse{}, false, fmt.Errorf(
@@ -364,19 +365,34 @@ func decodeUserAttrList(body []byte, name string) (rauthy.UserAttrResponse, bool
 		if entry.Typ != nil && *entry.Typ != "Email" {
 			return rauthy.UserAttrResponse{}, false, fmt.Errorf("values[%d].typ must be Email or null", i)
 		}
-		if name == "" || *entry.Name != name {
+		key := *entry.Name
+		previous, seen := entries[key]
+		if !seen {
+			entries[key] = entry
 			continue
 		}
-		// Rauthy 0.36.2 can cache multiple entries for the same name.
-		if match != nil && !reflect.DeepEqual(match, entry) {
+		if reflect.DeepEqual(previous, entry) {
+			continue
+		}
+		if name != "" && key == name {
 			return rauthy.UserAttrResponse{}, false, fmt.Errorf(
 				"values[%d] repeats an attribute name with different fields",
 				i,
 			)
 		}
-		match = entry
+		conflictingName = entry.Name
 	}
-	if match == nil {
+	match := entries[name]
+	if name == "" || match == nil {
+		// Conflicting rows can indicate a stale Rauthy cache. Such a list
+		// cannot establish that an unlisted attribute is absent.
+		if conflictingName != nil {
+			return rauthy.UserAttrResponse{}, false, fmt.Errorf(
+				"cannot determine whether attribute %q is absent: conflicting entries for %q may indicate a stale Rauthy cache",
+				name,
+				*conflictingName,
+			)
+		}
 		return rauthy.UserAttrResponse{}, false, nil
 	}
 	return rauthy.UserAttrResponse{

@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/fluencelabs/rauthy-go"
@@ -142,23 +144,7 @@ func TestPartialFollowups(t *testing.T) {
 			t.Errorf("PUT default_value = %s, want 42", body.DefaultValue)
 		}
 	})
-	t.Run("attribute PUT failure", func(t *testing.T) {
-		f, api := newFakeRauthy(t)
-		f.handle("PUT /users/attr/attr", forbid)
-		r := &userAttributeResource{api: api}
-		prior := userAttributeResourceModel{ID: types.StringValue("attr"), Name: types.StringValue("attr")}
-		plan := prior
-		plan.DefaultValue = newJSONString("42")
-		state := resourceState(t, r, &prior)
-		resp := resource.UpdateResponse{State: state}
-		r.Update(ctx, resource.UpdateRequest{Plan: resourcePlan(t, r, &plan), State: state}, &resp)
-		if !resp.Diagnostics.HasError() || !resp.State.Raw.Equal(state.Raw) {
-			t.Fatalf("failed PUT must preserve prior state: %v, %v", resp.Diagnostics, resp.State.Raw)
-		}
-		if len(f.bodies("GET /users/attr")) != 0 {
-			t.Error("failed PUT triggered a readback")
-		}
-	})
+	t.Run("attribute PUT failure", testUserAttributeRejectedUpdate)
 	t.Run("image upload", func(t *testing.T) {
 		f, api := newFakeRauthy(t)
 		f.answer("PUT /clients/app/logo", nil)
@@ -192,4 +178,44 @@ func TestPartialFollowups(t *testing.T) {
 			t.Fatalf("created blacklist entry lost: %v %v", resp.Diagnostics, d)
 		}
 	})
+}
+
+func testUserAttributeRejectedUpdate(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		handle http.HandlerFunc
+	}{
+		{http.StatusForbidden, forbid},
+		{http.StatusNotFound, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"timestamp":1700000000,"error":"NotFound","message":"no rows returned"}`))
+		}},
+	} {
+		t.Run(strconv.Itoa(tc.status), func(t *testing.T) {
+			f, api := newFakeRauthy(t)
+			f.handle("PUT /users/attr/attr", tc.handle)
+			f.answer("GET /users/attr", map[string]any{"values": []rauthy.UserAttrResponse{}})
+			r := &userAttributeResource{api: api}
+			prior := userAttributeResourceModel{ID: types.StringValue("attr"), Name: types.StringValue("attr")}
+			plan := prior
+			plan.DefaultValue = newJSONString("42")
+			state := resourceState(t, r, &prior)
+			resp := resource.UpdateResponse{State: state}
+			r.Update(t.Context(), resource.UpdateRequest{Plan: resourcePlan(t, r, &plan), State: state}, &resp)
+			if !resp.Diagnostics.HasError() ||
+				resp.Diagnostics[0].Summary() != "Could not update Rauthy user attribute attr" ||
+				!strings.Contains(resp.Diagnostics[0].Detail(), "HTTP "+strconv.Itoa(tc.status)) ||
+				!resp.State.Raw.Equal(state.Raw) {
+				t.Errorf(
+					"failed PUT must report the write error and preserve prior state: %v, %v",
+					resp.Diagnostics,
+					resp.State.Raw,
+				)
+			}
+			if len(f.bodies("GET /users/attr")) != 0 {
+				t.Error("failed PUT triggered a readback")
+			}
+		})
+	}
 }
