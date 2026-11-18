@@ -37,6 +37,13 @@ func TestUserAttributeReadList(t *testing.T) {
 			present: true,
 		},
 		{
+			name: "unrelated conflicting duplicates",
+			attrs: []rauthy.UserAttrResponse{
+				{Name: "other"}, {Name: "dev", UserEditable: true}, {Name: "other", UserEditable: true},
+			},
+			present: true,
+		},
+		{
 			name:    "unnamed entry before target",
 			attrs:   []rauthy.UserAttrResponse{{Name: ""}, {Name: "dev", UserEditable: true}},
 			present: true,
@@ -227,6 +234,13 @@ func TestUserAttributeValidListReadback(t *testing.T) {
 		{name: "false", attrs: []rauthy.UserAttrResponse{{Name: "dev", DefaultValue: []byte("42")}}},
 		{name: "true", attrs: []rauthy.UserAttrResponse{{Name: "dev", DefaultValue: []byte("42"), UserEditable: true}}},
 		{name: "omitted", attrs: []rauthy.UserAttrResponse{}},
+		{
+			name: "unrelated conflicting duplicates",
+			attrs: []rauthy.UserAttrResponse{
+				{Name: "dev", DefaultValue: []byte("42"), UserEditable: true},
+				{Name: "other"}, {Name: "other", UserEditable: true},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, api := newFakeRauthy(t)
@@ -380,6 +394,7 @@ func checkMalformedUserAttributeList(t *testing.T, status int, body string, head
 type attributeGuardCase struct {
 	name, other, failure string
 	missing, wantError   bool
+	unrelatedDuplicates  bool
 	status               int
 }
 
@@ -390,6 +405,8 @@ func TestUserAttributeDeletionGuard(t *testing.T) {
 		{name: "interior", other: "xdevx", wantError: true},
 		{name: "exact mapping", other: "dev"},
 		{name: "unrelated", other: "department"},
+		{name: "unrelated conflicting duplicates", other: "dev", unrelatedDuplicates: true},
+		{name: "unsafe mapping with unrelated conflicting duplicates", other: "xdevx", unrelatedDuplicates: true, wantError: true},
 		{name: "missing", other: "developer", missing: true, wantError: true},
 		{name: "attribute list 404", failure: "/users/attr", status: http.StatusNotFound, wantError: true},
 		{name: "attribute read error", failure: "/users/attr", wantError: true},
@@ -409,6 +426,12 @@ func testUserAttributeDeletionGuard(t *testing.T, tc attributeGuardCase, mapping
 	attrs := []rauthy.UserAttrResponse{}
 	if !tc.missing {
 		attrs = append(attrs, rauthy.UserAttrResponse{Name: "dev"})
+	}
+	if tc.unrelatedDuplicates {
+		attrs = append(attrs,
+			rauthy.UserAttrResponse{Name: "other"},
+			rauthy.UserAttrResponse{Name: "other", UserEditable: true},
+		)
 	}
 	f.answer("GET /users/attr", map[string]any{"values": attrs})
 	scope := rauthy.ScopeResponse{ID: "scope", Name: "mapped"}
