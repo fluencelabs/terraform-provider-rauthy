@@ -19,6 +19,11 @@ func TestClientNotFound(t *testing.T) {
 		{name: "empty route response"},
 		{name: "plain route response", contentType: "text/plain", body: "404 page not found"},
 		{
+			name:        "JSON gateway response",
+			contentType: "application/json",
+			body:        `{"error":"NotFound","message":"route missing"}`,
+		},
+		{
 			name:        "Rauthy NotFound",
 			contentType: "application/json",
 			body:        `{"timestamp":1700000000,"error":"NotFound","message":"no rows returned"}`,

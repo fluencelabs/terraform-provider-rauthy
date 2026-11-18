@@ -133,13 +133,30 @@ func TestPartialFollowups(t *testing.T) {
 		r.Update(ctx, resource.UpdateRequest{
 			Plan: resourcePlan(t, r, &plan), State: state,
 		}, &resp)
-		if !resp.Diagnostics.HasError() || !resp.State.Raw.Equal(state.Raw) {
-			t.Fatalf("failed readback must preserve prior state: %v, %v", resp.Diagnostics, resp.State.Raw)
+		if !resp.Diagnostics.HasError() || !resp.State.Raw.Equal(resourceState(t, r, &plan).Raw) {
+			t.Fatalf("failed readback must retain the applied plan: %v, %v", resp.Diagnostics, resp.State.Raw)
 		}
 		var body rauthy.UserAttrRequest
 		f.lastBody(t, "PUT /users/attr/attr", &body)
 		if string(body.DefaultValue) != "42" {
 			t.Errorf("PUT default_value = %s, want 42", body.DefaultValue)
+		}
+	})
+	t.Run("attribute PUT failure", func(t *testing.T) {
+		f, api := newFakeRauthy(t)
+		f.handle("PUT /users/attr/attr", forbid)
+		r := &userAttributeResource{api: api}
+		prior := userAttributeResourceModel{ID: types.StringValue("attr"), Name: types.StringValue("attr")}
+		plan := prior
+		plan.DefaultValue = newJSONString("42")
+		state := resourceState(t, r, &prior)
+		resp := resource.UpdateResponse{State: state}
+		r.Update(ctx, resource.UpdateRequest{Plan: resourcePlan(t, r, &plan), State: state}, &resp)
+		if !resp.Diagnostics.HasError() || !resp.State.Raw.Equal(state.Raw) {
+			t.Fatalf("failed PUT must preserve prior state: %v, %v", resp.Diagnostics, resp.State.Raw)
+		}
+		if len(f.bodies("GET /users/attr")) != 0 {
+			t.Error("failed PUT triggered a readback")
 		}
 	})
 	t.Run("image upload", func(t *testing.T) {
