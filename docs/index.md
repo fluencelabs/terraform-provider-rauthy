@@ -129,8 +129,13 @@ existing setup can run into:
   and caches the result. An overlapping read can cache a stale snapshot after a write
   invalidates the list. The stale entry can last up to 12 hours. On a cache miss in
   v0.36.2, create can cache the new attribute twice by appending it to the list just read.
-  Terraform refresh can drop an attribute from state, and readback after PUT can return
-  an older value. Refresh after the cache expires or restart Rauthy and refresh.
+  Terraform reports a list error when the requested attribute is missing and the list contains
+  conflicting copies of another attribute. A stale list without conflicts can still cause refresh
+  to drop an attribute from state, and readback after PUT can return an older value.
+  If a refresh-only plan proposes removing an attribute that still exists in Rauthy,
+  discard the plan. For an attribute still tracked in state, retry refresh after the cache
+  expires. If the removal was saved to state, wait for Rauthy to list the attribute again,
+  then run `terraform import <resource_address> <attribute_name>` to reattach it.
   Avoid changing attributes concurrently from multiple clients.
 * **Invalid PostgreSQL attribute type.** A row in `user_attr_config` with an invalid
   `typ` value causes a panic during row parsing on a cache miss, so

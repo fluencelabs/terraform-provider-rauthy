@@ -207,6 +207,9 @@ func TestUserAttributeListCollapsesIdenticalDuplicates(t *testing.T) {
 		string(attr.DefaultValue) != `{"quota":9007199254740993}` {
 		t.Fatalf("expected one dev record with all its fields: %+v, found=%v, err=%v", attr, found, err)
 	}
+	if _, absentFound, absentErr := decodeUserAttrList(body, "absent"); absentErr != nil || absentFound {
+		t.Errorf("identical duplicates must still allow a miss: found=%v, err=%v", absentFound, absentErr)
+	}
 }
 
 func TestUserAttributeListIgnoresUnrelatedConflicts(t *testing.T) {
@@ -220,9 +223,6 @@ func TestUserAttributeListIgnoresUnrelatedConflicts(t *testing.T) {
 	attr, found, err := decodeUserAttrList(body, "dev")
 	if err != nil || !found || attr.Name != "dev" || !attr.UserEditable || string(attr.DefaultValue) != "42" {
 		t.Fatalf("expected dev despite unrelated conflicts: %+v, found=%v, err=%v", attr, found, err)
-	}
-	if _, absentFound, absentErr := decodeUserAttrList(body, "absent"); absentErr != nil || absentFound {
-		t.Errorf("expected an ordinary miss despite unrelated conflicts: found=%v, err=%v", absentFound, absentErr)
 	}
 }
 
@@ -316,6 +316,9 @@ func TestUserAttributeMalformedList(t *testing.T) {
 		{name: "unknown typ", body: `{"values":[{"name":"dev","user_editable":true,"typ":"email"}]}`, status: http.StatusOK},
 		{name: "unknown field", body: `{"values":[{"name":"dev","user_editable":true,"extra":0}]}`, status: http.StatusOK},
 		{name: "duplicate target", body: `{"values":[{"name":"dev","user_editable":true},{"name":"dev","user_editable":false}]}`, status: http.StatusOK},
+		{name: "separated conflicting target", detail: "repeats an attribute name", body: `{"values":[{"name":"dev","default_value":24,"user_editable":false},{"name":"other","user_editable":false},{"name":"dev","default_value":42,"user_editable":false}]}`, status: http.StatusOK},
+		{name: "conflicting names without target", detail: "Rauthy cache", body: `{"values":[{"name":"other","user_editable":true},{"name":"extra","user_editable":false},{"name":"other","user_editable":false}]}`, status: http.StatusOK},
+		{name: "conflicting empty names without target", detail: "Rauthy cache", body: `{"values":[{"name":"","user_editable":true},{"name":"","user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate with different desc", body: `{"values":[{"name":"dev","desc":"a","user_editable":false},{"name":"dev","desc":"b","user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate with different default", body: `{"values":[{"name":"dev","default_value":9007199254740992,"user_editable":false},{"name":"dev","default_value":9007199254740993,"user_editable":false}]}`, status: http.StatusOK},
 		{name: "duplicate with different typ", body: `{"values":[{"name":"dev","typ":"Email","user_editable":false},{"name":"dev","user_editable":false}]}`, status: http.StatusOK},
